@@ -187,9 +187,11 @@ XmaxSDK is distributed through [**Maven Central**](#maven-central).
 
 ### Maven Central
 
-Version **1.0.11** uses Agora RTC and supports `X2_1_1_PREVIEW_CN` and
-`X2_1_1_PREVIEW_US`. When upgrading from 1.0.8, replace removed model constants
-and rebuild your application against the updated SDK.
+XmaxSDK uses Agora RTC. The current source API exposes `RealtimeModel.X2_1`;
+select China or global service routing through `XmaxConfiguration.environment`.
+The published **1.0.11** artifact still uses `X2_1_1_PREVIEW_CN` and
+`X2_1_1_PREVIEW_US`. The X2.1 API and quality controls described below require
+the updated source until the next release is published.
 
 When upgrading to **1.0.11**, remove the `videoFormat` argument from
 `createLocalImageStream(...)` and `createLocalVideoStream(uri)` calls and rebuild
@@ -278,7 +280,7 @@ val client = XmaxClient(
 )
 
 val realtime = client.createRealtimeManager(
-    options = RealtimeConfiguration(model = RealtimeModel.X2_1_1_PREVIEW_CN),
+    options = RealtimeConfiguration(model = RealtimeModel.X2_1),
 )
 
 val videoView = XmaxRealtimeVideoView(this).apply {
@@ -288,7 +290,7 @@ setContentView(videoView)
 
 lifecycleScope.launch {
     val localStream = realtime.createLocalCameraStream(
-        videoFormat = RealtimeVideoFormat(width = 1024, height = 1920, fps = 30),
+        videoFormat = RealtimeVideoFormat(width = 1080, height = 1920, fps = 30),
         position = CameraPosition.FRONT,
     )
     videoView.localTrack = localStream.videoTrack
@@ -335,7 +337,7 @@ import android.net.Uri
 
 val localStream = realtime.createNetworkVideoStream(
     uri = Uri.parse(drivingVideoUrl),
-    videoFormat = RealtimeVideoFormat(width = 1024, height = 1920, fps = 30),
+    videoFormat = RealtimeVideoFormat(width = 1080, height = 1920, fps = 30),
     onFinish = {
         // Called once on Main for the current task after the server reports completion.
         // Remote tail frames can still arrive; this does not close the session.
@@ -386,7 +388,7 @@ Camera input does not use the microphone by default. Opt in when creating the st
 
 ```kotlin
 val localStream = realtime.createLocalCameraStream(
-    videoFormat = RealtimeVideoFormat(width = 1024, height = 1920, fps = 30),
+    videoFormat = RealtimeVideoFormat(width = 1080, height = 1920, fps = 30),
     position = CameraPosition.FRONT,
     useMicrophone = true,
 )
@@ -411,9 +413,13 @@ val globalClient = XmaxClient(
 )
 ```
 
-`XmaxEnvironment.CHINA` uses `https://cloud.xmax.22duck.cn/open/api/v1`, and
-`XmaxEnvironment.GLOBAL` uses `https://api.xmax.cloud/open/api/v1`. Realtime and
-storage API requests use the environment selected for their client.
+`XmaxEnvironment.CHINA` uses `https://cloud.xmax.22duck.cn/open/api/v1`.
+For `XmaxEnvironment.GLOBAL`, realtime sessions use `https://api.xmax.ai/open/api/v1`,
+while storage and other API requests use `https://api.xmax.cloud/open/api/v1`.
+Both environments use `RealtimeModel.X2_1`; there is no separate regional model.
+
+X2.1 supports generation canvases of `1920×1080`, `1080×1920`, `1408×1408`,
+`1152×1536`, and `1536×1152`. The default camera format is `1080×1920` at 30 fps.
 
 Still images and local videos can also be used as input:
 
@@ -523,6 +529,30 @@ which run serially on an SDK background dispatcher.
 
 <br>
 
+### Adjust transmission quality
+
+Read the successfully applied uplink level and successfully submitted downlink
+level through `uplinkQualityLevel` and `downlinkQualityLevel`. A direction with no
+active configuration returns `null`; both become `null` when disconnecting.
+The actual received resolution may change slightly after the downlink property.
+
+While generating, adjust either direction independently:
+
+```kotlin
+import ai.xmax.sdk.RealtimeQualityLevel
+
+realtime.setUplinkQualityLevel(RealtimeQualityLevel.L3)
+realtime.setDownlinkQualityLevel(RealtimeQualityLevel.L2)
+```
+
+L1–L5 target 100%, 80%, 65%, 50%, and 50% of the media baseline's width and
+height. L5 lowers the uplink frame-rate limit further than L4. Pixel alignment
+and minimum dimensions still apply. Manual choices do not disable automatic
+quality adjustment, change the media baseline, or change the model canvas.
+Only successful adjustments update the current level and its one-hour history.
+Calls outside generation, or calls that cannot apply the requested configuration,
+throw an error without intentionally ending the current generation.
+
 ### Upload a reference image
 
 `RealtimeContext.referencePath` accepts a remote image URL. Upload an on-device image
@@ -588,7 +618,7 @@ credentials are not embedded in the host application.
 
 A complete example application featuring a Jetpack Compose implementation
 is available in
-[`examples/XLab`](https://github.com/XingMai/XmaxSDK-Android/tree/main/examples/XLab).
+[`examples/XLab`](https://github.com/Xmax-AI/XmaxSDK-Android/tree/main/examples/XLab).
 It demonstrates real-time generation using live camera feeds, static images, and
 local video files.
 
@@ -606,7 +636,7 @@ local video files.
 ## Contact us
 
 For bug reports and feature requests, please open a
-[GitHub Issue](https://github.com/XingMai/XmaxSDK-Android/issues). For integration
+[GitHub Issue](https://github.com/Xmax-AI/XmaxSDK-Android/issues). For integration
 assistance and technical support, contact us at [sdk@xmax.ai](mailto:sdk@xmax.ai).
 
 <br>

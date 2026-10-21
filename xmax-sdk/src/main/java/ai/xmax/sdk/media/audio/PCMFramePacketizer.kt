@@ -1,10 +1,9 @@
 //
 //  PCMFramePacketizer.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -18,17 +17,27 @@ import java.util.ArrayDeque
 
 /**
  * 将解码后的 PCM 样本整理为 RTC 所需的连续 10 ms 数据包。
- *
- * @param totalSamples 需要处理的总采样数。
  */
 internal class PCMFramePacketizer(
+    /**
+     * 需要处理的总采样数。
+     */
     private val totalSamples: Int,
 ) {
+
     /**
      * 音频采样缓冲与输入输出进度。
      */
     private val pendingSamples = ArrayDeque<Short>()
+
+    /**
+     * 当前包已写入的采样点数。
+     */
     private var writtenSampleCount = 0
+
+    /**
+     * 已输出的采样点总数，用于计算音频时间戳。
+     */
     private var emittedSampleCount = 0
 
     init {
@@ -42,7 +51,10 @@ internal class PCMFramePacketizer(
      * @param samples 待分包的 PCM16 音频采样。
      * @param atSample 该批数据在媒体时间线中的起始采样位置。
      */
-    fun append(samples: ShortArray, atSample: Int) {
+    fun append(
+        samples: ShortArray,
+        atSample: Int
+    ) {
         if (writtenSampleCount >= totalSamples || samples.isEmpty()) return
         val normalizedStart = atSample.coerceAtLeast(0)
         while (writtenSampleCount < normalizedStart && writtenSampleCount < totalSamples) {
@@ -94,12 +106,16 @@ internal class PCMFramePacketizer(
 
     /**
      * 一份可提交的 PCM 音频数据及其时间位置。
-     *
-     * @param data 待读取、传输或持有的二进制数据。
-     * @param sampleOffset 音频包在媒体时间线中的起始采样位置。
      */
     internal data class Packet(
+        /**
+         * 待读取、传输或持有的二进制数据。
+         */
         val data: ByteArray,
+
+        /**
+         * 音频包在媒体时间线中的起始采样位置。
+         */
         val sampleOffset: Int,
     )
 }

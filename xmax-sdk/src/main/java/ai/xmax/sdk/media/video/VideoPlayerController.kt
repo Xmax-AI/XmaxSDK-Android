@@ -1,10 +1,9 @@
 //
 //  VideoPlayerController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -61,20 +60,33 @@ import kotlin.coroutines.coroutineContext
  * 使用 Android 媒体框架循环解码共享时间轴上的本地音视频帧。
  *
  * @param context 访问 Android 系统服务或媒体资源所需的上下文。
- * @param videoFrameListener 接收解码视频帧的监听器。
- * @param audioFrameListener 接收解码音频帧的监听器。
- * @param errorListener 接收媒体错误的回调。
- * @param playbackScope 执行持续解码播放的协程作用域。
  */
 internal class VideoPlayerController(
     context: Context,
+
+    /**
+     * 接收解码视频帧的监听器。
+     */
     private val videoFrameListener: MediaVideoFrameListener,
+
+    /**
+     * 接收解码音频帧的监听器。
+     */
     private val audioFrameListener: MediaAudioFrameListener,
+
+    /**
+     * 接收媒体错误的回调。
+     */
     private val errorListener: (XmaxError) -> Unit,
+
+    /**
+     * 执行持续解码播放的协程作用域。
+     */
     private val playbackScope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default,
     ),
 ) : VideoPlayerControlling {
+
     /**
      * 媒体读取所需的 Android 运行环境。
      */
@@ -84,18 +96,30 @@ internal class VideoPlayerController(
      * 解码播放状态的并发保护。
      */
     private val operationMutex = Mutex()
+
+    /**
+     * 保护播放器与解码状态的锁。
+     */
     private val stateLock = Any()
 
     /**
      * 本地音频播放及视频预览派发组件。
      */
     private val audioPreviewPlayer = LocalAudioPreviewPlayer()
+
+    /**
+     * 向本地预览投递已解码画面的分发器。
+     */
     private val previewDispatcher = DecodedVideoPreviewDispatcher()
 
     /**
      * 当前播放配置与循环解码任务。
      */
     private var configuration: PlaybackConfiguration? = null
+
+    /**
+     * 驱动音视频解码与循环播放的协程。
+     */
     private var playbackJob: Job? = null
 
     /**
@@ -184,7 +208,9 @@ internal class VideoPlayerController(
      *
      * @param muted 是否静音。
      */
-    override suspend fun setLocalAudioPreviewMuted(muted: Boolean) {
+    override suspend fun setLocalAudioPreviewMuted(
+        muted: Boolean
+    ) {
         audioPreviewPlayer.setMuted(muted)
     }
 
@@ -193,7 +219,9 @@ internal class VideoPlayerController(
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    override suspend fun setLocalAudioVolume(volume: Float) {
+    override suspend fun setLocalAudioVolume(
+        volume: Float
+    ) {
         audioPreviewPlayer.setVolume(volume)
     }
 
@@ -203,7 +231,10 @@ internal class VideoPlayerController(
      * @param view 需要绑定或解除绑定的显示视图。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    override fun attachPreview(view: XmaxVideoView, contentMode: VideoContentMode) {
+    override fun attachPreview(
+        view: XmaxVideoView,
+        contentMode: VideoContentMode
+    ) {
         previewDispatcher.attach(view, contentMode)
     }
 
@@ -212,7 +243,9 @@ internal class VideoPlayerController(
      *
      * @param view 需要绑定或解除绑定的显示视图。
      */
-    override fun detachPreview(view: XmaxVideoView) {
+    override fun detachPreview(
+        view: XmaxVideoView
+    ) {
         previewDispatcher.detach(view)
     }
 
@@ -408,7 +441,9 @@ internal class VideoPlayerController(
      *
      * @param scheduledFrame 视频帧及其计划输出时刻。
      */
-    private suspend fun emitVideoFrame(scheduledFrame: ScheduledVideoFrame) {
+    private suspend fun emitVideoFrame(
+        scheduledFrame: ScheduledVideoFrame
+    ) {
         sleepUntil(scheduledFrame.targetNanoseconds)
         previewDispatcher.enqueue(scheduledFrame.frame)
         videoFrameListener(scheduledFrame.frame)
@@ -626,7 +661,9 @@ internal class VideoPlayerController(
      *
      * @param targetNanoseconds 等待到达的单调时钟时刻，单位为纳秒。
      */
-    private suspend fun sleepUntil(targetNanoseconds: Long) {
+    private suspend fun sleepUntil(
+        targetNanoseconds: Long
+    ) {
         while (true) {
             val remaining = targetNanoseconds - SystemClock.elapsedRealtimeNanos()
             if (remaining <= 0L) return
@@ -641,7 +678,10 @@ internal class VideoPlayerController(
      * @param size 有效数据的字节数。
      * @return 有效数据对应的字节数组。
      */
-    private fun ByteBuffer.selectedBytes(offset: Int, size: Int): ByteArray =
+    private fun ByteBuffer.selectedBytes(
+        offset: Int,
+        size: Int
+    ): ByteArray =
         duplicate().apply {
             position(offset)
             limit(offset + size)
@@ -656,7 +696,10 @@ internal class VideoPlayerController(
      * @param cause 触发当前错误的底层异常。
      * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
      */
-    private fun mediaError(message: String, cause: Throwable? = null): XmaxError =
+    private fun mediaError(
+        message: String,
+        cause: Throwable? = null
+    ): XmaxError =
         XmaxError(XmaxErrorCode.MEDIA_ERROR, message, cause = cause)
 
     /**
@@ -665,7 +708,9 @@ internal class VideoPlayerController(
      * @param error 本次操作失败的异常或 SDK 错误。
      * @return 包含播放失败原因的描述文本。
      */
-    private fun playbackErrorDescription(error: Throwable): String =
+    private fun playbackErrorDescription(
+        error: Throwable
+    ): String =
         generateSequence(error) { it.cause }
             .map { cause ->
                 val code = (cause as? XmaxError)?.code?.let { "[$it] " }.orEmpty()
@@ -677,46 +722,76 @@ internal class VideoPlayerController(
 
     /**
      * 控制本地媒体解码、旋转、帧输出和循环播放的配置。
-     *
-     * @param uri 应用有读取权限的媒体地址。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
-     * @param rotation 应用到源画面的旋转方向。
-     * @param frameRate 视频帧率，单位为 fps。
-     * @param hasAudio 输入媒体是否包含可用音频。
-     * @param durationUs 媒体持续时间，单位为微秒。
      */
     private data class PlaybackConfiguration(
+        /**
+         * 应用有读取权限的媒体地址。
+         */
         val uri: Uri,
+
+        /**
+         * 输出画面宽度，单位为像素。
+         */
         val outputWidth: Int,
+
+        /**
+         * 输出画面高度，单位为像素。
+         */
         val outputHeight: Int,
+
+        /**
+         * 应用到源画面的旋转方向。
+         */
         val rotation: VideoRotation,
+
+        /**
+         * 视频帧率，单位为 fps。
+         */
         val frameRate: Int,
+
+        /**
+         * 输入媒体是否包含可用音频。
+         */
         val hasAudio: Boolean,
+
+        /**
+         * 媒体持续时间，单位为微秒。
+         */
         val durationUs: Long,
     )
 
     /**
      * 保存视频帧及其应提交的播放时间。
-     *
-     * @param frame 待处理、显示或提交的视频帧。
-     * @param targetNanoseconds 等待到达的单调时钟时刻，单位为纳秒。
      */
     private data class ScheduledVideoFrame(
+        /**
+         * 待处理、显示或提交的视频帧。
+         */
         val frame: VideoFrame,
+
+        /**
+         * 等待到达的单调时钟时刻，单位为纳秒。
+         */
         val targetNanoseconds: Long,
     )
 
     /**
      * 保存当前预览视图、显示模式及绑定代次。
-     *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
-     * @param generation 用于识别当前生成请求或事件归属的标识。
      */
     private data class PreviewTarget(
+        /**
+         * 需要绑定或解除绑定的显示视图。
+         */
         val view: XmaxVideoView?,
+
+        /**
+         * 视频等比适配或等比裁切的显示方式。
+         */
         val contentMode: VideoContentMode,
+
+        /**
+         * 用于识别当前生成请求或事件归属的标识。
+         */
         val generation: Long,
     )
 
@@ -724,10 +799,15 @@ internal class VideoPlayerController(
      * 将最新解码帧派发到预览视图，避免慢显示积压旧帧。
      */
     private inner class DecodedVideoPreviewDispatcher {
+
         /**
          * 待显示的最新帧及派发标记。
          */
         private val pendingFrame = AtomicReference<VideoFrame?>(null)
+
+        /**
+         * 是否已安排主线程预览投递。
+         */
         private val deliveryScheduled = AtomicBoolean(false)
 
         /**
@@ -739,7 +819,15 @@ internal class VideoPlayerController(
          * 当前预览视图、显示模式及绑定代次。
          */
         private var view: WeakReference<XmaxVideoView>? = null
+
+        /**
+         * 本地预览的等比缩放与裁剪方式。
+         */
         private var contentMode = VideoContentMode.FILL
+
+        /**
+         * 预览绑定版本，用于忽略旧绑定的待显示画面。
+         */
         private var generation = 0L
 
         /**
@@ -748,7 +836,10 @@ internal class VideoPlayerController(
          * @param view 需要绑定或解除绑定的显示视图。
          * @param contentMode 视频等比适配或等比裁切的显示方式。
          */
-        fun attach(view: XmaxVideoView, contentMode: VideoContentMode) {
+        fun attach(
+            view: XmaxVideoView,
+            contentMode: VideoContentMode
+        ) {
             synchronized(previewLock) {
                 this.view = WeakReference(view)
                 this.contentMode = contentMode
@@ -762,7 +853,9 @@ internal class VideoPlayerController(
          *
          * @param view 需要绑定或解除绑定的显示视图。
          */
-        fun detach(view: XmaxVideoView) {
+        fun detach(
+            view: XmaxVideoView
+        ) {
             synchronized(previewLock) {
                 if (this.view?.get() === view) {
                     this.view = null
@@ -777,7 +870,9 @@ internal class VideoPlayerController(
          *
          * @param frame 待处理、显示或提交的视频帧。
          */
-        suspend fun enqueue(frame: VideoFrame) {
+        suspend fun enqueue(
+            frame: VideoFrame
+        ) {
             if (synchronized(previewLock) { view?.get() == null }) return
             pendingFrame.set(frame)
             scheduleDelivery(CoroutineScope(currentCoroutineContext()))
@@ -800,7 +895,9 @@ internal class VideoPlayerController(
          *
          * @param owner 运行异步派发任务的协程作用域。
          */
-        private fun scheduleDelivery(owner: CoroutineScope) {
+        private fun scheduleDelivery(
+            owner: CoroutineScope
+        ) {
             if (owner.isActive && deliveryScheduled.compareAndSet(false, true)) {
                 owner.launch { deliverLatestFrames() }
             }
@@ -851,17 +948,38 @@ internal class VideoPlayerController(
     }
 
     /**
-     * 提供 VideoPlayerController 使用的构造入口、共享配置或常量。
+     * 音视频解码与播放同步的时间和缓冲限制。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 等待解码器输入或输出缓冲区的超时时长，单位为微秒。
          */
         const val CODEC_TIMEOUT_US = 10_000L
+
+        /**
+         * 秒换算为微秒的倍率。
+         */
         const val MICROSECONDS_PER_SECOND = 1_000_000L
+
+        /**
+         * 微秒换算为纳秒的倍率。
+         */
         const val NANOSECONDS_PER_MICROSECOND = 1_000L
+
+        /**
+         * 毫秒换算为纳秒的倍率。
+         */
         const val NANOSECONDS_PER_MILLISECOND = 1_000_000L
+
+        /**
+         * 允许音频帧落后播放时钟的最大时长，单位为纳秒。
+         */
         const val MAXIMUM_AUDIO_LATENESS_NANOSECONDS = 30_000_000L
+
+        /**
+         * 视频解码与输出之间最多缓存的帧数。
+         */
         const val VIDEO_DECODE_BUFFER_SIZE = 2
     }
 }

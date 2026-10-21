@@ -1,10 +1,9 @@
 //
 //  RealtimeComponents.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -129,17 +128,30 @@ internal fun createRealtimeComponents(
 
 /**
  * 一代运行时的组件集合；close 释放后，下次操作通过工厂重新创建整套组件。
- *
- * @param media 本地媒体生命周期控制器。
- * @param stream 执行媒体发布、订阅及业务信令的控制器。
- * @param render 视频显示与轨迹绑定控制器。
- * @param connection 负责服务端会话和 RTC 连接生命周期的组件。
- * @param generation 负责生成上下文和任务生命周期的组件。
  */
 internal data class RealtimeComponents(
+    /**
+     * 本地媒体生命周期控制器。
+     */
     val media: MediaControlling,
+
+    /**
+     * 执行媒体发布、订阅及业务信令的控制器。
+     */
     val stream: StreamControlling,
+
+    /**
+     * 视频显示与轨迹绑定控制器。
+     */
     val render: RenderControlling,
+
+    /**
+     * 负责服务端会话和 RTC 连接生命周期的组件。
+     */
     val connection: XmaxRealtimeConnectionManager,
+
+    /**
+     * 负责生成上下文和任务生命周期的组件。
+     */
     val generation: XmaxRealtimeGenerationManager,
 )

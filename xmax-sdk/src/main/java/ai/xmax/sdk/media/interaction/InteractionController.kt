@@ -1,10 +1,9 @@
 //
 //  InteractionController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -33,14 +32,19 @@ internal typealias InteractionListener = suspend (String, List<RealtimePoint>) -
 
 /**
  * 将渲染容器中的交互行为转换为固定媒体基准的归一化坐标并发送。
- *
- * @param listener 接收对应事件的监听器。
- * @param scope 执行后台任务的协程作用域。
  */
 internal class InteractionController(
+    /**
+     * 接收对应事件的监听器。
+     */
     private val listener: InteractionListener = { _, _ -> },
+
+    /**
+     * 执行后台任务的协程作用域。
+     */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : InteractionControlling {
+
     /**
      * 交互任务与轨迹队列的并发保护。
      */
@@ -50,8 +54,20 @@ internal class InteractionController(
      * 当前任务、待发送轨迹及派发代次。
      */
     private var activeInteraction: ActiveInteraction? = null
+
+    /**
+     * 等待发送的最新轨迹提交。
+     */
     private var pendingSubmission: Submission? = null
+
+    /**
+     * 发送待处理轨迹的协程。
+     */
     private var drainJob: Job? = null
+
+    /**
+     * 轨迹发送循环的版本，用于隔离过期任务。
+     */
     private var drainGeneration = 0L
 
     /**
@@ -60,7 +76,10 @@ internal class InteractionController(
      * @param taskId 用于关联本次生成请求和结果流的任务标识。
      * @param videoFormat 处理后的固定本地媒体规格，用于确定归一化坐标基准。
      */
-    override suspend fun startInteraction(taskId: String, videoFormat: RealtimeVideoFormat) {
+    override suspend fun startInteraction(
+        taskId: String,
+        videoFormat: RealtimeVideoFormat
+    ) {
         stopInteraction()
         synchronized(stateLock) {
             activeInteraction = ActiveInteraction(taskId, SizeF(videoFormat.width.toFloat(), videoFormat.height.toFloat()))
@@ -85,7 +104,9 @@ internal class InteractionController(
      *
      * @param frame 当前触控轨迹及显示画面尺寸。
      */
-    override fun submitInteraction(frame: InteractionFrame) {
+    override fun submitInteraction(
+        frame: InteractionFrame
+    ) {
         val interaction = synchronized(stateLock) { activeInteraction } ?: return
         if (frame.points.isEmpty()) return
         val points = frame.points.mapNotNull { point ->
@@ -113,7 +134,9 @@ internal class InteractionController(
      *
      * @param generation 用于识别当前生成请求或事件归属的标识。
      */
-    private suspend fun drainPendingFrames(generation: Long) {
+    private suspend fun drainPendingFrames(
+        generation: Long
+    ) {
         while (true) {
             val submission = synchronized(stateLock) {
                 if (generation != drainGeneration) return
@@ -134,9 +157,7 @@ internal class InteractionController(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                /**
-                 * 轨迹采用最新帧优先策略，单帧发送失败不终止后续交互。
-                 */
+                // 轨迹采用最新帧优先策略，单帧发送失败不终止后续交互。
                 XmaxLogger.interaction.warn(
                     message = {
                         "发送交互轨迹失败，已丢弃当前采样帧 " +
@@ -150,23 +171,31 @@ internal class InteractionController(
 
     /**
      * 保存当前允许发送轨迹的任务及坐标换算规格。
-     *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param resolvedMediaSize 处理后的固定本地媒体尺寸，用于归一化轨迹坐标。
      */
     private data class ActiveInteraction(
+        /**
+         * 用于关联本次生成请求和结果流的任务标识。
+         */
         val taskId: String,
+
+        /**
+         * 处理后的固定本地媒体尺寸，用于归一化轨迹坐标。
+         */
         val resolvedMediaSize: SizeF,
     )
 
     /**
      * 准备发送给生成服务的任务标识与轨迹点集合。
-     *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param points 媒体归一化坐标中的轨迹点集合，范围为 [0, 1]。
      */
     private data class Submission(
+        /**
+         * 用于关联本次生成请求和结果流的任务标识。
+         */
         val taskId: String,
+
+        /**
+         * 媒体归一化坐标中的轨迹点集合，范围为 [0, 1]。
+         */
         val points: List<RealtimePoint>,
     )
 }

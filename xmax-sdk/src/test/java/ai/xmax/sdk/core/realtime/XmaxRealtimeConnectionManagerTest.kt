@@ -1,7 +1,7 @@
 //
 //  XmaxRealtimeConnectionManagerTest.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -43,7 +43,7 @@ class XmaxRealtimeConnectionManagerTest {
         )
 
         val remoteStream = manager.connect(
-            model = RealtimeModel.X2_1_1_PREVIEW_CN,
+            model = RealtimeModel.X2_1,
             videoFormat = RealtimeVideoFormat(704, 1280, 24),
             includeLocalAudio = false,
             isCurrent = { true },
@@ -86,7 +86,7 @@ class XmaxRealtimeConnectionManagerTest {
 
         val error = try {
             manager.connect(
-                model = RealtimeModel.X2_1_1_PREVIEW_CN,
+                model = RealtimeModel.X2_1,
                 videoFormat = RealtimeVideoFormat(704, 1280, 24),
                 includeLocalAudio = false,
                 isCurrent = { true },

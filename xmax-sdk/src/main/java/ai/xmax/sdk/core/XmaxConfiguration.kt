@@ -1,10 +1,9 @@
 //
 //  XmaxConfiguration.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -15,7 +14,6 @@ package ai.xmax.sdk
  * SDK 客户端配置；API Key 在构造时去除首尾空白，实际校验由调用方或服务入口执行。
  *
  * @param apiKey 开放平台签发的 API Key；不得写入日志或对外展示。
- * @param loggerOptions 允许输出的 SDK 日志类别；默认值为 `XmaxLoggerOption.none`。
  */
 public class XmaxConfiguration @JvmOverloads constructor(
     apiKey: String,
@@ -25,6 +23,7 @@ public class XmaxConfiguration @JvmOverloads constructor(
      */
     public val loggerOptions: XmaxLoggerOption = XmaxLoggerOption.none,
 ) {
+
     /**
      * 服务环境配置与公开快照。
      */

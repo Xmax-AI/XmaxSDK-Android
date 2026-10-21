@@ -1,10 +1,9 @@
 //
 //  RoomControlling.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -20,6 +19,7 @@ import ai.xmax.sdk.service.realtime.RealtimeSessionConnection
  * 定义 RTC 房间生命周期和业务信令发送能力。
  */
 internal interface RoomControlling {
+
     /**
      * 加入 RTC 房间并启动房间心跳；调用完成时房间已可发送信令。
      *
@@ -62,7 +62,11 @@ internal interface RoomControlling {
      * @param targetVideoFormat 下行输出的视频规格。
      * @param ensureActive 检查当前操作是否仍可继续的函数，取消时应抛出异常。
      */
-    fun changeTargetSize(taskId: String, targetVideoFormat: RealtimeVideoFormat, ensureActive: () -> Unit)
+    fun changeTargetSize(
+        taskId: String,
+        targetVideoFormat: RealtimeVideoFormat,
+        ensureActive: () -> Unit
+    )
 
     /**
      * 发送当前任务的新生成条件。
@@ -86,7 +90,9 @@ internal interface RoomControlling {
      *
      * @param taskId 用于关联本次生成请求和结果流的任务标识。
      */
-    fun stopGeneration(taskId: String)
+    fun stopGeneration(
+        taskId: String
+    )
 
     /**
      * 向服务端发送当前任务的媒体归一化坐标轨迹。

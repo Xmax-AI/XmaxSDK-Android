@@ -1,10 +1,9 @@
 //
 //  VideoPixelFormat.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -13,10 +12,14 @@ package ai.xmax.sdk
 
 /**
  * 中性视频帧支持的像素格式。
- *
- * @param value 需要规范化、校验或显示的文本。
  */
-internal enum class VideoPixelFormat(val value: String) {
+internal enum class VideoPixelFormat(
+    /**
+     * 需要规范化、校验或显示的文本。
+     */
+    val value: String
+) {
+
     /**
      * Y、U、V 独立平面的 YUV420 格式。
      */

@@ -1,10 +1,9 @@
 //
 //  FrameReportingTextureView.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -20,25 +19,37 @@ import android.view.TextureView
  *
  * @param context Android 上下文；视图应使用具备当前界面主题的 Context。
  */
-internal class FrameReportingTextureView(context: Context) : TextureView(context) {
+internal class FrameReportingTextureView(
+    context: Context
+) : TextureView(context) {
+
     /**
      * 画面显示通知及外部纹理监听器。
      */
     var onFrameDisplayed: ((FrameReportingTextureView) -> Unit)? = null
 
+    /**
+     * 视频渲染器注册的纹理生命周期监听器。
+     */
     private var rendererListener: SurfaceTextureListener? = null
 
     /**
      * 首帧显示判定与绘制检查任务。
      */
     private var frameCheckPending = false
+
+    /**
+     * 当前纹理是否已显示有效视频帧。
+     */
     private var hasDisplayedFrame = false
+
+    /**
+     * 确认纹理首帧已显示的检查任务。
+     */
     private val frameCheck = Runnable {
         frameCheckPending = false
         val surface = surfaceTexture
-        /**
-         * 在绘制完成后确认纹理已取得有效视频帧，再发送首帧显示通知。
-         */
+        // 在绘制完成后确认纹理已取得有效视频帧，再发送首帧显示通知。
         if (!hasDisplayedFrame && isAttachedToWindow && surface != null &&
             !surface.isReleased && surface.timestamp != 0L
         ) {
@@ -49,6 +60,7 @@ internal class FrameReportingTextureView(context: Context) : TextureView(context
 
     init {
         super.setSurfaceTextureListener(object : SurfaceTextureListener {
+
             /**
              * 在预览纹理可用后建立视频输出绑定。
              *
@@ -56,7 +68,11 @@ internal class FrameReportingTextureView(context: Context) : TextureView(context
              * @param width 画面宽度，单位为像素。
              * @param height 画面高度，单位为像素。
              */
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+            override fun onSurfaceTextureAvailable(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
                 rendererListener?.onSurfaceTextureAvailable(surface, width, height)
             }
 
@@ -67,7 +83,11 @@ internal class FrameReportingTextureView(context: Context) : TextureView(context
              * @param width 画面宽度，单位为像素。
              * @param height 画面高度，单位为像素。
              */
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+            override fun onSurfaceTextureSizeChanged(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
                 rendererListener?.onSurfaceTextureSizeChanged(surface, width, height)
             }
 
@@ -77,7 +97,9 @@ internal class FrameReportingTextureView(context: Context) : TextureView(context
              * @param surface 当前预览纹理。
              * @return 是否由 TextureView 释放纹理的判定结果。
              */
-            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+            override fun onSurfaceTextureDestroyed(
+                surface: SurfaceTexture
+            ): Boolean {
                 removeCallbacks(frameCheck)
                 frameCheckPending = false
                 hasDisplayedFrame = false
@@ -89,7 +111,9 @@ internal class FrameReportingTextureView(context: Context) : TextureView(context
              *
              * @param surface 当前预览纹理。
              */
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+            override fun onSurfaceTextureUpdated(
+                surface: SurfaceTexture
+            ) {
                 rendererListener?.onSurfaceTextureUpdated(surface)
                 if (surface === surfaceTexture && !hasDisplayedFrame && !frameCheckPending) {
                     frameCheckPending = true
@@ -104,7 +128,9 @@ internal class FrameReportingTextureView(context: Context) : TextureView(context
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setSurfaceTextureListener(listener: SurfaceTextureListener?) {
+    override fun setSurfaceTextureListener(
+        listener: SurfaceTextureListener?
+    ) {
         rendererListener = listener
     }
 

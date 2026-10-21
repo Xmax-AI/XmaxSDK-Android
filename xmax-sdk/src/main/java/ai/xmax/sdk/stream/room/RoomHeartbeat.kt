@@ -1,10 +1,9 @@
 //
 //  RoomHeartbeat.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -28,16 +27,24 @@ import kotlinx.coroutines.cancelAndJoin
 
 /**
  * 周期发送 RTC 房间心跳并隔离已经停止的旧周期。
- *
- * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
- * @param sleeper 等待下一轮心跳的挂起函数。
- * @param scope 执行后台任务的协程作用域。
  */
 internal class RoomHeartbeat(
+    /**
+     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     */
     private val rtcManager: RtcManaging,
+
+    /**
+     * 等待下一轮心跳的挂起函数。
+     */
     private val sleeper: suspend () -> Unit = { delay(10_000L) },
+
+    /**
+     * 执行后台任务的协程作用域。
+     */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
+
     /**
      * 房间心跳任务的并发保护。
      */
@@ -47,6 +54,10 @@ internal class RoomHeartbeat(
      * 当前心跳周期及执行任务。
      */
     private val cycle = AtomicLong(0L)
+
+    /**
+     * 定时发送房间心跳的协程。
+     */
     private var heartbeatTask: Job? = null
 
     /**
@@ -54,7 +65,9 @@ internal class RoomHeartbeat(
      *
      * @param userId 房间中的业务用户标识。
      */
-    fun start(userId: String) {
+    fun start(
+        userId: String
+    ) {
         synchronized(taskLock) {
             val version = cycle.incrementAndGet()
             heartbeatTask?.cancel()

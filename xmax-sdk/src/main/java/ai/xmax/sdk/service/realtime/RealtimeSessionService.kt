@@ -1,10 +1,9 @@
 //
 //  RealtimeSessionService.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -34,16 +33,24 @@ import org.json.JSONObject
 
 /**
  * 管理实时生成会话的创建、心跳维持和关闭。
- *
- * @param apiService 发起服务端 API 请求的客户端。
- * @param heartbeatSleeper 控制会话心跳间隔的挂起组件；默认值为 `RealtimeHeartbeatSleeper.live`。
- * @param heartbeatScope 执行会话心跳的协程作用域。
  */
 internal class RealtimeSessionService(
+    /**
+     * 发起服务端 API 请求的客户端。
+     */
     private val apiService: ApiServicing,
+
+    /**
+     * 控制会话心跳间隔的挂起组件；默认值为 `RealtimeHeartbeatSleeper.live`。
+     */
     private val heartbeatSleeper: RealtimeHeartbeatSleeper = RealtimeHeartbeatSleeper.live,
+
+    /**
+     * 执行会话心跳的协程作用域。
+     */
     private val heartbeatScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : RealtimeSessionServicing {
+
     /**
      * 会话心跳的并发保护。
      */
@@ -53,6 +60,10 @@ internal class RealtimeSessionService(
      * 当前心跳周期及执行任务。
      */
     private val heartbeatVersion = AtomicLong(0L)
+
+    /**
+     * 定期维持服务端会话的心跳协程。
+     */
     private var heartbeatJob: Job? = null
 
     /**
@@ -61,7 +72,9 @@ internal class RealtimeSessionService(
      * @param model 用于确定服务端能力、地址及输入规格的模型。
      * @return 服务端会话标识、状态及可用的 RTC 连接信息。
      */
-    override suspend fun createSession(model: RealtimeModel): RealtimeSession {
+    override suspend fun createSession(
+        model: RealtimeModel
+    ): RealtimeSession {
         val payload = apiService.post(
             path = "/session",
             body = JSONObject().put("model", model.id),
@@ -123,7 +136,9 @@ internal class RealtimeSessionService(
      *
      * @param sessionId 服务端会话标识。
      */
-    override suspend fun closeSession(sessionId: String) {
+    override suspend fun closeSession(
+        sessionId: String
+    ) {
         apiService.delete("/session/$sessionId")
     }
 
@@ -132,7 +147,9 @@ internal class RealtimeSessionService(
      *
      * @param context 本轮会话心跳的标识和失败通知。
      */
-    private suspend fun runHeartbeat(context: HeartbeatContext) {
+    private suspend fun runHeartbeat(
+        context: HeartbeatContext
+    ) {
         while (isCurrent(context.version)) {
             try {
                 heartbeatSleeper.sleep()
@@ -158,7 +175,9 @@ internal class RealtimeSessionService(
      * @param sessionId 服务端会话标识。
      * @return 服务端会话标识、状态及可用的 RTC 连接信息。
      */
-    private suspend fun heartbeatSession(sessionId: String): RealtimeSession =
+    private suspend fun heartbeatSession(
+        sessionId: String
+    ): RealtimeSession =
         apiService.put("/session/$sessionId/heartbeat") { payload ->
             makeSession(payload, requiresConnection = false)
         }
@@ -168,7 +187,9 @@ internal class RealtimeSessionService(
      *
      * @param session 服务端会话及其连接信息。
      */
-    private fun ensureSessionActive(session: RealtimeSession) {
+    private fun ensureSessionActive(
+        session: RealtimeSession
+    ) {
         val status = session.status ?: return
         if (status == ACTIVE_STATUS) return
         throw XmaxError(
@@ -249,7 +270,9 @@ internal class RealtimeSessionService(
      * @param key JSON 对象中的字段名称。
      * @return 字段的非空字符串值；缺失或空白时为 null。
      */
-    private fun JSONObject.nonEmptyString(key: String): String? =
+    private fun JSONObject.nonEmptyString(
+        key: String
+    ): String? =
         (opt(key) as? String)?.trim()?.takeIf(String::isNotEmpty)
 
     /**
@@ -258,7 +281,9 @@ internal class RealtimeSessionService(
      * @param version 用于识别当前任务或回调归属的版本号。
      * @return 任务或房间仍有效时为 true。
      */
-    private fun isCurrent(version: Long): Boolean = heartbeatVersion.get() == version
+    private fun isCurrent(
+        version: Long
+    ): Boolean = heartbeatVersion.get() == version
 
     /**
      * 使指定心跳任务失效，阻止其继续更新会话或触发回调。
@@ -266,48 +291,60 @@ internal class RealtimeSessionService(
      * @param version 用于识别当前任务或回调归属的版本号。
      * @return 本次成功使目标心跳周期失效时为 true。
      */
-    private fun invalidate(version: Long): Boolean =
+    private fun invalidate(
+        version: Long
+    ): Boolean =
         heartbeatVersion.compareAndSet(version, version + 1L)
 
     /**
      * 关联一次会话心跳的标识、版本及失败通知。
-     *
-     * @param version 用于识别当前任务或回调归属的版本号。
-     * @param sessionId 服务端会话标识。
-     * @param onFailure 会话续期失败时接收会话标识和错误的回调。
      */
     private data class HeartbeatContext(
+        /**
+         * 用于识别当前任务或回调归属的版本号。
+         */
         val version: Long,
+
+        /**
+         * 服务端会话标识。
+         */
         val sessionId: String,
+
+        /**
+         * 会话续期失败时接收会话标识和错误的回调。
+         */
         val onFailure: RealtimeSessionHeartbeatFailureHandler,
     )
 
     /**
-     * 提供 RealtimeSessionService 使用的构造入口、共享配置或常量。
+     * 服务端会话状态的协议取值。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 服务端返回的会话活跃状态。
          */
         const val ACTIVE_STATUS = "ACTIVE"
     }
 }
 
 /**
- * 提供可替换的心跳等待行为，便于测试周期任务。
+ * 控制服务端会话心跳的发送间隔。
  */
 internal fun interface RealtimeHeartbeatSleeper {
+
     /**
      * 挂起等待下一次心跳发送时刻。
      */
     suspend fun sleep()
 
     /**
-     * 提供 RealtimeHeartbeatSleeper 使用的构造入口、共享配置或常量。
+     * 会话心跳的默认等待策略。
      */
     companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 每次等待 10 秒的心跳间隔策略。
          */
         val live: RealtimeHeartbeatSleeper = RealtimeHeartbeatSleeper {
             delay(10_000L)

@@ -1,10 +1,9 @@
 //
 //  RealtimeModel.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -15,40 +14,27 @@ import androidx.compose.ui.unit.IntSize
 
 /**
  * SDK 支持的实时生成模型；[id] 是创建服务端会话时使用的模型标识。
- *
- * @param id 用于区分当前对象或操作的唯一标识。
  */
-public enum class RealtimeModel(public val id: String) {
+public enum class RealtimeModel(
     /**
-     * 国内声网实时生成模型。
+     * 请求服务端时使用的模型标识。
      */
-    X2_1_1_PREVIEW_CN("x2.1.1-preview-cn"),
+    public val id: String
+) {
 
     /**
-     * 海外声网实时生成模型。
+     * X2.1 实时生成模型。
      */
-    X2_1_1_PREVIEW_US("x2.1.1-preview-us"),
+    X2_1("x2.1"),
 
     ;
 
     /**
-     * 模型展示名称和服务入口。
-     *
      * 界面展示名称，与创建会话时使用的 [id] 分开维护。
      */
     public val displayName: String
         get() = when (this) {
-            X2_1_1_PREVIEW_CN -> "X2.1.1-preview-cn"
-            X2_1_1_PREVIEW_US -> "X2.1.1-preview-us"
-        }
-
-    /**
-     * 模型专用的会话 API 地址；null 表示沿用客户端环境地址。
-     */
-    public val baseUrl: String?
-        get() = when (this) {
-            X2_1_1_PREVIEW_CN -> "https://cloud.xmax.22duck.cn/open/api/v1"
-            X2_1_1_PREVIEW_US -> "https://api.xmax.ai/open/api/v1"
+            X2_1 -> "X2.1"
         }
 
     /**
@@ -60,8 +46,11 @@ public enum class RealtimeModel(public val id: String) {
      */
     public val resolutionBuckets: List<IntSize>
         get() = listOf(
-            IntSize(width = 1_024, height = 1_920),
-            IntSize(width = 1_920, height = 1_024),
+            IntSize(width = 1_920, height = 1_080),
+            IntSize(width = 1_080, height = 1_920),
+            IntSize(width = 1_408, height = 1_408),
+            IntSize(width = 1_152, height = 1_536),
+            IntSize(width = 1_536, height = 1_152),
         )
 
     /**
@@ -95,7 +84,7 @@ public enum class RealtimeModel(public val id: String) {
      */
     public val defaultCameraVideoFormat: RealtimeVideoFormat
         get() = RealtimeVideoFormat(
-            width = 1_024,
+            width = 1_080,
             height = 1_920,
             fps = defaultFrameRate,
         )
@@ -103,12 +92,10 @@ public enum class RealtimeModel(public val id: String) {
 
 /**
  * 创建实时 Manager 所需的业务配置。
- *
- * @param model 用于确定服务端能力、地址及输入规格的模型；默认值为 `RealtimeModel.X2_1_1_PREVIEW_CN`。
  */
 public data class RealtimeConfiguration(
     /**
-     * 新建实时会话使用的模型，默认国内模型；海外业务请显式选择 US 模型。
+     * 新建实时会话使用的模型；服务区域由客户端环境决定。
      */
-    public val model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN,
+    public val model: RealtimeModel = RealtimeModel.X2_1,
 )

@@ -1,10 +1,9 @@
 //
 //  DecodedImage.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -29,6 +28,7 @@ import java.util.UUID
  * 表示 SDK 内部已经完成方向处理和像素解码的图片。
  */
 internal interface DecodedImage {
+
     /**
      * 视频或图片的尺寸与像素数据。
      */
@@ -40,17 +40,21 @@ internal interface DecodedImage {
      * @param videoFormat 视频尺寸、帧率及上行编码参数。
      * @return 按目标像素格式、尺寸和方向生成的视频帧。
      */
-    fun makeVideoFrame(videoFormat: RealtimeVideoFormat): VideoFrame
+    fun makeVideoFrame(
+        videoFormat: RealtimeVideoFormat
+    ): VideoFrame
 }
 
 /**
  * 持有方向已经规范化的 Android Bitmap，并生成可复用的 RGBA 视频帧。
- *
- * @param bitmap 待处理或显示的 Android 图片。
  */
 internal class BitmapDecodedImage(
+    /**
+     * 待处理或显示的 Android 图片。
+     */
     private val bitmap: Bitmap,
 ) : DecodedImage {
+
     /**
      * 视频或图片的尺寸与像素数据。
      */
@@ -62,7 +66,9 @@ internal class BitmapDecodedImage(
      * @param videoFormat 视频尺寸、帧率及上行编码参数。
      * @return 按目标像素格式、尺寸和方向生成的视频帧。
      */
-    override fun makeVideoFrame(videoFormat: RealtimeVideoFormat): VideoFrame {
+    override fun makeVideoFrame(
+        videoFormat: RealtimeVideoFormat
+    ): VideoFrame {
         videoFormat.validate()
         if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) {
             throw processingError("Decoded image is unavailable")
@@ -128,20 +134,23 @@ internal class BitmapDecodedImage(
     }
 
     /**
-     * 提供 BitmapDecodedImage 使用的构造入口、共享配置或常量。
+     * 图像像素布局与处理错误的构造入口。
      */
     internal companion object {
+
         /**
          * 创建用于报告图像处理失败的媒体错误。
          *
          * @param message 待发送或记录的消息文本。
          * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
          */
-        private fun processingError(message: String): XmaxError =
+        private fun processingError(
+            message: String
+        ): XmaxError =
             XmaxError(XmaxErrorCode.MEDIA_ERROR, message)
 
         /**
-         * 共享常量、默认配置与工厂入口。
+         * RGBA 每个像素占用的字节数。
          */
         private const val RGBA_BYTES_PER_PIXEL = 4
     }

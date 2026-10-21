@@ -1,10 +1,9 @@
 //
 //  RealtimeExternalVideoSource.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -20,6 +19,7 @@ import android.widget.FrameLayout
  * 生命周期和预览方法在主线程调用；帧可从后台线程同步提交。
  */
 public interface RealtimeExternalVideoSource {
+
     /**
      * 外部源的原始视频规格与音频能力。
      *
@@ -40,7 +40,9 @@ public interface RealtimeExternalVideoSource {
      *
      * @param sink SDK 提供的外部音视频帧接收器。
      */
-    public suspend fun start(sink: RealtimeExternalFrameSink)
+    public suspend fun start(
+        sink: RealtimeExternalFrameSink
+    )
 
     /**
      * 停止向 SDK 供帧并清除 sink，必须幂等；不代表关闭接入方的摄像头或播放器。
@@ -53,14 +55,19 @@ public interface RealtimeExternalVideoSource {
      * @param container 承载本地预览视图的 Android 容器。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    public fun attachPreview(container: FrameLayout, contentMode: VideoContentMode) = Unit
+    public fun attachPreview(
+        container: FrameLayout,
+        contentMode: VideoContentMode
+    ) = Unit
 
     /**
      * 可选：移除对应容器中的本地预览，不停止采集；默认不操作。
      *
      * @param container 承载本地预览视图的 Android 容器。
      */
-    public fun detachPreview(container: FrameLayout) = Unit
+    public fun detachPreview(
+        container: FrameLayout
+    ) = Unit
 
     /**
      * 可选：只控制本地监听音量，不改变提交给 SDK 的 PCM；默认不操作。
@@ -68,7 +75,10 @@ public interface RealtimeExternalVideoSource {
      * @param volume 播放音量，范围为 0 到 1。
      * @param muted 是否静音。
      */
-    public fun setPreviewAudio(volume: Float, muted: Boolean) = Unit
+    public fun setPreviewAudio(
+        volume: Float,
+        muted: Boolean
+    ) = Unit
 }
 
 /**
@@ -77,6 +87,7 @@ public interface RealtimeExternalVideoSource {
  * 两者时间戳使用同一单调时钟（微秒），seek/循环后不得回退。
  */
 public interface RealtimeExternalFrameSink {
+
     /**
      * SDK 当前要求的输入规格及供帧状态。
      */
@@ -93,7 +104,10 @@ public interface RealtimeExternalFrameSink {
      * @param rgba 按当前输入尺寸排列的紧密 RGBA 像素数据。
      * @param timestampUs 帧的单调时间戳，单位为微秒。
      */
-    public fun pushVideo(rgba: ByteArray, timestampUs: Long)
+    public fun pushVideo(
+        rgba: ByteArray,
+        timestampUs: Long
+    )
 
     /**
      * 向 SDK 提交外部采集的 PCM 音频数据。
@@ -101,12 +115,17 @@ public interface RealtimeExternalFrameSink {
      * @param pcm 48 kHz、单声道、PCM16 小端音频字节。
      * @param timestampUs 帧的单调时间戳，单位为微秒。
      */
-    public fun pushAudio(pcm: ByteArray, timestampUs: Long)
+    public fun pushAudio(
+        pcm: ByteArray,
+        timestampUs: Long
+    )
 
     /**
      * 报告当前媒体输入或生成任务的失败。
      *
      * @param error 本次操作失败的异常或 SDK 错误。
      */
-    public fun reportError(error: Throwable)
+    public fun reportError(
+        error: Throwable
+    )
 }

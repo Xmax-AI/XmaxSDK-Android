@@ -1,10 +1,9 @@
 //
 //  TrajectoryRegistry.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -18,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 保存远端视频轨道与轨迹交互能力之间的绑定。
  */
 internal object TrajectoryRegistry {
+
     /**
      * 轨道与显示组件的绑定记录。
      */
@@ -29,7 +29,10 @@ internal object TrajectoryRegistry {
      * @param track 需要显示或绑定的视频轨道。
      * @param binding 视频轨道对应的显示或交互绑定。
      */
-    fun register(track: RealtimeVideoTrack, binding: TrajectoryBinding) {
+    fun register(
+        track: RealtimeVideoTrack,
+        binding: TrajectoryBinding
+    ) {
         bindings.put(track, binding)?.invalidate()
     }
 
@@ -38,7 +41,9 @@ internal object TrajectoryRegistry {
      *
      * @param track 需要显示或绑定的视频轨道。
      */
-    fun unregister(track: RealtimeVideoTrack) {
+    fun unregister(
+        track: RealtimeVideoTrack
+    ) {
         bindings.remove(track)?.invalidate()
     }
 
@@ -48,5 +53,7 @@ internal object TrajectoryRegistry {
      * @param track 需要显示或绑定的视频轨道。
      * @return 轨道对应的轨迹绑定；未注册时为 null。
      */
-    fun binding(track: RealtimeVideoTrack): TrajectoryBinding? = bindings[track]
+    fun binding(
+        track: RealtimeVideoTrack
+    ): TrajectoryBinding? = bindings[track]
 }

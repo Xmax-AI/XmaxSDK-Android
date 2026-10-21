@@ -1,10 +1,9 @@
 //
 //  RtcStatsLogger.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -20,12 +19,15 @@ import ai.xmax.sdk.DownlinkVideoStatistics
  * 输出统一的上下行视频统计日志；不可用指标显示为 —。
  */
 internal object RtcStatsLogger {
+
     /**
      * 按性能日志开关输出上行视频统计。
      *
      * @param stats RTC 视频统计快照。
      */
-    fun logUplinkVideoStatistics(stats: UplinkVideoStatistics) {
+    fun logUplinkVideoStatistics(
+        stats: UplinkVideoStatistics
+    ) {
         XmaxLogger.rtc.debug(message = { uplinkVideoStatisticsMessage(stats) }, option = XmaxLoggerOption.performance)
     }
 
@@ -34,7 +36,9 @@ internal object RtcStatsLogger {
      *
      * @param stats RTC 视频统计快照。
      */
-    fun logDownlinkVideoStatistics(stats: DownlinkVideoStatistics) {
+    fun logDownlinkVideoStatistics(
+        stats: DownlinkVideoStatistics
+    ) {
         XmaxLogger.rtc.debug(message = { downlinkVideoStatisticsMessage(stats) }, option = XmaxLoggerOption.performance)
     }
 
@@ -44,7 +48,9 @@ internal object RtcStatsLogger {
      * @param stats RTC 视频统计快照。
      * @return 上行视频统计的分行文本。
      */
-    internal fun uplinkVideoStatisticsMessage(stats: UplinkVideoStatistics): String =
+    internal fun uplinkVideoStatisticsMessage(
+        stats: UplinkVideoStatistics
+    ): String =
         "视频上行统计 (Video Uplink Statistics)\n" +
             "├─ ${label("分辨率：", "Resolution: ")}${resolution(stats.width, stats.height)}\n" +
             "├─ ${label("发送码率：", "Send Bitrate: ")}${metric(stats.bitrateKbps, "kbps")}\n" +
@@ -59,7 +65,9 @@ internal object RtcStatsLogger {
      * @param stats RTC 视频统计快照。
      * @return 下行视频统计的分行文本。
      */
-    internal fun downlinkVideoStatisticsMessage(stats: DownlinkVideoStatistics): String =
+    internal fun downlinkVideoStatisticsMessage(
+        stats: DownlinkVideoStatistics
+    ): String =
         "视频下行统计 (Video Downlink Statistics)\n" +
             "├─ ${label("分辨率：", "Resolution: ")}${resolution(stats.width, stats.height)}\n" +
             "├─ ${label("接收码率：", "Receive Bitrate: ")}${metric(stats.bitrateKbps, "kbps")}\n" +
@@ -75,7 +83,10 @@ internal object RtcStatsLogger {
      * @param unit 指标显示使用的单位文本。
      * @return 包含数值与单位的指标文本；缺失值显示为不可用。
      */
-    private fun metric(value: Int?, unit: String): String = value?.let { "$it $unit" } ?: "—"
+    private fun metric(
+        value: Int?,
+        unit: String
+    ): String = value?.let { "$it $unit" } ?: "—"
 
     /**
      * 格式化视频宽高；缺失尺寸显示为不可用。
@@ -84,7 +95,10 @@ internal object RtcStatsLogger {
      * @param height 画面高度，单位为像素。
      * @return 宽高组成的分辨率文本；无有效尺寸时显示为不可用。
      */
-    private fun resolution(width: Int?, height: Int?): String =
+    private fun resolution(
+        width: Int?,
+        height: Int?
+    ): String =
         if (width != null && height != null) "$width × $height" else "—"
 
     /**
@@ -94,5 +108,8 @@ internal object RtcStatsLogger {
      * @param english 海外环境使用的英文文本。
      * @return 符合当前日志语言配置的文本。
      */
-    private fun label(chinese: String, english: String): String = XmaxLogger.localized(chinese, english)
+    private fun label(
+        chinese: String,
+        english: String
+    ): String = XmaxLogger.localized(chinese, english)
 }

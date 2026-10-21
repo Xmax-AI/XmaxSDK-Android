@@ -1,10 +1,9 @@
 //
 //  StorageServicing.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -20,6 +19,7 @@ import java.io.File
  * 定义图片和视频的上传、下载及图片安全检查能力。
  */
 internal interface StorageServicing {
+
     /**
      * 上传图片字节并返回可访问的存储结果。
      *

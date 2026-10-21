@@ -1,10 +1,9 @@
 //
 //  StorageService.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -35,14 +34,19 @@ import org.json.JSONObject
 
 /**
  * 提供媒体上传下载、格式校验及可选图片内容安全检查。
- *
- * @param apiService 发起服务端 API 请求的客户端。
- * @param storageManager 执行对象存储传输的组件。
  */
 internal class StorageService(
+    /**
+     * 发起服务端 API 请求的客户端。
+     */
     private val apiService: ApiServicing,
+
+    /**
+     * 执行对象存储传输的组件。
+     */
     private val storageManager: StorageManaging,
 ) : StorageServicing {
+
     /**
      * 上传图片字节并返回可访问的存储结果。
      *
@@ -318,7 +322,9 @@ internal class StorageService(
      * @param url 资源或请求的网络地址。
      * @return 安全检查通过后的图片地址。
      */
-    private suspend fun checkImage(url: String): String {
+    private suspend fun checkImage(
+        url: String
+    ): String {
         val value = apiService.post("/cos/image/check", JSONObject().put("url", url))
         val safe = value.opt("safe")
         if (safe !is Boolean) {
@@ -376,7 +382,9 @@ internal class StorageService(
      * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
      * @return 图片扩展名对应的 MIME 类型。
      */
-    private fun inferImageContentType(fileName: String): String = inferContentType(
+    private fun inferImageContentType(
+        fileName: String
+    ): String = inferContentType(
         fileName,
         mapOf(
             "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "jpe" to "image/jpeg",
@@ -394,7 +402,9 @@ internal class StorageService(
      * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
      * @return 视频扩展名对应的 MIME 类型。
      */
-    private fun inferVideoContentType(fileName: String): String = inferContentType(
+    private fun inferVideoContentType(
+        fileName: String
+    ): String = inferContentType(
         fileName,
         mapOf(
             "mp4" to "video/mp4", "mov" to "video/quicktime", "m4v" to "video/x-m4v",
@@ -412,7 +422,11 @@ internal class StorageService(
      * @param mediaType 允许上传的媒体类型。
      * @return 允许扩展名对应的 MIME 类型。
      */
-    private fun inferContentType(fileName: String, types: Map<String, String>, mediaType: String): String {
+    private fun inferContentType(
+        fileName: String,
+        types: Map<String, String>,
+        mediaType: String
+    ): String {
         val extension = fileName.substringAfterLast('.', "").lowercase()
         return types[extension] ?: throw XmaxError(
             XmaxErrorCode.INVALID_CONFIGURATION,
@@ -426,7 +440,9 @@ internal class StorageService(
      * @param value 需要规范化、校验或显示的文本。
      * @return 不包含目录路径的存储文件名。
      */
-    private fun sanitizeFileName(value: String): String = value.trim()
+    private fun sanitizeFileName(
+        value: String
+    ): String = value.trim()
         .replace(Regex("[^\\p{L}\\p{N}._-]"), "_")
         .replace(Regex("_+"), "_")
         .trim { it == '.' || it == '_' || it == '-' }
@@ -437,7 +453,9 @@ internal class StorageService(
      * @param value 需要规范化、校验或显示的文本。
      * @return 使用 HTTP 或 HTTPS 协议时为 true。
      */
-    private fun isHttpUrl(value: String): Boolean = try {
+    private fun isHttpUrl(
+        value: String
+    ): Boolean = try {
         val uri = URI(value.trim())
         (uri.scheme.equals("http", true) || uri.scheme.equals("https", true)) && !uri.host.isNullOrBlank()
     } catch (_: Exception) {
@@ -450,7 +468,9 @@ internal class StorageService(
      * @param key JSON 对象中的字段名称。
      * @return 必填字段的字符串值。
      */
-    private fun JSONObject.requiredString(key: String): String {
+    private fun JSONObject.requiredString(
+        key: String
+    ): String {
         val value = opt(key)
         if (value !is String) throw invalidCredentialPayload()
         return value.trim()
@@ -462,7 +482,9 @@ internal class StorageService(
      * @param key JSON 对象中的字段名称。
      * @return 必填字段的非空字符串值。
      */
-    private fun JSONObject.requiredNonEmptyString(key: String): String =
+    private fun JSONObject.requiredNonEmptyString(
+        key: String
+    ): String =
         requiredString(key).takeIf { it.isNotEmpty() } ?: throw invalidCredentialPayload()
 
     /**
@@ -480,7 +502,10 @@ internal class StorageService(
      * @param mediaType 允许上传的媒体类型。
      * @return 媒体尺寸的日志描述。
      */
-    private suspend fun readResolution(source: StorageSource, mediaType: MediaType): String =
+    private suspend fun readResolution(
+        source: StorageSource,
+        mediaType: MediaType
+    ): String =
         withContext(Dispatchers.IO) {
             runCatching {
                 when (mediaType) {
@@ -496,7 +521,9 @@ internal class StorageService(
      * @param source 待上传的本地文件或字节数据。
      * @return 图片尺寸的日志描述。
      */
-    private fun readImageResolution(source: StorageSource): String {
+    private fun readImageResolution(
+        source: StorageSource
+    ): String {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         when (source) {
             is StorageSource.Bytes -> BitmapFactory.decodeByteArray(
@@ -516,7 +543,9 @@ internal class StorageService(
      * @param source 待上传的本地文件或字节数据。
      * @return 视频尺寸的日志描述。
      */
-    private fun readVideoResolution(source: StorageSource): String {
+    private fun readVideoResolution(
+        source: StorageSource
+    ): String {
         val file = (source as? StorageSource.LocalFile)?.file ?: return "--"
         val retriever = MediaMetadataRetriever()
         return try {
@@ -547,7 +576,10 @@ internal class StorageService(
      * @param height 画面高度，单位为像素。
      * @return 格式化后的宽高文本。
      */
-    private fun formatResolution(width: Int, height: Int): String =
+    private fun formatResolution(
+        width: Int,
+        height: Int
+    ): String =
         if (width > 0 && height > 0) "$width × $height" else "--"
 
     /**
@@ -556,7 +588,9 @@ internal class StorageService(
      * @param byteCount 数据大小，单位为字节。
      * @return 带数据量单位的字节数描述。
      */
-    private fun formatByteCount(byteCount: Long): String {
+    private fun formatByteCount(
+        byteCount: Long
+    ): String {
         val count = byteCount.toDouble()
         return when {
             byteCount < 1_024L -> "$byteCount B"
@@ -577,7 +611,9 @@ internal class StorageService(
      * @param startedAt 操作开始时的单调时钟纳秒数。
      * @return 带时间单位的耗时描述。
      */
-    private fun formatDuration(startedAt: Long): String {
+    private fun formatDuration(
+        startedAt: Long
+    ): String {
         val milliseconds = (System.nanoTime() - startedAt) / 1_000_000L
         return if (milliseconds < 1_000L) {
             "$milliseconds ms"
@@ -588,11 +624,19 @@ internal class StorageService(
 
     /**
      * 限定存储服务允许处理的图片或视频类型。
-     *
-     * @param value 需要规范化、校验或显示的文本。
-     * @param label 用于日志或错误描述的可读名称。
      */
-    private enum class MediaType(val value: String, val label: String) {
+    private enum class MediaType(
+        /**
+         * 需要规范化、校验或显示的文本。
+         */
+        val value: String,
+
+        /**
+         * 用于日志或错误描述的可读名称。
+         */
+        val label: String
+    ) {
+
         /**
          * 静态图片输入。
          */

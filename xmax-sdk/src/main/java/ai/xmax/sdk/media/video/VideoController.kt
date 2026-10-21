@@ -1,10 +1,9 @@
 //
 //  VideoController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -26,14 +25,19 @@ import android.net.Uri
 
 /**
  * 协调本地视频播放器、RTC 外部音视频源和预览资源。
- *
- * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
- * @param mediaSourceController 解析媒体输入并驱动帧输出的组件。
  */
 internal class VideoController(
+    /**
+     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     */
     private val rtcManager: RtcManaging,
+
+    /**
+     * 解析媒体输入并驱动帧输出的组件。
+     */
     private val mediaSourceController: MediaSourceControlling,
 ) {
+
     /**
      * 视频输入轨道的并发保护。
      */
@@ -44,9 +48,15 @@ internal class VideoController(
      */
     private var activeTrack: RealtimeVideoTrack? = null
 
+    /**
+     * 当前本地视频对应的媒体轨道。
+     */
     val currentTrack: RealtimeVideoTrack?
         get() = synchronized(stateLock) { activeTrack }
 
+    /**
+     * 当前视频轨道是否包含音频。
+     */
     val hasAudio: Boolean
         get() = currentTrack != null && mediaSourceController.hasAudio
 
@@ -106,7 +116,9 @@ internal class VideoController(
      *
      * @param muted 是否静音。
      */
-    suspend fun setLocalAudioPreviewMuted(muted: Boolean) {
+    suspend fun setLocalAudioPreviewMuted(
+        muted: Boolean
+    ) {
         if (currentTrack != null) mediaSourceController.setLocalAudioPreviewMuted(muted)
     }
 
@@ -115,7 +127,9 @@ internal class VideoController(
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    suspend fun setLocalAudioVolume(volume: Float) {
+    suspend fun setLocalAudioVolume(
+        volume: Float
+    ) {
         mediaSourceController.setLocalAudioVolume(volume)
     }
 
@@ -138,11 +152,12 @@ internal class VideoController(
     }
 
     /**
-     * 提供 VideoController 使用的构造入口、共享配置或常量。
+     * 本地视频轨道的标识约定。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 本地视频文件的视频轨道标识。
          */
         const val LOCAL_VIDEO_TRACK_ID = "video0"
     }

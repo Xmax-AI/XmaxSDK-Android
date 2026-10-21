@@ -1,7 +1,7 @@
 //
 //  RealtimeSessionServiceTest.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -45,11 +45,11 @@ public class RealtimeSessionServiceTest {
                 ApiBehavior.Success(JSONObject().put("sessionUid", "allocated").put("userUid", "business-user").put("modelExtra", extra)),
                 ApiBehavior.Success(JSONObject()),
             )
-            val error = expectXmaxError { RealtimeSessionService(api).createSession(RealtimeModel.X2_1_1_PREVIEW_US) }
+            val error = expectXmaxError { RealtimeSessionService(api).createSession(RealtimeModel.X2_1) }
             assertEquals(XmaxErrorCode.SESSION_ERROR, error.code)
             assertEquals(ApiMethod.DELETE, api.requests.last().method)
             assertEquals("/session/allocated", api.requests.last().path)
-            assertEquals("x2.1.1-preview-us", JSONObject(api.requests.first().body!!).getString("model"))
+            assertEquals("x2.1", JSONObject(api.requests.first().body!!).getString("model"))
         }
     }
 
@@ -74,7 +74,7 @@ public class RealtimeSessionServiceTest {
         )
         val service = RealtimeSessionService(apiService)
 
-        val session = service.createSession(RealtimeModel.X2_1_1_PREVIEW_CN)
+        val session = service.createSession(RealtimeModel.X2_1)
 
         assertEquals(
             RealtimeSession(
@@ -94,7 +94,7 @@ public class RealtimeSessionServiceTest {
         val request = apiService.requests.single()
         assertEquals(ApiMethod.POST, request.method)
         assertEquals("/session", request.path)
-        assertEquals("x2.1.1-preview-cn", JSONObject(request.body!!).getString("model"))
+        assertEquals("x2.1", JSONObject(request.body!!).getString("model"))
     }
 
     @Test
@@ -117,10 +117,10 @@ public class RealtimeSessionServiceTest {
         )
         val service = RealtimeSessionService(apiService)
 
-        service.createSession(RealtimeModel.X2_1_1_PREVIEW_CN)
+        service.createSession(RealtimeModel.X2_1)
 
         val request = apiService.requests.single()
-        assertEquals("x2.1.1-preview-cn", JSONObject(request.body!!).getString("model"))
+        assertEquals("x2.1", JSONObject(request.body!!).getString("model"))
     }
 
     @Test
@@ -138,7 +138,7 @@ public class RealtimeSessionServiceTest {
         )
         val service = RealtimeSessionService(apiService)
 
-        val session = service.createSession(RealtimeModel.X2_1_1_PREVIEW_CN)
+        val session = service.createSession(RealtimeModel.X2_1)
 
         assertEquals(
             RealtimeSessionConnection(
@@ -158,7 +158,7 @@ public class RealtimeSessionServiceTest {
         )
 
         val error = expectXmaxError {
-            service.createSession(RealtimeModel.X2_1_1_PREVIEW_CN)
+            service.createSession(RealtimeModel.X2_1)
         }
 
         assertEquals(XmaxErrorCode.SESSION_ERROR, error.code)
@@ -178,7 +178,7 @@ public class RealtimeSessionServiceTest {
         )
 
         val error = expectXmaxError {
-            service.createSession(RealtimeModel.X2_1_1_PREVIEW_CN)
+            service.createSession(RealtimeModel.X2_1)
         }
 
         assertEquals(XmaxErrorCode.SESSION_ERROR, error.code)

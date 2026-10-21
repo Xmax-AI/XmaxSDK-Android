@@ -1,10 +1,9 @@
 //
 //  RtcManaging.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -22,6 +21,7 @@ import android.view.View
  * 定义 RTC 引擎生命周期和房间连接能力。
  */
 internal interface RtcManaging {
+
     /**
      * 初始化 RTC 引擎。重复调用不会重复获取引擎。
      */
@@ -37,7 +37,9 @@ internal interface RtcManaging {
      *
      * @param configuration 上行视频的尺寸、帧率、码率及编码偏好。
      */
-    fun configureVideoEncoding(configuration: VideoEncodingConfiguration)
+    fun configureVideoEncoding(
+        configuration: VideoEncodingConfiguration
+    )
 
     /**
      * 推送一帧外部视频数据及其可选 SEI。
@@ -55,7 +57,9 @@ internal interface RtcManaging {
      *
      * @param frame 待播放或提交的 PCM 音频帧。
      */
-    fun pushExternalAudioFrame(frame: AudioFrame)
+    fun pushExternalAudioFrame(
+        frame: AudioFrame
+    )
 
     /**
      * 将主视频切换为 RTC 外部帧输入。
@@ -105,7 +109,9 @@ internal interface RtcManaging {
      *
      * @param position 需要使用的前置或后置摄像头。
      */
-    fun switchCamera(position: CameraPosition)
+    fun switchCamera(
+        position: CameraPosition
+    )
 
     /**
      * 将本地视频绑定到渲染视图。
@@ -141,14 +147,18 @@ internal interface RtcManaging {
      *
      * @param stream 由房间和用户标识确定的远端媒体流。
      */
-    fun unbindRemoteVideo(stream: RemoteStream)
+    fun unbindRemoteVideo(
+        stream: RemoteStream
+    )
 
     /**
      * 加入 RTC 房间，并等待服务端确认加入成功。
      *
      * @param configuration 房间标识、用户账号、App ID 和进房 Token。
      */
-    suspend fun joinRoom(configuration: RoomJoinConfiguration)
+    suspend fun joinRoom(
+        configuration: RoomJoinConfiguration
+    )
 
     /**
      * 离开当前或正在加入的 RTC 房间。重复调用安全。
@@ -214,14 +224,19 @@ internal interface RtcManaging {
      * @param message 待发送或记录的消息文本。
      * @param replacingPendingMessage 合并键；同键且尚未发送的信令仅保留最新内容。
      */
-    fun sendRoomMessage(message: String, replacingPendingMessage: String? = null)
+    fun sendRoomMessage(
+        message: String,
+        replacingPendingMessage: String? = null
+    )
 
     /**
      * 丢弃尚未开始发送的可合并信令。
      *
      * @param key 要清理的合并键；null 表示清理全部可合并信令。
      */
-    fun discardPendingMessages(key: String? = null)
+    fun discardPendingMessages(
+        key: String? = null
+    )
 
     /**
      * 不阻塞主线程地等待已经入队的房间信令提交完成。
@@ -233,14 +248,18 @@ internal interface RtcManaging {
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setEventListener(listener: RtcEventListener?)
+    fun setEventListener(
+        listener: RtcEventListener?
+    )
 
     /**
      * 设置 RTC 摄像头预览就绪监听器，传入空值时清除。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?)
+    fun setCameraPreviewReadyListener(
+        listener: RealtimeCameraPreviewReadyListener?
+    )
 
     /**
      * 为当前生成注册持续帧接收器；清除时同时停止该接收器的远端渲染。
@@ -258,5 +277,7 @@ internal interface RtcManaging {
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setQualityListener(listener: RtcQualityListener?)
+    fun setQualityListener(
+        listener: RtcQualityListener?
+    )
 }

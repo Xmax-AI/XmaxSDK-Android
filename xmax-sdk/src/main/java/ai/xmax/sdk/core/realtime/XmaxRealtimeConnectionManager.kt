@@ -1,10 +1,9 @@
 //
 //  XmaxRealtimeConnectionManager.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -29,30 +28,57 @@ import kotlinx.coroutines.withTimeout
  * 将服务端会话、RTC 房间、本地发布及远端轨道作为一组连接资源管理。
  * operationMutex 覆盖连接、断连和失败回滚，防止后一连接接管尚未释放的旧资源。
  * stateLock 仅保护当前会话和轨道快照，不在持锁期间执行挂起操作。
- *
- * @param sessionService 创建、续期和关闭服务端会话的服务。
- * @param interactionController 提交触控轨迹的控制器。
- * @param renderController 绑定视频轨道与预览视图的控制器。
- * @param streamController 控制 RTC 发布、订阅及生成信令的组件。
  */
 internal class XmaxRealtimeConnectionManager(
+    /**
+     * 创建、续期和关闭服务端会话的服务。
+     */
     private val sessionService: RealtimeSessionServicing,
+
+    /**
+     * 提交触控轨迹的控制器。
+     */
     private val interactionController: InteractionControlling,
+
+    /**
+     * 绑定视频轨道与预览视图的控制器。
+     */
     private val renderController: RenderControlling,
+
+    /**
+     * 控制 RTC 发布、订阅及生成信令的组件。
+     */
     private val streamController: StreamControlling,
 ) {
+
     /**
      * 连接状态及生命周期操作的并发保护。
      */
     private val stateLock = Any()
+
+    /**
+     * 串行执行连接与断开操作的互斥锁。
+     */
     private val operationMutex = Mutex()
 
     /**
      * 当前会话、结果轨道及入房时的输入规格。
      */
     private var activeRemoteTrack: RealtimeVideoTrack? = null
+
+    /**
+     * 当前连接所使用的服务端会话。
+     */
     private var activeSession: RealtimeSession? = null
+
+    /**
+     * 发布本地流时使用的输入规格。
+     */
     private var inputFormat: RealtimeVideoFormat? = null
+
+    /**
+     * 当前输入流是否包含音频。
+     */
     private var inputHasAudio = false
 
     /**
@@ -62,7 +88,10 @@ internal class XmaxRealtimeConnectionManager(
      * @param hasAudio 输入媒体是否包含可用音频。
      * @return 当前连接可复用该输入时为 true，否则为 false。
      */
-    fun acceptsInput(format: RealtimeVideoFormat, hasAudio: Boolean): Boolean = synchronized(stateLock) {
+    fun acceptsInput(
+        format: RealtimeVideoFormat,
+        hasAudio: Boolean
+    ): Boolean = synchronized(stateLock) {
         activeSession != null && inputFormat == format && inputHasAudio == hasAudio
     }
 
@@ -89,7 +118,9 @@ internal class XmaxRealtimeConnectionManager(
      *
      * @param videoFormat 视频尺寸、帧率及上行编码参数。
      */
-    fun updateRemoteVideoFormat(videoFormat: RealtimeVideoFormat) {
+    fun updateRemoteVideoFormat(
+        videoFormat: RealtimeVideoFormat
+    ) {
         val track = synchronized(stateLock) { activeRemoteTrack } ?: return
         track.updateVideoFormat(videoFormat)
     }
@@ -151,9 +182,7 @@ internal class XmaxRealtimeConnectionManager(
             timing?.mark(RealtimeTiming.Stage.CONNECTION_END)
             return@withLock RealtimeMediaStream(StreamID.REMOTE.value, remoteTrack)
         } catch (error: Throwable) {
-            /**
-             * 回滚仍持有操作锁，此时旧连接的资源不可能已被后续 connect 接管。
-             */
+            // 回滚仍持有操作锁，此时旧连接的资源不可能已被后续 connect 接管。
             cleanupAfterFailure(error,
                 { sessionService.stopHeartbeat() },
                 { val track = synchronized(stateLock) {
@@ -192,7 +221,9 @@ internal class XmaxRealtimeConnectionManager(
      *
      * @param sessionId 服务端会话标识。
      */
-    private suspend fun closeSessionBestEffort(sessionId: String) {
+    private suspend fun closeSessionBestEffort(
+        sessionId: String
+    ) {
         try { withTimeout(5_000L) { sessionService.closeSession(sessionId) } }
         catch (error: Throwable) { logCleanupFailure("Failed to close realtime session $sessionId", error) }
     }
@@ -203,7 +234,10 @@ internal class XmaxRealtimeConnectionManager(
      * @param title 日志条目的说明标题。
      * @param error 本次操作失败的异常或 SDK 错误。
      */
-    private fun logCleanupFailure(title: String, error: Throwable) {
+    private fun logCleanupFailure(
+        title: String,
+        error: Throwable
+    ) {
         XmaxLogger.realtime.error(
             message = {
                 "$title\n└─ ${XmaxLogger.localized("原因：", "Reason: ")}${ErrorMessageFormatter.format(error)}"
@@ -216,7 +250,9 @@ internal class XmaxRealtimeConnectionManager(
      *
      * @param isCurrent 判断当前操作是否仍有效的函数。
      */
-    private fun ensureCurrent(isCurrent: () -> Boolean) {
+    private fun ensureCurrent(
+        isCurrent: () -> Boolean
+    ) {
         if (!isCurrent()) {
             throw CancellationException("Realtime connection was cancelled")
         }
@@ -224,12 +260,16 @@ internal class XmaxRealtimeConnectionManager(
 
     /**
      * 断连时从活动状态取出的资源快照，后续清理仅操作这一组资源。
-     *
-     * @param session 服务端会话及其连接信息。
-     * @param remoteTrack 当前远端视频轨道。
      */
     private data class ConnectionResources(
+        /**
+         * 服务端会话及其连接信息。
+         */
         val session: RealtimeSession?,
+
+        /**
+         * 当前远端视频轨道。
+         */
         val remoteTrack: RealtimeVideoTrack?,
     )
 }

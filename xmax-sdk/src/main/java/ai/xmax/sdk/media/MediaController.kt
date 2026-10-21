@@ -1,10 +1,9 @@
 //
 //  MediaController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -40,28 +39,52 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * 统一协调本地媒体所有权以及 RTC Engine 生命周期。
- *
- * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
- * @param cameraController 本地相机输入控制器。
- * @param imageController 本地图片输入控制器。
- * @param videoController 本地视频输入控制器。
- * @param externalController 接入方自采集视频输入控制器。
- * @param networkVideoController 服务端读取网络视频的输入控制器。
- * @param interactionController 提交触控轨迹的控制器。
  */
 internal class MediaController(
+    /**
+     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     */
     private val rtcManager: RtcManaging,
+
+    /**
+     * 本地相机输入控制器。
+     */
     private val cameraController: CameraController,
+
+    /**
+     * 本地图片输入控制器。
+     */
     private val imageController: ImageController? = null,
+
+    /**
+     * 本地视频输入控制器。
+     */
     private val videoController: VideoController? = null,
+
+    /**
+     * 接入方自采集视频输入控制器。
+     */
     private val externalController: ExternalVideoController? = null,
+
+    /**
+     * 服务端读取网络视频的输入控制器。
+     */
     private val networkVideoController: NetworkVideoController? = null,
+
+    /**
+     * 提交触控轨迹的控制器。
+     */
     private val interactionController: InteractionController = InteractionController(),
 ) : MediaControlling {
+
     /**
      * 本地媒体操作与状态访问的并发保护。
      */
     private val operationMutex = Mutex()
+
+    /**
+     * 保护当前媒体源状态的锁。
+     */
     private val stateLock = Any()
 
     /**
@@ -69,6 +92,9 @@ internal class MediaController(
      */
     private var activeSource: LocalMediaKind? = null
 
+    /**
+     * 当前媒体源提供的本地视频轨道。
+     */
     override val currentTrack: RealtimeVideoTrack?
         get() = when (synchronized(stateLock) { activeSource }) {
             LocalMediaKind.CAMERA -> cameraController.currentTrack
@@ -79,9 +105,15 @@ internal class MediaController(
             null -> null
         }
 
+    /**
+     * 当前本地轨道的输入规格。
+     */
     override val currentVideoFormat: RealtimeVideoFormat?
         get() = currentTrack?.videoFormat
 
+    /**
+     * 当前媒体源是否包含可发布的音频。
+     */
     override val hasAudio: Boolean
         get() = when (synchronized(stateLock) { activeSource }) {
             LocalMediaKind.CAMERA -> cameraController.useMicrophone
@@ -90,11 +122,17 @@ internal class MediaController(
             else -> false
         }
 
+    /**
+     * 当前网络视频的服务端参考配置。
+     */
     override val networkVideoReference: RealtimeReferenceVideo?
         get() = if (synchronized(stateLock) { activeSource == LocalMediaKind.NETWORK_VIDEO }) {
             networkVideoController?.reference
         } else null
 
+    /**
+     * 网络视频生成结束时的回调。
+     */
     override val networkVideoFinishHandler: (() -> Unit)?
         get() = networkVideoController?.onFinish
 
@@ -130,7 +168,9 @@ internal class MediaController(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) {
+    override fun setCameraPreviewReadyListener(
+        listener: RealtimeCameraPreviewReadyListener?
+    ) {
         cameraController.setPreviewReadyListener(listener)
     }
 
@@ -159,7 +199,9 @@ internal class MediaController(
      *
      * @param frame 当前触控轨迹及显示画面尺寸。
      */
-    override fun submitInteraction(frame: InteractionFrame) {
+    override fun submitInteraction(
+        frame: InteractionFrame
+    ) {
         interactionController.submitInteraction(frame)
     }
 
@@ -259,6 +301,9 @@ internal class MediaController(
     override val isLocalVideo: Boolean
         get() = synchronized(stateLock) { activeSource == LocalMediaKind.VIDEO }
 
+    /**
+     * 当前媒体源是否为本地图片。
+     */
     override val isLocalImage: Boolean
         get() = synchronized(stateLock) { activeSource == LocalMediaKind.IMAGE }
 
@@ -328,7 +373,9 @@ internal class MediaController(
      *
      * @param muted 是否静音。
      */
-    override suspend fun setLocalAudioPreviewMuted(muted: Boolean) {
+    override suspend fun setLocalAudioPreviewMuted(
+        muted: Boolean
+    ) {
         if (synchronized(stateLock) { activeSource } == LocalMediaKind.EXTERNAL) {
             externalController?.setAudio(muted = muted)
         }
@@ -342,7 +389,9 @@ internal class MediaController(
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    override suspend fun setLocalAudioVolume(volume: Float) {
+    override suspend fun setLocalAudioVolume(
+        volume: Float
+    ) {
         videoController?.setLocalAudioVolume(volume)
         externalController?.setAudio(volume = volume)
     }
@@ -376,7 +425,9 @@ internal class MediaController(
      * @param stream 当前本地媒体或远端结果媒体流。
      * @return 当前控制器持有该媒体流时为 true。
      */
-    override fun owns(stream: RealtimeMediaStream): Boolean =
+    override fun owns(
+        stream: RealtimeMediaStream
+    ): Boolean =
         stream.videoTrack != null && stream.videoTrack === currentTrack
 
     /**
@@ -416,7 +467,9 @@ internal class MediaController(
      *
      * @param kind 本次操作或媒体源的类型。
      */
-    private suspend fun stopSource(kind: LocalMediaKind) = operationMutex.withLock {
+    private suspend fun stopSource(
+        kind: LocalMediaKind
+    ) = operationMutex.withLock {
         if (synchronized(stateLock) { activeSource } == kind) stopSourceLocked(kind)
     }
 
@@ -425,7 +478,9 @@ internal class MediaController(
      *
      * @param kind 本次操作或媒体源的类型。
      */
-    private suspend fun stopSourceLocked(kind: LocalMediaKind) {
+    private suspend fun stopSourceLocked(
+        kind: LocalMediaKind
+    ) {
         cleanupResources(
             { stopController(kind) },
             { rtcManager.destroy() },
@@ -438,7 +493,9 @@ internal class MediaController(
      *
      * @param kind 本次操作或媒体源的类型。
      */
-    private suspend fun stopController(kind: LocalMediaKind) {
+    private suspend fun stopController(
+        kind: LocalMediaKind
+    ) {
         when (kind) {
             LocalMediaKind.CAMERA -> cameraController.stopLocalCameraStream()
             LocalMediaKind.IMAGE -> imageController?.stopLocalImageStream()
@@ -472,6 +529,7 @@ internal class MediaController(
      * 当前管理器所持有的本地媒体输入类型。
      */
     private enum class LocalMediaKind {
+
         /**
          * 由服务端直接读取的网络视频输入。
          */

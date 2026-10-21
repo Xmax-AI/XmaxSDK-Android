@@ -1,10 +1,9 @@
 //
 //  RealtimeVideoFormat.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -15,6 +14,7 @@ package ai.xmax.sdk
  * 实时视频的编码策略偏好。
  */
 public enum class RealtimeVideoEncoderPreference {
+
     /**
      * 平衡帧率和分辨率。
      */
@@ -32,50 +32,46 @@ public enum class RealtimeVideoEncoderPreference {
 }
 
 /**
- * 实时视频的尺寸、帧率和上传编码配置。
+ * 实时视频的尺寸、帧率和上行编码配置。
  * 本地图片和视频流以此描述媒体输入基准；模型生成画布独立选择，传输档位不会覆盖输入基准。
- *
- * @param width 输入宽度，单位为像素，必须为正偶数。
- * @param height 输入高度，单位为像素，必须为正偶数。
- * @param fps 输入帧率，必须大于 0。
- * @param minimumBitrate 最低上行码率，单位为 kbps；null 使用 SDK 默认值，0 表示不设最低码率。
- * @param maximumBitrate 最高上行码率，单位为 kbps；null 使用 SDK 默认值，指定时必须大于 0。
- * @param encoderPreference 带宽不足时优先保帧率或保画质的编码策略；默认值为 `RealtimeVideoEncoderPreference.MAINTAIN_FRAMERATE`。
  */
 public data class RealtimeVideoFormat @JvmOverloads constructor(
     /**
-     * 视频宽度，单位为像素。
+     * 视频宽度，单位为像素，必须为正偶数。
      */
     public val width: Int,
 
     /**
-     * 视频高度，单位为像素。
+     * 视频高度，单位为像素，必须为正偶数。
      */
     public val height: Int,
 
     /**
-     * 视频帧率，单位为 fps。
+     * 视频帧率，单位为 fps，必须大于 0。
      */
     public val fps: Int,
 
     /**
-     * 最低上传码率，单位为 kbps；null 使用默认值 100，0 表示不设最低码率。
+     * 最低上行码率，单位为 kbps；null 使用默认值 100，0 表示不设最低码率。
      */
     public val minimumBitrate: Int? = null,
 
     /**
-     * 最高上传码率，单位为 kbps；null 使用 SDK 默认值，指定时必须大于 0。
+     * 最高上行码率，单位为 kbps；null 使用 SDK 默认值，指定时必须大于 0 且不低于最低码率。
      */
     public val maximumBitrate: Int? = null,
 
     /**
-     * 上传编码策略偏好；默认流畅优先，优先保障帧率。
+     * 上行编码策略偏好；默认流畅优先，优先保障帧率。
      */
     public val encoderPreference: RealtimeVideoEncoderPreference =
         RealtimeVideoEncoderPreference.MAINTAIN_FRAMERATE,
 ) {
+
     /**
      * 校验尺寸、帧率和显式指定的码率范围。
+     *
+     * @throws XmaxError 尺寸、帧率或码率范围不满足约束时抛出配置错误。
      */
     public fun validate() {
         if (width <= 0 || height <= 0 || fps <= 0 || width % 2 != 0 || height % 2 != 0) {

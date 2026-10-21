@@ -1,10 +1,9 @@
 //
 //  ImageController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -28,14 +27,19 @@ import android.net.Uri
 
 /**
  * 协调本地图片解码、循环帧输出和预览资源。
- *
- * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
- * @param imageSourceController 负责图片解码及持续供帧的组件。
  */
 internal class ImageController(
+    /**
+     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     */
     private val rtcManager: RtcManaging,
+
+    /**
+     * 负责图片解码及持续供帧的组件。
+     */
     private val imageSourceController: ImageSourceControlling,
 ) {
+
     /**
      * 图片轨道状态的并发保护。
      */
@@ -46,6 +50,9 @@ internal class ImageController(
      */
     private var activeTrack: RealtimeVideoTrack? = null
 
+    /**
+     * 当前图片对应的本地视频轨道。
+     */
     val currentTrack: RealtimeVideoTrack?
         get() = synchronized(stateLock) { activeTrack }
 
@@ -145,11 +152,12 @@ internal class ImageController(
     }
 
     /**
-     * 提供 ImageController 使用的构造入口、共享配置或常量。
+     * 本地图片视频轨道的标识约定。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 本地图片输出的视频轨道标识。
          */
         const val LOCAL_VIDEO_TRACK_ID = "video0"
     }

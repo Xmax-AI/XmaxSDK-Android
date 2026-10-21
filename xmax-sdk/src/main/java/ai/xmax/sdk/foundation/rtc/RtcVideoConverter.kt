@@ -1,10 +1,9 @@
 //
 //  RtcVideoConverter.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -25,6 +24,7 @@ import io.agora.rtc2.video.VideoEncoderConfiguration
  * 将中性视频配置转换为声网类型；输出缓冲区仅供同步提交使用。
  */
 internal object RtcVideoConverter {
+
     /**
      * 本地预览随摄像头自动切换镜像：前置开启、后置关闭；上传编码单独配置。
      *
@@ -32,7 +32,10 @@ internal object RtcVideoConverter {
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      * @return 绑定指定视图和显示模式的 RTC 视频画布。
      */
-    fun makeLocalCanvas(view: View?, contentMode: VideoContentMode): VideoCanvas =
+    fun makeLocalCanvas(
+        view: View?,
+        contentMode: VideoContentMode
+    ): VideoCanvas =
         makeCanvas(view, contentMode).apply {
             mirrorMode = Constants.VIDEO_MIRROR_MODE_AUTO
         }
@@ -45,7 +48,11 @@ internal object RtcVideoConverter {
      * @param uid RTC 分配的数字用户标识；默认值为 `0`。
      * @return 绑定指定视图和显示模式的 RTC 视频画布。
      */
-    fun makeCanvas(view: View?, contentMode: VideoContentMode, uid: Int = 0): VideoCanvas =
+    fun makeCanvas(
+        view: View?,
+        contentMode: VideoContentMode,
+        uid: Int = 0
+    ): VideoCanvas =
         VideoCanvas(view, convertRenderMode(contentMode), uid).apply {
             mirrorMode = Constants.VIDEO_MIRROR_MODE_DISABLED
         }
@@ -56,7 +63,9 @@ internal object RtcVideoConverter {
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      * @return RTC 使用的等比适配或等比裁切模式值。
      */
-    fun convertRenderMode(contentMode: VideoContentMode): Int = when (contentMode) {
+    fun convertRenderMode(
+        contentMode: VideoContentMode
+    ): Int = when (contentMode) {
         VideoContentMode.FIT -> VideoCanvas.RENDER_MODE_FIT
         VideoContentMode.FILL -> VideoCanvas.RENDER_MODE_HIDDEN
     }
@@ -68,7 +77,10 @@ internal object RtcVideoConverter {
      * @param seiData 附加视频元数据；null 表示不附加，当前 Agora 适配不使用该字段。
      * @return 满足 RTC 输入格式要求的视频帧。
      */
-    fun convertFrame(frame: VideoFrame, seiData: ByteArray? = null): AgoraVideoFrame {
+    fun convertFrame(
+        frame: VideoFrame,
+        seiData: ByteArray? = null
+    ): AgoraVideoFrame {
         val width = frame.format.width
         val height = frame.format.height
         val pixel = frame.format.pixelFormat

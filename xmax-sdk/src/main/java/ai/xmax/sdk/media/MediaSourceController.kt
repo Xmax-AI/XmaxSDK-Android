@@ -1,10 +1,9 @@
 //
 //  MediaSourceController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -30,28 +29,47 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * 协调本地视频元数据、输出格式和平台播放器。
- *
- * @param metadataManager 读取媒体元数据的组件。
- * @param mediaService 解析媒体尺寸及模型输入规则的服务。
- * @param playerController 负责本地解码与播放时间线的组件。
  */
 internal class MediaSourceController(
+    /**
+     * 读取媒体元数据的组件。
+     */
     private val metadataManager: MediaFileMetadataManaging,
+
+    /**
+     * 解析媒体尺寸及模型输入规则的服务。
+     */
     private val mediaService: MediaServicing,
+
+    /**
+     * 负责本地解码与播放时间线的组件。
+     */
     private val playerController: VideoPlayerControlling,
 ) : MediaSourceControlling {
+
     /**
      * 媒体准备和播放状态的并发保护。
      */
     private val operationMutex = Mutex()
+
+    /**
+     * 保护媒体准备与输出状态的锁。
+     */
     private val stateLock = Any()
 
     /**
      * 已准备媒体及播放状态。
      */
     private var preparedMedia: PreparedMedia? = null
+
+    /**
+     * 媒体帧输出是否正在运行。
+     */
     private var isRunning = false
 
+    /**
+     * 已准备的媒体是否包含音频。
+     */
     override val hasAudio: Boolean
         get() = synchronized(stateLock) { preparedMedia?.configuration?.hasAudio == true }
 
@@ -125,7 +143,9 @@ internal class MediaSourceController(
      *
      * @param muted 是否静音。
      */
-    override suspend fun setLocalAudioPreviewMuted(muted: Boolean) {
+    override suspend fun setLocalAudioPreviewMuted(
+        muted: Boolean
+    ) {
         if (hasAudio) playerController.setLocalAudioPreviewMuted(muted)
     }
 
@@ -134,7 +154,9 @@ internal class MediaSourceController(
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    override suspend fun setLocalAudioVolume(volume: Float) {
+    override suspend fun setLocalAudioVolume(
+        volume: Float
+    ) {
         playerController.setLocalAudioVolume(volume)
     }
 
@@ -144,7 +166,10 @@ internal class MediaSourceController(
      * @param view 需要绑定或解除绑定的显示视图。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    override fun attachPreview(view: XmaxVideoView, contentMode: VideoContentMode) {
+    override fun attachPreview(
+        view: XmaxVideoView,
+        contentMode: VideoContentMode
+    ) {
         playerController.attachPreview(view, contentMode)
     }
 
@@ -153,7 +178,9 @@ internal class MediaSourceController(
      *
      * @param view 需要绑定或解除绑定的显示视图。
      */
-    override fun detachPreview(view: XmaxVideoView) {
+    override fun detachPreview(
+        view: XmaxVideoView
+    ) {
         playerController.detachPreview(view)
     }
 
@@ -194,12 +221,16 @@ internal class MediaSourceController(
 
     /**
      * 保存已解析的媒体信息和最终播放配置。
-     *
-     * @param metadata 媒体原始尺寸、方向、时长及音轨信息。
-     * @param configuration 媒体输入尺寸、帧率、旋转方向及音轨配置。
      */
     private data class PreparedMedia(
+        /**
+         * 媒体原始尺寸、方向、时长及音轨信息。
+         */
         val metadata: MediaFileMetadata,
+
+        /**
+         * 媒体输入尺寸、帧率、旋转方向及音轨配置。
+         */
         val configuration: MediaSourceConfiguration,
     )
 }

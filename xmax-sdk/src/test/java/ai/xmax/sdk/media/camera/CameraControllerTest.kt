@@ -1,7 +1,7 @@
 //
 //  CameraControllerTest.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -52,12 +52,12 @@ import org.junit.Test
 class CameraControllerTest {
     @Test
     fun `bucket camera preserves resolution and encoding options`() = runTest {
-        listOf(1_024 to 1_920, 1_920 to 1_024).forEach { (width, height) ->
+        RealtimeModel.X2_1.resolutionBuckets.forEach { (width, height) ->
             val rtc = CameraRtcStub()
             val controller = CameraController(
                 rtcManager = rtc,
                 permissionManager = GrantedPermissionManager,
-                mediaService = MediaService(RealtimeModel.X2_1_1_PREVIEW_CN),
+                mediaService = MediaService(RealtimeModel.X2_1),
             )
             val requested = RealtimeVideoFormat(
                 width = width,
@@ -90,7 +90,7 @@ class CameraControllerTest {
         val controller = CameraController(
             rtcManager = rtc,
             permissionManager = permissions,
-            mediaService = MediaService(RealtimeModel.X2_1_1_PREVIEW_CN),
+            mediaService = MediaService(RealtimeModel.X2_1),
         )
 
         val error = runCatching {
@@ -277,7 +277,7 @@ private data object GrantedPermissionManager : PermissionManaging {
 }
 
 private data object IdentityMediaService : MediaServicing by MediaService() {
-    override val model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN
+    override val model: RealtimeModel = RealtimeModel.X2_1
 
     override fun resolveMediaSize(size: IntSize, source: RealtimeMediaSource): IntSize = size
 }

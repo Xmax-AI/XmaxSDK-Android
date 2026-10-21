@@ -1,10 +1,9 @@
 //
 //  VideoRenderBinding.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -18,14 +17,19 @@ import java.lang.ref.WeakReference
 
 /**
  * 将实时视频轨道绑定到具体 Android 渲染视图。
- *
- * @param attachHandler 将轨道绑定到视图并应用显示模式的函数。
- * @param detachHandler 解除轨道视图绑定的函数。
  */
 internal class VideoRenderBinding(
+    /**
+     * 将轨道绑定到视图并应用显示模式的函数。
+     */
     private val attachHandler: (XmaxVideoView, VideoContentMode) -> Unit,
+
+    /**
+     * 解除轨道视图绑定的函数。
+     */
     private val detachHandler: (XmaxVideoView) -> Unit,
 ) {
+
     /**
      * 轨道与显示组件的绑定记录。
      */
@@ -36,7 +40,9 @@ internal class VideoRenderBinding(
      *
      * @param imageFrame 用于本地预览的图片帧。
      */
-    constructor(imageFrame: VideoFrame) : this(
+    constructor(
+        imageFrame: VideoFrame
+    ) : this(
         attachHandler = { view, contentMode ->
             view.displayImageFrame(imageFrame, contentMode)
         },
@@ -50,7 +56,10 @@ internal class VideoRenderBinding(
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
     @Synchronized
-    fun attach(view: XmaxVideoView, contentMode: VideoContentMode) {
+    fun attach(
+        view: XmaxVideoView,
+        contentMode: VideoContentMode
+    ) {
         val previousView = attachedView?.get()
         if (previousView != null && previousView !== view) {
             detachHandler(previousView)
@@ -66,7 +75,9 @@ internal class VideoRenderBinding(
      * @param view 需要绑定或解除绑定的显示视图。
      */
     @Synchronized
-    fun detach(view: XmaxVideoView) {
+    fun detach(
+        view: XmaxVideoView
+    ) {
         if (attachedView?.get() === view) detach()
     }
 

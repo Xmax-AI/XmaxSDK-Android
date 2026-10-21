@@ -1,10 +1,9 @@
 //
 //  FrameAudioSink.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -26,22 +25,40 @@ import java.util.ArrayDeque
  * 复用 ExoPlayer 解码的 PCM，按 AudioTrack 播放时钟发送，不把预缓冲音频提前推给 RTC。
  *
  * @param delegate 负责实际音频播放的接收器。
- * @param input 取得当前外部音视频帧接收器的函数。
  */
 @UnstableApi
-internal class FrameAudioSink(delegate: AudioSink, private val input: () -> RealtimeExternalFrameSink?) : ForwardingAudioSink(delegate) {
+internal class FrameAudioSink(
+    delegate: AudioSink,
+
+    /**
+     * 取得当前外部音视频帧接收器的函数。
+     */
+    private val input: () -> RealtimeExternalFrameSink?
+) : ForwardingAudioSink(delegate) {
+
     /**
      * 一份可提交的 PCM 音频数据及其时间位置。
-     *
-     * @param data 待读取、传输或持有的二进制数据。
-     * @param ptsUs 音频包的媒体呈现时间，单位为微秒。
      */
-    private data class Packet(val data: ByteArray, val ptsUs: Long)
+    private data class Packet(
+        /**
+         * 待读取、传输或持有的二进制数据。
+         */
+        val data: ByteArray,
+
+        /**
+         * 音频包的媒体呈现时间，单位为微秒。
+         */
+        val ptsUs: Long
+    )
 
     /**
      * 待提交 PCM 包及固定长度分包器。
      */
     private val pending = ArrayDeque<Packet>()
+
+    /**
+     * 将解码音频转换为固定规格 PCM 帧的分包器。
+     */
     private val packetizer = PcmPacketizer { bytes, pts ->
         if (pending.size >= 100) pending.removeFirst()
         pending.addLast(Packet(bytes, pts))
@@ -51,6 +68,10 @@ internal class FrameAudioSink(delegate: AudioSink, private val input: () -> Real
      * 当前音频格式和外部帧接收器。
      */
     private var format: Format? = null
+
+    /**
+     * 当前接收外部音频帧的 SDK 接口。
+     */
     private var binding: RealtimeExternalFrameSink? = null
 
     /**
@@ -59,7 +80,9 @@ internal class FrameAudioSink(delegate: AudioSink, private val input: () -> Real
      * @param format 音频采样编码、采样率和声道格式。
      * @return 支持当前音频格式时为 true。
      */
-    override fun supportsFormat(format: Format): Boolean =
+    override fun supportsFormat(
+        format: Format
+    ): Boolean =
         format.sampleMimeType == MimeTypes.AUDIO_RAW && super.supportsFormat(format)
 
     /**
@@ -68,7 +91,9 @@ internal class FrameAudioSink(delegate: AudioSink, private val input: () -> Real
      * @param format 音频采样编码、采样率和声道格式。
      * @return Media3 的音频格式支持等级常量。
      */
-    override fun getFormatSupport(format: Format): Int =
+    override fun getFormatSupport(
+        format: Format
+    ): Int =
         if (format.sampleMimeType == MimeTypes.AUDIO_RAW) super.getFormatSupport(format) else AudioSink.SINK_FORMAT_UNSUPPORTED
 
     /**
@@ -78,7 +103,11 @@ internal class FrameAudioSink(delegate: AudioSink, private val input: () -> Real
      * @param specifiedBufferSize 播放器要求的音频缓冲大小，单位为字节。
      * @param outputChannels 输出声道映射；null 表示保留默认声道映射。
      */
-    override fun configure(inputFormat: Format, specifiedBufferSize: Int, outputChannels: IntArray?) {
+    override fun configure(
+        inputFormat: Format,
+        specifiedBufferSize: Int,
+        outputChannels: IntArray?
+    ) {
         require(inputFormat.pcmEncoding == C.ENCODING_PCM_16BIT) { "Media3 adapter requires PCM16 audio" }
         format = inputFormat
         clearPending()
@@ -93,7 +122,11 @@ internal class FrameAudioSink(delegate: AudioSink, private val input: () -> Real
      * @param encodedAccessUnitCount 缓冲区内编码音频访问单元的数量。
      * @return 缓冲区已由音频接收器完整消费时为 true。
      */
-    override fun handleBuffer(buffer: ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
+    override fun handleBuffer(
+        buffer: ByteBuffer,
+        presentationTimeUs: Long,
+        encodedAccessUnitCount: Int
+    ): Boolean {
         val start = buffer.position()
         val copy = buffer.duplicate()
         val consumed = super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
@@ -114,7 +147,9 @@ internal class FrameAudioSink(delegate: AudioSink, private val input: () -> Real
      *
      * @param sink SDK 提供的外部音视频帧接收器。
      */
-    private fun drain(sink: RealtimeExternalFrameSink) {
+    private fun drain(
+        sink: RealtimeExternalFrameSink
+    ) {
         val positionUs = super.getCurrentPositionUs(false)
         if (positionUs == Long.MIN_VALUE) return
         while (pending.isNotEmpty() && pending.first.ptsUs <= positionUs + 10_000) {

@@ -1,10 +1,9 @@
 //
 //  RealtimeState.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -13,10 +12,14 @@ package ai.xmax.sdk
 
 /**
  * 实时业务连接状态。
- *
- * @param value 需要规范化、校验或显示的文本。
  */
-public enum class RealtimeConnectionState(public val value: String) {
+public enum class RealtimeConnectionState(
+    /**
+     * 需要规范化、校验或显示的文本。
+     */
+    public val value: String
+) {
+
     /**
      * 尚无可用本地媒体，或全部资源已关闭。
      */
@@ -57,6 +60,7 @@ public enum class RealtimeConnectionState(public val value: String) {
  * 进入当前实时状态的原因。
  */
 public sealed interface RealtimeReason {
+
     /**
      * 主动停止或正常释放资源。
      */
@@ -69,23 +73,32 @@ public sealed interface RealtimeReason {
 
     /**
      * 操作或运行异常导致当前流程结束。
-     *
-     * @param error 本次操作失败的异常或 SDK 错误。
      */
-    public data class Failure(public val error: XmaxError) : RealtimeReason
+    public data class Failure(
+        /**
+         * 本次操作失败的异常或 SDK 错误。
+         */
+        public val error: XmaxError
+    ) : RealtimeReason
 }
 
 /**
  * 实时业务当前状态快照。
- *
- * @param connectionState 当前媒体和生成连接的状态。
- * @param sessionId 服务端会话标识。
- * @param taskId 用于关联本次生成请求和结果流的任务标识。
- * @param reason 引起状态变化或失败的原因。
  */
 public data class RealtimeState(
+    /**
+     * 当前媒体和生成连接的状态。
+     */
     public val connectionState: RealtimeConnectionState,
+
+    /**
+     * 服务端会话标识。
+     */
     public val sessionId: String? = null,
+
+    /**
+     * 用于关联本次生成请求和结果流的任务标识。
+     */
     public val taskId: String? = null,
 
     /**
@@ -98,10 +111,13 @@ public data class RealtimeState(
  * 实时状态监听器。
  */
 public fun interface RealtimeStateListener {
+
     /**
      * 通知管理器最新的实时状态快照。
      *
      * @param state 当前状态快照。
      */
-    public fun onStateChanged(state: RealtimeState)
+    public fun onStateChanged(
+        state: RealtimeState
+    )
 }

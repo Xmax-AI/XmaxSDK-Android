@@ -1,10 +1,9 @@
 //
 //  RenderControlling.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -20,12 +19,15 @@ import ai.xmax.sdk.media.interaction.InteractionFrame
  * 定义渲染层向 Core 暴露的远端视频能力。
  */
 internal interface RenderControlling {
+
     /**
      * 设置当前订阅的远端流；null 表示解除远端流绑定。
      *
      * @param stream 由房间和用户标识确定的远端媒体流。
      */
-    fun setRemoteStream(stream: RemoteStream?)
+    fun setRemoteStream(
+        stream: RemoteStream?
+    )
 
     /**
      * 为远端轨道注册视频显示和交互轨迹能力。
@@ -50,5 +52,7 @@ internal interface RenderControlling {
      *
      * @param track 需要显示或绑定的视频轨道。
      */
-    suspend fun resetRemoteTrack(track: RealtimeVideoTrack?)
+    suspend fun resetRemoteTrack(
+        track: RealtimeVideoTrack?
+    )
 }

@@ -1,10 +1,9 @@
 //
 //  RoomEvent.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -24,6 +23,7 @@ import org.json.JSONObject
  * 生成 SDK 与 RTC 房间之间传输的结构化事件消息。
  */
 internal object RoomEvent {
+
     /**
      * 构造启动实时生成的房间信令。
      *
@@ -169,7 +169,9 @@ internal object RoomEvent {
      * @param userId 房间中的业务用户标识。
      * @return 房间心跳 JSON 信令。
      */
-    fun heartbeat(userId: String): String = encode(
+    fun heartbeat(
+        userId: String
+    ): String = encode(
         event = "heartbeat",
         userId = userId,
     )

@@ -1,10 +1,9 @@
 //
 //  QualityController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -36,14 +35,18 @@ import kotlinx.coroutines.launch
  * 转换 RTC 质量事件，为内部调档提供样本，并在主线程派发公共统计与告警。
  *
  * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
- * @param callbackScope 派发异步回调的协程作用域。
  */
 internal class QualityController(
     rtcManager: RtcManaging,
+
+    /**
+     * 派发异步回调的协程作用域。
+     */
     private val callbackScope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main,
     ),
 ) : QualityControlling, RtcQualityListener {
+
     /**
      * 质量监听配置的并发保护。
      */
@@ -53,19 +56,55 @@ internal class QualityController(
      * 网络质量、性能告警及自动调档的监听配置。
      */
     private var networkVersion = 0L
+
+    /**
+     * 性能监听版本，用于忽略旧监听器的回调。
+     */
     private var performanceVersion = 0L
+
+    /**
+     * 接收自动调档所需网络质量样本的回调。
+     */
     private var adaptiveQualityListener: ((RealtimeNetworkQuality) -> Unit)? = null
+
+    /**
+     * 向接入方报告网络质量的监听器。
+     */
     private var networkQualityListener: RealtimeNetworkQualityListener? = null
+
+    /**
+     * 向接入方报告设备性能告警的监听器。
+     */
     private var performanceAlarmListener: RealtimePerformanceAlarmListener? = null
 
     /**
      * 上下行统计的有效版本、目标与监听配置。
      */
     private var uplinkStatisticsVersion = 0L
+
+    /**
+     * 下行统计监听版本，用于隔离过期回调。
+     */
     private var downlinkStatisticsVersion = 0L
+
+    /**
+     * 是否接收并分发上行统计。
+     */
     private var uplinkStatisticsEnabled = false
+
+    /**
+     * 当前下行统计所对应的远端用户。
+     */
     private var downlinkStatisticsUser: String? = null
+
+    /**
+     * 接收上行视频统计的监听器。
+     */
     private var uplinkStatisticsListener: UplinkVideoStatisticsListener? = null
+
+    /**
+     * 接收下行视频统计的监听器。
+     */
     private var downlinkStatisticsListener: DownlinkVideoStatisticsListener? = null
 
     /**
@@ -73,7 +112,9 @@ internal class QualityController(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setUplinkVideoStatisticsListener(listener: UplinkVideoStatisticsListener?) {
+    override fun setUplinkVideoStatisticsListener(
+        listener: UplinkVideoStatisticsListener?
+    ) {
         synchronized(listenerLock) {
             uplinkStatisticsVersion++
             uplinkStatisticsListener = listener
@@ -85,7 +126,9 @@ internal class QualityController(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setDownlinkVideoStatisticsListener(listener: DownlinkVideoStatisticsListener?) {
+    override fun setDownlinkVideoStatisticsListener(
+        listener: DownlinkVideoStatisticsListener?
+    ) {
         synchronized(listenerLock) {
             downlinkStatisticsVersion++
             downlinkStatisticsListener = listener
@@ -97,7 +140,9 @@ internal class QualityController(
      *
      * @param enabled 是否启用对应能力。
      */
-    override fun setUplinkVideoStatisticsEnabled(enabled: Boolean) {
+    override fun setUplinkVideoStatisticsEnabled(
+        enabled: Boolean
+    ) {
         synchronized(listenerLock) {
             uplinkStatisticsVersion++
             uplinkStatisticsEnabled = enabled
@@ -110,7 +155,9 @@ internal class QualityController(
      *
      * @param userId 房间中的业务用户标识。
      */
-    override fun setDownlinkVideoStatisticsUser(userId: String?) {
+    override fun setDownlinkVideoStatisticsUser(
+        userId: String?
+    ) {
         synchronized(listenerLock) {
             downlinkStatisticsVersion++
             downlinkStatisticsUser = userId
@@ -123,7 +170,9 @@ internal class QualityController(
      *
      * @param statistics 当前统计快照；null 表示没有可用统计。
      */
-    override fun onUplinkVideoStatistics(statistics: UplinkVideoStatistics?) {
+    override fun onUplinkVideoStatistics(
+        statistics: UplinkVideoStatistics?
+    ) {
         val registration = synchronized(listenerLock) {
             if (statistics != null && !uplinkStatisticsEnabled) return
             uplinkStatisticsVersion to uplinkStatisticsListener
@@ -140,7 +189,9 @@ internal class QualityController(
      *
      * @param statistics 当前统计快照；null 表示没有可用统计。
      */
-    override fun onDownlinkVideoStatistics(statistics: DownlinkVideoStatistics?) {
+    override fun onDownlinkVideoStatistics(
+        statistics: DownlinkVideoStatistics?
+    ) {
         val registration = synchronized(listenerLock) {
             if (statistics != null && statistics.userId != downlinkStatisticsUser) return
             downlinkStatisticsVersion to downlinkStatisticsListener
@@ -161,7 +212,9 @@ internal class QualityController(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setAdaptiveQualityListener(listener: ((RealtimeNetworkQuality) -> Unit)?) {
+    override fun setAdaptiveQualityListener(
+        listener: ((RealtimeNetworkQuality) -> Unit)?
+    ) {
         synchronized(listenerLock) { adaptiveQualityListener = listener }
     }
 
@@ -170,7 +223,9 @@ internal class QualityController(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setNetworkQualityListener(listener: RealtimeNetworkQualityListener?) {
+    override fun setNetworkQualityListener(
+        listener: RealtimeNetworkQualityListener?
+    ) {
         synchronized(listenerLock) {
             networkVersion++
             networkQualityListener = listener
@@ -182,7 +237,9 @@ internal class QualityController(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setPerformanceAlarmListener(listener: RealtimePerformanceAlarmListener?) {
+    override fun setPerformanceAlarmListener(
+        listener: RealtimePerformanceAlarmListener?
+    ) {
         synchronized(listenerLock) {
             performanceVersion++
             performanceAlarmListener = listener
@@ -248,7 +305,9 @@ internal class QualityController(
      *
      * @param action 需要执行的操作。
      */
-    private fun protect(action: () -> Unit) {
+    private fun protect(
+        action: () -> Unit
+    ) {
         try { action() } catch (error: Throwable) {
             XmaxLogger.realtime.warn(
                 message = { "Quality listener failed: ${ErrorMessageFormatter.format(error)}" },
@@ -262,7 +321,9 @@ internal class QualityController(
      * @param level 需要应用或保存的质量档位，1 为最高档。
      * @return 对接入方提供的网络质量等级。
      */
-    private fun networkQualityLevel(level: RtcQualityLevel): RealtimeNetworkQualityLevel =
+    private fun networkQualityLevel(
+        level: RtcQualityLevel
+    ): RealtimeNetworkQualityLevel =
         when (level) {
             RtcQualityLevel.UNKNOWN -> RealtimeNetworkQualityLevel.UNKNOWN
             RtcQualityLevel.EXCELLENT -> RealtimeNetworkQualityLevel.EXCELLENT
@@ -294,46 +355,87 @@ internal class QualityController(
     /**
      * 单个方向的调档状态机；计算候选档位，只有应用成功才提交新档位。
      *
-     * @param baseline 用于计算各质量档位的原始输入规格。
      * @param level 需要应用或保存的质量档位，1 为最高档。
-     * @param downlink true 操作下行档位，false 操作上行档位。
-     * @param policy 控制质量升降档阈值及冷却时间的策略。
      */
     internal class Direction(
+        /**
+         * 用于计算各质量档位的原始输入规格。
+         */
         val baseline: RealtimeVideoFormat,
+
         level: Int,
+
+        /**
+         * true 操作下行档位，false 操作上行档位。
+         */
         val downlink: Boolean,
+
+        /**
+         * 控制质量升降档阈值及冷却时间的策略。
+         */
         private val policy: QualityPolicy = QualityPolicy(),
     ) {
+
         /**
          * 当前生效的质量档位与传输规格。
          */
         @Volatile var level = QualityVideoFormat.initialLevel(baseline, level, downlink)
             private set
+
+        /**
+         * 按输入基准与当前档位计算的视频规格。
+         */
         val format: RealtimeVideoFormat get() = QualityVideoFormat.resolve(baseline, level, downlink)
 
         /**
          * 连续网络样本计数及最后采样时刻。
          */
         private var good = 0
+
+        /**
+         * 连续检测到不良网络质量的次数。
+         */
         private var poor = 0
+
+        /**
+         * 最近一次网络质量采样时间，单位为毫秒。
+         */
         private var lastSample: Long? = null
 
         /**
          * 调档稳定期、升档冷却与探测截止时间。
          */
         private var stableUntil = 0L
+
+        /**
+         * 允许再次升档的最早时间，单位为毫秒。
+         */
         private var upgradeAfter = 0L
+
+        /**
+         * 升档后质量观察期的截止时间，单位为毫秒。
+         */
         private var probeUntil = 0L
 
         /**
          * 保存自动调档的原档位、目标档位及触发原因。
-         *
-         * @param from 调整前的质量档位。
-         * @param to 准备应用的目标质量档位。
-         * @param reason 引起状态变化或失败的原因。
          */
-        data class Change(val from: Int, val to: Int, val reason: String)
+        data class Change(
+            /**
+             * 调整前的质量档位。
+             */
+            val from: Int,
+
+            /**
+             * 准备应用的目标质量档位。
+             */
+            val to: Int,
+
+            /**
+             * 引起状态变化或失败的原因。
+             */
+            val reason: String
+        )
 
         /**
          * 清空连续样本，保留当前档位、稳定窗口和升档冷却。
@@ -354,7 +456,11 @@ internal class QualityController(
          * @return 建议的质量档位变化；无需或暂不能调档时为 null。
          */
         @Synchronized
-        fun observe(quality: RealtimeNetworkQualityLevel, sampleAt: Long, now: Long): Change? {
+        fun observe(
+            quality: RealtimeNetworkQualityLevel,
+            sampleAt: Long,
+            now: Long
+        ): Change? {
             if (sampleAt > now || (lastSample != null && sampleAt <= lastSample!!)) return null
 
             if (lastSample != null && sampleAt - lastSample!! > policy.sampleTimeoutMs) resetSamples()
@@ -410,14 +516,22 @@ internal class QualityController(
          * @param now 当前单调时钟时间，单位为毫秒。
          */
         @Synchronized
-        fun complete(change: Change, success: Boolean, now: Long) {
+        fun complete(
+            change: Change,
+            success: Boolean,
+            now: Long
+        ) {
             resetSamples()
             stableUntil = now + policy.stabilizationMs
             if (!success) return
 
+            if (change.to < level) {
+                probeUntil = now + policy.probeMs
+            } else if (change.to > level) {
+                if (now < probeUntil) upgradeAfter = now + policy.upgradeCooldownMs
+                probeUntil = 0
+            }
             level = change.to
-            probeUntil = if (change.reason == "probeUpgrade") now + policy.probeMs else 0
-            if (change.reason == "failedProbe") upgradeAfter = now + policy.upgradeCooldownMs
         }
     }
 }

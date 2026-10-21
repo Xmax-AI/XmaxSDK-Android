@@ -1,10 +1,9 @@
 //
 //  MediaControlling.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -27,17 +26,30 @@ import android.net.Uri
  * 定义媒体层向 Core 暴露的本地媒体能力。
  */
 internal interface MediaControlling : InteractionControlling {
+
     /**
      * 当前媒体轨道、规格、音轨及来源信息。
      */
     val currentTrack: RealtimeVideoTrack?
 
+    /**
+     * 当前本地视频轨道的输入规格。
+     */
     val currentVideoFormat: RealtimeVideoFormat?
 
+    /**
+     * 当前媒体源是否包含可发布的音频。
+     */
     val hasAudio: Boolean
 
+    /**
+     * 交由服务端读取的网络视频配置。
+     */
     val networkVideoReference: RealtimeReferenceVideo?
 
+    /**
+     * 网络视频生成结束时的回调。
+     */
     val networkVideoFinishHandler: (() -> Unit)?
 
     /**
@@ -79,7 +91,9 @@ internal interface MediaControlling : InteractionControlling {
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?)
+    fun setCameraPreviewReadyListener(
+        listener: RealtimeCameraPreviewReadyListener?
+    )
 
     /**
      * 创建并启动相机输入；接入方须先取得所需权限，输入尺寸会按模型规则调整。
@@ -205,14 +219,18 @@ internal interface MediaControlling : InteractionControlling {
      *
      * @param muted 是否静音。
      */
-    suspend fun setLocalAudioPreviewMuted(muted: Boolean)
+    suspend fun setLocalAudioPreviewMuted(
+        muted: Boolean
+    )
 
     /**
      * 设置当前本地媒体的预览音量，范围为 0 到 1，不影响提交给 RTC 的音频数据。
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    suspend fun setLocalAudioVolume(volume: Float)
+    suspend fun setLocalAudioVolume(
+        volume: Float
+    )
 
     /**
      * 切换当前相机输入的方向，并更新本地轨道信息。
@@ -232,5 +250,7 @@ internal interface MediaControlling : InteractionControlling {
      * @param stream 当前本地媒体或远端结果媒体流。
      * @return 当前控制器持有该媒体流时为 true。
      */
-    fun owns(stream: RealtimeMediaStream): Boolean
+    fun owns(
+        stream: RealtimeMediaStream
+    ): Boolean
 }

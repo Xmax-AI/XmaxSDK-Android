@@ -1,7 +1,7 @@
 //
 //  StatisticsPanel.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -13,14 +13,18 @@ package com.xmax.xlab.modules.xlrealtime
 
 import ai.xmax.sdk.RealtimeNetworkQuality
 import ai.xmax.sdk.RealtimeNetworkQualityLevel
+import ai.xmax.sdk.RealtimeQualityLevel
 import ai.xmax.sdk.DownlinkVideoStatistics
 import ai.xmax.sdk.UplinkVideoStatistics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -32,6 +36,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +55,12 @@ internal fun StatisticsPanel(
     uplink: UplinkVideoStatistics?,
     downlink: DownlinkVideoStatistics?,
     quality: RealtimeNetworkQuality?,
+    uplinkLevel: RealtimeQualityLevel?,
+    downlinkLevel: RealtimeQualityLevel?,
+    canAdjustQuality: Boolean,
+    isAdjustingQuality: Boolean,
+    qualityError: String?,
+    onQualityLevel: (RealtimeQualityLevel, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -57,6 +72,8 @@ internal fun StatisticsPanel(
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         StatisticsHeading(xLabText(R.string.statistics_uplink))
+        QualityButtons(uplinkLevel, canAdjustQuality && !isAdjustingQuality && uplinkLevel != null,
+            xLabText(R.string.statistics_uplink)) { onQualityLevel(it, false) }
         StatisticsRow(xLabText(R.string.statistics_resolution), statisticsResolution(uplink?.width, uplink?.height))
         StatisticsRow(xLabText(R.string.statistics_capture_frame_rate), statisticsMetric(uplink?.captureFrameRate, "fps"))
         StatisticsRow(xLabText(R.string.statistics_encode_frame_rate), statisticsMetric(uplink?.encodeFrameRate, "fps"))
@@ -65,6 +82,8 @@ internal fun StatisticsPanel(
         StatisticsRow(xLabText(R.string.statistics_loss), statisticsMetric(uplink?.packetLossPercent, "%"))
         StatisticsRow(xLabText(R.string.statistics_network), qualityText(quality?.uplink))
         StatisticsHeading(xLabText(R.string.statistics_downlink), Modifier.padding(top = 6.dp))
+        QualityButtons(downlinkLevel, canAdjustQuality && !isAdjustingQuality && downlinkLevel != null,
+            xLabText(R.string.statistics_downlink)) { onQualityLevel(it, true) }
         StatisticsRow(xLabText(R.string.statistics_resolution), statisticsResolution(downlink?.width, downlink?.height))
         StatisticsRow(xLabText(R.string.statistics_decode_frame_rate), statisticsMetric(downlink?.decodeFrameRate, "fps"))
         StatisticsRow(xLabText(R.string.statistics_render_frame_rate), statisticsMetric(downlink?.renderFrameRate, "fps"))
@@ -72,6 +91,32 @@ internal fun StatisticsPanel(
         StatisticsRow(xLabText(R.string.statistics_loss), statisticsMetric(downlink?.packetLossPercent, "%"))
         StatisticsRow(xLabText(R.string.statistics_network), qualityText(quality?.downlink))
         StatisticsRow(xLabText(R.string.statistics_e2e), statisticsMetric(downlink?.endToEndDelayMs, "ms"))
+        Text(xLabText(R.string.statistics_level_hint), color = Color.White.copy(alpha = 0.6f), fontSize = 9.sp,
+            modifier = Modifier.padding(top = 4.dp))
+        qualityError?.let { Text(it, color = Color(0xFFFF7373), fontSize = 10.sp) }
+    }
+}
+
+@Composable
+private fun QualityButtons(
+    current: RealtimeQualityLevel?,
+    enabled: Boolean,
+    direction: String,
+    onClick: (RealtimeQualityLevel) -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        RealtimeQualityLevel.entries.forEach { level ->
+            Box(
+                Modifier.weight(1f).heightIn(min = 28.dp)
+                    .background(if (current == level) Color(0xFF278BE8) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                    .semantics { selected = current == level; contentDescription = "$direction ${level.name}" }
+                    .clickable(enabled = enabled && current != level, role = Role.Button) { onClick(level) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(level.name, color = Color.White.copy(alpha = if (enabled) 1f else 0.5f),
+                    fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
 

@@ -1,10 +1,9 @@
 //
 //  AgoraRemoteVideoFrame.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -17,20 +16,32 @@ import java.nio.ByteBuffer
 
 /**
  * 借用声网回调帧；仅在接入方需要像素时复制 I420，显示由原生 VideoCanvas 完成。
- *
- * @param frame 待处理、显示或提交的视频帧。
  */
-internal class AgoraRemoteVideoFrame(private val frame: VideoFrame) : RtcRemoteVideoFrame {
+internal class AgoraRemoteVideoFrame(
+    /**
+     * 待处理、显示或提交的视频帧。
+     */
+    private val frame: VideoFrame
+) : RtcRemoteVideoFrame {
+
     /**
      * 应用旋转后的显示尺寸。
      */
     override val displayWidth: Int get() = frame.rotatedWidth
+
+    /**
+     * 应用旋转后的画面高度，单位为像素。
+     */
     override val displayHeight: Int get() = frame.rotatedHeight
 
     /**
      * 底层视频帧的原始尺寸。
      */
     override val width: Int get() = frame.buffer.width
+
+    /**
+     * 原始帧缓冲区的高度，单位为像素。
+     */
     override val height: Int get() = frame.buffer.height
 
     /**
@@ -65,7 +76,12 @@ internal class AgoraRemoteVideoFrame(private val frame: VideoFrame) : RtcRemoteV
      * @param rows 需要读取的有效行数。
      * @return 有效数据对应的字节数组。
      */
-    private fun copyPlane(buffer: ByteBuffer, stride: Int, columns: Int, rows: Int): ByteArray {
+    private fun copyPlane(
+        buffer: ByteBuffer,
+        stride: Int,
+        columns: Int,
+        rows: Int
+    ): ByteArray {
         val source = buffer.duplicate()
         require(stride >= columns && (rows - 1L) * stride + columns <= source.remaining())
         val start = source.position()

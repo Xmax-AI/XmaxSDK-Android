@@ -1,10 +1,9 @@
 //
 //  MediaFileMetadataManager.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -28,6 +27,7 @@ import kotlinx.coroutines.withContext
 internal class MediaFileMetadataManager(
     context: Context,
 ) : MediaFileMetadataManaging {
+
     /**
      * Android 媒体或文件访问环境。
      */
@@ -39,7 +39,9 @@ internal class MediaFileMetadataManager(
      * @param uri 应用有读取权限的媒体地址。
      * @return 媒体的尺寸、旋转、时长及音轨信息。
      */
-    override suspend fun readMetadata(uri: Uri): MediaFileMetadata =
+    override suspend fun readMetadata(
+        uri: Uri
+    ): MediaFileMetadata =
         withContext(Dispatchers.IO) {
             val retriever = MediaMetadataRetriever()
             try {
@@ -81,7 +83,9 @@ internal class MediaFileMetadataManager(
      * @param key Android 媒体元数据字段标识。
      * @return 经过校验的正整数元数据值。
      */
-    private fun MediaMetadataRetriever.requiredPositiveInt(key: Int): Int =
+    private fun MediaMetadataRetriever.requiredPositiveInt(
+        key: Int
+    ): Int =
         extractMetadata(key)?.toIntOrNull()?.takeIf { it > 0 }
             ?: throw mediaError("The media file has invalid video dimensions")
 
@@ -91,7 +95,9 @@ internal class MediaFileMetadataManager(
      * @param key Android 媒体元数据字段标识。
      * @return 经过校验的正长整数元数据值。
      */
-    private fun MediaMetadataRetriever.requiredPositiveLong(key: Int): Long =
+    private fun MediaMetadataRetriever.requiredPositiveLong(
+        key: Int
+    ): Long =
         extractMetadata(key)?.toLongOrNull()?.takeIf { it > 0L }
             ?: throw mediaError("The media file has an invalid duration")
 
@@ -114,15 +120,19 @@ internal class MediaFileMetadataManager(
      * @param cause 触发当前错误的底层异常。
      * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
      */
-    private fun mediaError(message: String, cause: Throwable? = null): XmaxError =
+    private fun mediaError(
+        message: String,
+        cause: Throwable? = null
+    ): XmaxError =
         XmaxError(XmaxErrorCode.MEDIA_ERROR, message, cause = cause)
 
     /**
-     * 提供 MediaFileMetadataManager 使用的构造入口、共享配置或常量。
+     * 媒体时间戳的单位换算常量。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 毫秒换算为微秒的倍率。
          */
         const val MICROSECONDS_PER_MILLISECOND = 1_000L
     }

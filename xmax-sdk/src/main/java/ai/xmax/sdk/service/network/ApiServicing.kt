@@ -1,10 +1,9 @@
 //
 //  ApiServicing.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -18,10 +17,14 @@ import org.json.JSONObject
 
 /**
  * Xmax API 支持的 HTTP 请求方法。
- *
- * @param wireValue 协议传输使用的字符串值。
  */
-internal enum class ApiMethod(internal val wireValue: String) {
+internal enum class ApiMethod(
+    /**
+     * 协议传输使用的字符串值。
+     */
+    internal val wireValue: String
+) {
+
     /**
      * 读取服务端资源的 HTTP 方法。
      */
@@ -47,6 +50,7 @@ internal enum class ApiMethod(internal val wireValue: String) {
  * 定义 Xmax API 的基础请求能力。
  */
 internal interface ApiServicing {
+
     /**
      * 发送请求并返回统一响应中的业务数据。
      *
@@ -96,7 +100,9 @@ internal interface ApiServicing {
      * @param path 相对于 API 基础地址的请求路径。
      * @return 供当前业务使用的 JSON 数据。
      */
-    suspend fun get(path: String): JSONObject = request(ApiMethod.GET, path)
+    suspend fun get(
+        path: String
+    ): JSONObject = request(ApiMethod.GET, path)
 
     /**
      * 发送 GET 请求并返回响应业务数据。
@@ -116,7 +122,9 @@ internal interface ApiServicing {
      * @param path 相对于 API 基础地址的请求路径。
      * @return 供当前业务使用的 JSON 数据。
      */
-    suspend fun post(path: String): JSONObject = request(ApiMethod.POST, path)
+    suspend fun post(
+        path: String
+    ): JSONObject = request(ApiMethod.POST, path)
 
     /**
      * 发送 POST 请求并返回响应业务数据。
@@ -125,7 +133,10 @@ internal interface ApiServicing {
      * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
      * @return 供当前业务使用的 JSON 数据。
      */
-    suspend fun post(path: String, body: JSONObject): JSONObject =
+    suspend fun post(
+        path: String,
+        body: JSONObject
+    ): JSONObject =
         request(ApiMethod.POST, path, body)
 
     /**
@@ -148,7 +159,9 @@ internal interface ApiServicing {
      * @param path 相对于 API 基础地址的请求路径。
      * @return 供当前业务使用的 JSON 数据。
      */
-    suspend fun put(path: String): JSONObject = request(ApiMethod.PUT, path)
+    suspend fun put(
+        path: String
+    ): JSONObject = request(ApiMethod.PUT, path)
 
     /**
      * 发送 PUT 请求并返回响应业务数据。
@@ -157,7 +170,10 @@ internal interface ApiServicing {
      * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
      * @return 供当前业务使用的 JSON 数据。
      */
-    suspend fun put(path: String, body: JSONObject): JSONObject =
+    suspend fun put(
+        path: String,
+        body: JSONObject
+    ): JSONObject =
         request(ApiMethod.PUT, path, body)
 
     /**
@@ -180,7 +196,9 @@ internal interface ApiServicing {
      * @param path 相对于 API 基础地址的请求路径。
      * @return 供当前业务使用的 JSON 数据。
      */
-    suspend fun delete(path: String): JSONObject = request(ApiMethod.DELETE, path)
+    suspend fun delete(
+        path: String
+    ): JSONObject = request(ApiMethod.DELETE, path)
 
     /**
      * 发送 DELETE 请求并返回响应业务数据。

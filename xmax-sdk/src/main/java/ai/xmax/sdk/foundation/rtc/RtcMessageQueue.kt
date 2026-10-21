@@ -1,10 +1,9 @@
 //
 //  RtcMessageQueue.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -27,26 +26,43 @@ import kotlin.coroutines.coroutineContext
  * 有序发送房间信令，并在发送额度不足时仅保留同键轨迹的最新内容。
  *
  * @param scope 房间生命周期内的发送协程作用域。
- * @param send 将单个数据包提交给 RTC，失败时抛出异常。
- * @param onFailure 通知房间信令发送故障。
- * @param nowMillis 单调递增的毫秒时钟，用于计算发送窗口。
  */
 internal class RtcMessageQueue(
     scope: CoroutineScope,
+
+    /**
+     * 将单个数据包提交给 RTC，失败时抛出异常。
+     */
     private val send: (ByteArray) -> Unit,
+
+    /**
+     * 通知房间信令发送故障。
+     */
     private val onFailure: (Throwable) -> Unit,
+
+    /**
+     * 单调递增的毫秒时钟，用于计算发送窗口。
+     */
     private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
+
     /**
      * 保存同一条信令的完整分片、合并键和发送结果。
-     *
-     * @param packets 按顺序发送的数据包。
-     * @param key 尚未发送时用于替换内容的合并键。
-     * @param completion 整条信令提交给 RTC 后完成的结果。
      */
     private class Message(
+        /**
+         * 按顺序发送的数据包。
+         */
         var packets: List<ByteArray>,
+
+        /**
+         * 尚未发送时用于替换内容的合并键。
+         */
         val key: String?,
+
+        /**
+         * 整条信令提交给 RTC 后完成的结果。
+         */
         val completion: CompletableDeferred<Unit> = CompletableDeferred(),
     )
 
@@ -54,16 +70,40 @@ internal class RtcMessageQueue(
      * 队列状态、未发送内容与包含正在发送信令的结果集合。
      */
     private val lock = Any()
+
+    /**
+     * 尚未发送的房间信令。
+     */
     private val pending = ArrayDeque<Message>()
+
+    /**
+     * 等待发送结果的请求。
+     */
     private val completions = mutableSetOf<CompletableDeferred<Unit>>()
+
+    /**
+     * 队列是否已停止接受新消息。
+     */
     private var closed = false
+
+    /**
+     * 导致发送队列终止的错误。
+     */
     private var failure: Throwable? = null
 
     /**
      * 消息编码、队列唤醒及单一发送协程。
      */
     private val codec = RoomMessageCodec()
+
+    /**
+     * 唤醒发送循环的合并通知通道。
+     */
     private val wake = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * 持续发送待处理信令的协程。
+     */
     private val worker = scope.launch { drain() }
 
     /**
@@ -73,7 +113,10 @@ internal class RtcMessageQueue(
      * @param replacingPendingMessage 合并键；null 表示每条信令均须保留。
      * @return 整条信令的发送结果，被合并的调用共享同一结果。
      */
-    fun enqueue(message: String, replacingPendingMessage: String? = null): CompletableDeferred<Unit> {
+    fun enqueue(
+        message: String,
+        replacingPendingMessage: String? = null
+    ): CompletableDeferred<Unit> {
         val packets = codec.encode(message).map { it.toByteArray(Charsets.UTF_8) }
         return synchronized(lock) {
             checkAvailable()
@@ -101,7 +144,9 @@ internal class RtcMessageQueue(
      *
      * @param key 要清理的合并键；null 表示清理全部可合并信令。
      */
-    fun discardPendingMessages(key: String? = null) {
+    fun discardPendingMessages(
+        key: String? = null
+    ) {
         synchronized(lock) {
             val discarded = pending.filter { it.key != null && (key == null || it.key == key) }
             pending.removeAll(discarded.toSet())
@@ -205,7 +250,10 @@ internal class RtcMessageQueue(
      * @param byteCount 待发送数据包的字节数。
      * @return 需等待的毫秒数；0 表示可立即发送。
      */
-    private fun remainingWait(sent: ArrayDeque<Pair<Long, Int>>, byteCount: Int): Long {
+    private fun remainingWait(
+        sent: ArrayDeque<Pair<Long, Int>>,
+        byteCount: Int
+    ): Long {
         val now = nowMillis()
         while (sent.isNotEmpty() && now - sent.first().first >= 1_000) sent.removeFirst()
         if (sent.size < 58 && sent.sumOf { it.second } + byteCount <= 29_000) return 0

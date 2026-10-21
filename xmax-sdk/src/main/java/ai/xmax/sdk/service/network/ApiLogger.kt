@@ -1,10 +1,9 @@
 //
 //  ApiLogger.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -18,6 +17,7 @@ import ai.xmax.sdk.XmaxLogger
  * 输出不包含认证信息和响应正文的 API 调试日志。
  */
 internal object ApiLogger {
+
     /**
      * 输出请求路径、响应状态和耗时，不包含凭据或响应正文。
      *

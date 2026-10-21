@@ -1,10 +1,9 @@
 //
 //  RtcEngineManager.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -23,35 +22,52 @@ import kotlinx.coroutines.sync.Mutex
 
 /**
  * 表示对进程级 RTC Engine 的独占使用权。
- *
- * @param id 用于区分当前对象或操作的唯一标识。
- * @param engine 用于执行 RTC 操作的平台引擎。
  */
 internal data class RtcEngineLease(
+    /**
+     * 本次引擎租约的标识，用于核验释放权限。
+     */
     val id: UUID = UUID.randomUUID(),
+
+    /**
+     * 用于执行 RTC 操作的平台引擎。
+     */
     val engine: RtcPlatform,
 )
 
 /**
  * 管理声网 RTC Engine 的进程级独占生命周期。
- *
- * @param makeEngine 创建 RTC 平台引擎的工厂函数。
- * @param destroyEngine 释放底层 RTC 引擎资源的函数。
  */
 internal open class RtcEngineManager internal constructor(
+    /**
+     * 创建 RTC 平台引擎的工厂函数。
+     */
     private val makeEngine: () -> RtcPlatform?,
+
+    /**
+     * 释放底层 RTC 引擎资源的函数。
+     */
     private val destroyEngine: () -> Unit,
 ) {
+
     /**
      * 引擎租约与共享状态的并发保护。
      */
     private val leaseMutex = Mutex()
+
+    /**
+     * 保护引擎生命周期状态的锁。
+     */
     private val stateLock = Any()
 
     /**
      * 当前引擎占用及销毁失败状态。
      */
     private var activeLease: RtcEngineLease? = null
+
+    /**
+     * 引擎销毁过程中发生的错误。
+     */
     private var destructionFailure: Throwable? = null
 
     /**
@@ -114,7 +130,9 @@ internal open class RtcEngineManager internal constructor(
      *
      * @param lease 当前引擎的独占使用凭据。
      */
-    internal open fun release(lease: RtcEngineLease) {
+    internal open fun release(
+        lease: RtcEngineLease
+    ) {
         val shouldRelease = synchronized(stateLock) {
             if (activeLease?.id != lease.id) {
                 false
@@ -136,14 +154,18 @@ internal open class RtcEngineManager internal constructor(
     }
 
     /**
-     * 提供 RtcEngineManager 使用的构造入口、共享配置或常量。
+     * RTC 引擎的默认配置与进程级共享入口。
      */
     internal companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 本地预览初始化 RTC 引擎时使用的默认 App ID。
          */
         const val DEFAULT_APP_ID: String = "5588dfe2e7874bd08ea28f4968ec2d40"
 
+        /**
+         * 进程内共享的 RTC 引擎管理器。
+         */
         @Volatile
         private var sharedInstance: RtcEngineManager? = null
 
@@ -153,7 +175,9 @@ internal open class RtcEngineManager internal constructor(
          * @param context 访问 Android 系统服务或媒体资源所需的上下文。
          * @return 应用共享的 RTC 引擎管理器。
          */
-        fun shared(context: Context): RtcEngineManager =
+        fun shared(
+            context: Context
+        ): RtcEngineManager =
             sharedInstance ?: synchronized(this) {
                 sharedInstance ?: RtcEngineManager(context).also {
                     sharedInstance = it

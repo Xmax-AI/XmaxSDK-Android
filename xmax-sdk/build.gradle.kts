@@ -1,7 +1,7 @@
 //
 //  build.gradle.kts
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -83,7 +83,7 @@ mavenPublishing {
     pom {
         name.set("XmaxSDK")
         description.set("Xmax real-time interactive video generation SDK for Android")
-        url.set("https://github.com/XingMai/XmaxSDK-Android")
+        url.set("https://github.com/Xmax-AI/XmaxSDK-Android")
         inceptionYear.set("2026")
 
         licenses {
@@ -103,9 +103,9 @@ mavenPublishing {
         }
 
         scm {
-            url.set("https://github.com/XingMai/XmaxSDK-Android")
-            connection.set("scm:git:https://github.com/XingMai/XmaxSDK-Android.git")
-            developerConnection.set("scm:git:ssh://git@github.com/XingMai/XmaxSDK-Android.git")
+            url.set("https://github.com/Xmax-AI/XmaxSDK-Android")
+            connection.set("scm:git:https://github.com/Xmax-AI/XmaxSDK-Android.git")
+            developerConnection.set("scm:git:ssh://git@github.com/Xmax-AI/XmaxSDK-Android.git")
         }
     }
 }

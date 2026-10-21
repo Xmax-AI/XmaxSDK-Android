@@ -1,10 +1,9 @@
 //
 //  RtcPlatform.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -21,13 +20,16 @@ import android.view.View
  * 隔离第三方 RTC SDK 的引擎能力。
  */
 internal interface RtcPlatform {
+
     /**
      * 应用主视频流编码配置。
      *
      * @param configuration 上行视频的尺寸、帧率、码率及编码偏好。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun configureVideoEncoding(configuration: VideoEncodingConfiguration): Int
+    fun configureVideoEncoding(
+        configuration: VideoEncodingConfiguration
+    ): Int
 
     /**
      * 推送一帧外部视频数据及其可选 SEI。
@@ -35,14 +37,19 @@ internal interface RtcPlatform {
      * @param frame 待处理、显示或提交的视频帧。
      * @param seiData 附加视频元数据；null 表示不附加，当前 Agora 适配不使用该字段。
      */
-    fun pushExternalVideoFrame(frame: VideoFrame, seiData: ByteArray?)
+    fun pushExternalVideoFrame(
+        frame: VideoFrame,
+        seiData: ByteArray?
+    )
 
     /**
      * 推送一帧 10 ms PCM 外部音频数据。
      *
      * @param frame 待播放或提交的 PCM 音频帧。
      */
-    fun pushExternalAudioFrame(frame: AudioFrame)
+    fun pushExternalAudioFrame(
+        frame: AudioFrame
+    )
 
     /**
      * 将主视频切换为 RTC 外部帧输入。
@@ -87,7 +94,11 @@ internal interface RtcPlatform {
      * @param frameRate 视频帧率，单位为 fps。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun startVideoCapture(width: Int, height: Int, frameRate: Int): Int
+    fun startVideoCapture(
+        width: Int,
+        height: Int,
+        frameRate: Int
+    ): Int
 
     /**
      * 停止 RTC 内部摄像头采集。
@@ -102,7 +113,9 @@ internal interface RtcPlatform {
      * @param position 需要使用的前置或后置摄像头。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun switchCamera(position: CameraPosition): Int
+    fun switchCamera(
+        position: CameraPosition
+    ): Int
 
     /**
      * 将本地视频绑定到渲染视图。
@@ -111,7 +124,10 @@ internal interface RtcPlatform {
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun bindLocalVideo(view: View, contentMode: VideoContentMode): Int
+    fun bindLocalVideo(
+        view: View,
+        contentMode: VideoContentMode
+    ): Int
 
     /**
      * 解除本地视频与渲染视图的绑定。
@@ -128,7 +144,11 @@ internal interface RtcPlatform {
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun bindRemoteVideo(userId: String, view: View, contentMode: VideoContentMode): Int
+    fun bindRemoteVideo(
+        userId: String,
+        view: View,
+        contentMode: VideoContentMode
+    ): Int
 
     /**
      * 解除指定远端用户的视频视图绑定。
@@ -136,14 +156,18 @@ internal interface RtcPlatform {
      * @param userId 房间中的业务用户标识。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun unbindRemoteVideo(userId: String): Int
+    fun unbindRemoteVideo(
+        userId: String
+    ): Int
 
     /**
      * 替换相机预览就绪监听器；null 表示注销。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setCameraPreviewReadyListener(listener: (() -> Unit)?)
+    fun setCameraPreviewReadyListener(
+        listener: (() -> Unit)?
+    )
 
     /**
      * 替换指定远端流的视频帧监听器。
@@ -164,21 +188,28 @@ internal interface RtcPlatform {
      * @param volume 远端音频播放音量，范围为 0 到 100。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun setRemoteAudioVolume(streamId: String, volume: Int): Int
+    fun setRemoteAudioVolume(
+        streamId: String,
+        volume: Int
+    ): Int
 
     /**
      * 设置 RTC 事件监听器，传入空值时清除。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setEventListener(listener: RtcEventListener?)
+    fun setEventListener(
+        listener: RtcEventListener?
+    )
 
     /**
      * 设置 RTC 质量事件监听器，传入空值时清除。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setQualityListener(listener: RtcQualityListener?)
+    fun setQualityListener(
+        listener: RtcQualityListener?
+    )
 
     /**
      * 创建用于加入指定 RTC 房间的操作对象。
@@ -186,13 +217,16 @@ internal interface RtcPlatform {
      * @param roomId RTC 房间标识。
      * @return 指定房间的 RTC 操作对象；无法创建时为 null。
      */
-    fun createRoom(roomId: String): RtcRoom?
+    fun createRoom(
+        roomId: String
+    ): RtcRoom?
 }
 
 /**
  * 隔离第三方 RTC SDK 的房间能力。
  */
 internal interface RtcRoom {
+
     /**
      * 替换 RTC 房间或引擎事件监听器。
      *
@@ -213,7 +247,9 @@ internal interface RtcRoom {
      * @param configuration 房间标识、用户账号、App ID 和进房 Token。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun join(configuration: RoomJoinConfiguration): Int
+    fun join(
+        configuration: RoomJoinConfiguration
+    ): Int
 
     /**
      * 离开当前 RTC 房间。
@@ -228,7 +264,9 @@ internal interface RtcRoom {
      * @param publish true 发布媒体，false 撤销发布。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun publishLocalVideo(publish: Boolean): Int
+    fun publishLocalVideo(
+        publish: Boolean
+    ): Int
 
     /**
      * 按发布开关更新本地音频发布状态。
@@ -236,7 +274,9 @@ internal interface RtcRoom {
      * @param publish true 发布媒体，false 撤销发布。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun publishLocalAudio(publish: Boolean): Int
+    fun publishLocalAudio(
+        publish: Boolean
+    ): Int
 
     /**
      * 更新远端视频流订阅状态。
@@ -245,7 +285,10 @@ internal interface RtcRoom {
      * @param subscribe true 订阅媒体，false 取消订阅。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun subscribeRemoteVideo(userId: String, subscribe: Boolean): Int
+    fun subscribeRemoteVideo(
+        userId: String,
+        subscribe: Boolean
+    ): Int
 
     /**
      * 更新远端音频流订阅状态。
@@ -254,7 +297,10 @@ internal interface RtcRoom {
      * @param subscribe true 订阅媒体，false 取消订阅。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    fun subscribeRemoteAudio(userId: String, subscribe: Boolean): Int
+    fun subscribeRemoteAudio(
+        userId: String,
+        subscribe: Boolean
+    ): Int
 
     /**
      * 取得用于订阅和渲染指定远端用户的流标识。
@@ -262,7 +308,9 @@ internal interface RtcRoom {
      * @param userId 房间中的业务用户标识。
      * @return 可用于远端订阅及渲染的流标识。
      */
-    fun resolveRemoteStreamId(userId: String): String
+    fun resolveRemoteStreamId(
+        userId: String
+    ): String
 
     /**
      * 向当前 RTC 房间发送消息。
@@ -271,14 +319,19 @@ internal interface RtcRoom {
      * @param replacingPendingMessage 合并键；同键且尚未发送的信令仅保留最新内容。
      * @return RTC 返回的消息标识或错误码。
      */
-    fun sendRoomMessage(message: String, replacingPendingMessage: String? = null): Long
+    fun sendRoomMessage(
+        message: String,
+        replacingPendingMessage: String? = null
+    ): Long
 
     /**
      * 丢弃尚未开始发送的可合并信令。
      *
      * @param key 要清理的合并键；null 表示清理全部可合并信令。
      */
-    fun discardPendingMessages(key: String? = null)
+    fun discardPendingMessages(
+        key: String? = null
+    )
 
     /**
      * 等待此前排队的信令真正提交给 RTC，离房或发送失败时抛出异常。

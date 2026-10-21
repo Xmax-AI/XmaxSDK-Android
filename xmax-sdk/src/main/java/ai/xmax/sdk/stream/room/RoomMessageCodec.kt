@@ -1,10 +1,9 @@
 //
 //  RoomMessageCodec.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -15,17 +14,29 @@ import java.util.UUID
 import org.json.JSONObject
 
 /**
- * 与 Web 的 __agora_chunk__ 协议一致；按 JSON 转义后的 UTF-8 字节预算分片。
+ * 使用 __agora_chunk__ 协议，按 JSON 转义后的 UTF-8 字节预算分片。
  */
 internal class RoomMessageCodec {
+
     /**
      * 保存同一条分片消息已接收的数据及完整性信息。
-     *
-     * @param count 消息分片的总数量。
-     * @param parts 按序号保存的已收到消息分片。
-     * @param bytes 已接收分片数据的累计字节数；默认值为 `0`。
      */
-    private data class Record(val count: Int, val parts: MutableMap<Int, String> = mutableMapOf(), var bytes: Int = 0)
+    private data class Record(
+        /**
+         * 消息分片的总数量。
+         */
+        val count: Int,
+
+        /**
+         * 按序号保存的已收到消息分片。
+         */
+        val parts: MutableMap<Int, String> = mutableMapOf(),
+
+        /**
+         * 已接收分片数据的累计字节数；默认值为 `0`。
+         */
+        var bytes: Int = 0
+    )
 
     /**
      * 按发送者与消息标识保存的分片重组缓存。
@@ -38,7 +49,9 @@ internal class RoomMessageCodec {
      * @param message 待发送或记录的消息文本。
      * @return 按发送顺序排列的信令消息片段。
      */
-    fun encode(message: String): List<String> {
+    fun encode(
+        message: String
+    ): List<String> {
         require(message.toByteArray(Charsets.UTF_8).size <= MAX_MESSAGE_BYTES) { "Room message is too large" }
         if (message.toByteArray(Charsets.UTF_8).size <= 800) return listOf(message)
         val pieces = mutableListOf<String>()
@@ -74,7 +87,10 @@ internal class RoomMessageCodec {
      * @return 完整重组后的消息；尚未收齐时为 null。
      */
     @Synchronized
-    fun decode(sender: String, message: String): String? {
+    fun decode(
+        sender: String,
+        message: String
+    ): String? {
         if (message.toByteArray(Charsets.UTF_8).size > MAX_MESSAGE_BYTES) return null
         val json = runCatching { JSONObject(message) }.getOrNull() ?: return null
         if (json.optString("event") != EVENT) return message
@@ -111,13 +127,18 @@ internal class RoomMessageCodec {
     fun clear() = records.clear()
 
     /**
-     * 提供 RoomMessageCodec 使用的构造入口、共享配置或常量。
+     * 房间信令分片的事件名称与消息大小限制。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 用于识别信令分片的协议事件名。
          */
         const val EVENT = "__agora_chunk__"
+
+        /**
+         * 允许重组的信令消息大小上限，单位为字节。
+         */
         const val MAX_MESSAGE_BYTES = 256 * 1024
     }
 }

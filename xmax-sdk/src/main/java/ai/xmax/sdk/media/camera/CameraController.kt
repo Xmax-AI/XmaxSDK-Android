@@ -1,10 +1,9 @@
 //
 //  CameraController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -32,18 +31,29 @@ import androidx.compose.ui.unit.IntSize
 
 /**
  * 协调相机权限、RTC 内部采集和本地预览资源。
- *
- * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
- * @param permissionManager 检查 Android 相机及录音权限的组件。
- * @param mediaService 解析媒体尺寸及模型输入规则的服务。
- * @param errorListener 接收媒体错误的回调。
  */
 internal class CameraController(
+    /**
+     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     */
     private val rtcManager: RtcManaging,
+
+    /**
+     * 检查 Android 相机及录音权限的组件。
+     */
     private val permissionManager: PermissionManaging,
+
+    /**
+     * 解析媒体尺寸及模型输入规则的服务。
+     */
     private val mediaService: MediaServicing,
+
+    /**
+     * 接收媒体错误的回调。
+     */
     private val errorListener: (XmaxError) -> Unit = {},
 ) {
+
     /**
      * 创建 CameraController，并配置其依赖和运行参数。
      *
@@ -73,7 +83,15 @@ internal class CameraController(
      * 活动相机轨道与麦克风采集配置。
      */
     private var activeTrack: RealtimeVideoTrack? = null
+
+    /**
+     * 创建摄像头流时指定的麦克风开关。
+     */
     private var storedUseMicrophone = false
+
+    /**
+     * 麦克风采集是否已启动。
+     */
     private var isMicrophoneCapturing = false
 
     /**
@@ -82,6 +100,9 @@ internal class CameraController(
     val currentTrack: RealtimeVideoTrack?
         get() = synchronized(stateLock) { activeTrack }
 
+    /**
+     * 当前摄像头轨道是否启用了麦克风输入。
+     */
     val useMicrophone: Boolean
         get() = synchronized(stateLock) { activeTrack != null && storedUseMicrophone }
 
@@ -90,7 +111,9 @@ internal class CameraController(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) {
+    fun setPreviewReadyListener(
+        listener: RealtimeCameraPreviewReadyListener?
+    ) {
         rtcManager.setCameraPreviewReadyListener(listener)
     }
 
@@ -239,7 +262,9 @@ internal class CameraController(
      * @param videoFormat 视频尺寸、帧率及上行编码参数。
      * @return 解析或计算后的视频尺寸、帧率和编码配置。
      */
-    private fun resolveVideoFormat(videoFormat: RealtimeVideoFormat): RealtimeVideoFormat {
+    private fun resolveVideoFormat(
+        videoFormat: RealtimeVideoFormat
+    ): RealtimeVideoFormat {
         videoFormat.validate()
         val size = mediaService.resolveMediaSize(
             IntSize(videoFormat.width, videoFormat.height),
@@ -250,11 +275,12 @@ internal class CameraController(
     }
 
     /**
-     * 提供 CameraController 使用的构造入口、共享配置或常量。
+     * 本地摄像头轨道的标识约定。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 本地摄像头的视频轨道标识。
          */
         const val LOCAL_VIDEO_TRACK_ID = "video0"
     }

@@ -1,10 +1,9 @@
 //
 //  XmaxStorageManaging.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -19,6 +18,7 @@ import java.io.File
  * 下载先写临时文件，成功后替换目标文件；同一目标路径不允许并发下载写入。
  */
 public interface XmaxStorageManaging {
+
     /**
      * 上传图片字节；fileName 用于生成对象名称，contentType 必须为图片 MIME 类型。
      *

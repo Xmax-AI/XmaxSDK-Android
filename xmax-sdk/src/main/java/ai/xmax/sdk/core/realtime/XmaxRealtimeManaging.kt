@@ -1,10 +1,9 @@
 //
 //  XmaxRealtimeManaging.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -25,6 +24,7 @@ import android.net.Uri
  * 调档不改变原始媒体规格、模型生成尺寸或交互坐标，也不依赖公开统计监听器。
  */
 public interface XmaxRealtimeManaging {
+
     /**
      * 管理器配置与当前生命周期状态。
      *
@@ -36,6 +36,38 @@ public interface XmaxRealtimeManaging {
      * 当前状态快照；异步故障由 [RealtimeState.reason] 表达。
      */
     public val currentState: RealtimeState
+
+    /**
+     * 当前成功应用的上行档位；尚未连接、已开始断开或没有本地上行时为 null。
+     */
+    public val uplinkQualityLevel: RealtimeQualityLevel?
+
+    /**
+     * 当前成功提交的下行档位；尚未建立下行配置或已开始断开时为 null。
+     * 服务端返回新尺寸可能稍晚于本属性更新。
+     */
+    public val downlinkQualityLevel: RealtimeQualityLevel?
+
+    /**
+     * 在生成中调整上行编码档位，不改变媒体采集规格或模型生成尺寸。
+     * 后续网络采样仍可自动调整档位，不会锁定为手动选择值。
+     *
+     * @param level 目标上行档位。
+     * @throws XmaxError 未在生成、没有本地上行、操作冲突或编码配置失败时抛出错误。
+     */
+    public suspend fun setUplinkQualityLevel(
+        level: RealtimeQualityLevel,
+    )
+
+    /**
+     * 在生成中调整下行回传档位；后续网络采样仍可自动调整档位。
+     *
+     * @param level 目标下行档位。
+     * @throws XmaxError 未在生成、操作冲突或信令发送失败时抛出错误。
+     */
+    public suspend fun setDownlinkQualityLevel(
+        level: RealtimeQualityLevel,
+    )
 
     /**
      * 本地预览与远端结果的播放音量。
@@ -54,7 +86,9 @@ public interface XmaxRealtimeManaging {
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    public suspend fun setStateListener(listener: RealtimeStateListener?)
+    public suspend fun setStateListener(
+        listener: RealtimeStateListener?
+    )
 
     /**
      * 接收显示前的最终远端视频帧。
@@ -64,42 +98,54 @@ public interface XmaxRealtimeManaging {
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    public suspend fun setRemoteVideoFrameListener(listener: RealtimeVideoFrameListener?)
+    public suspend fun setRemoteVideoFrameListener(
+        listener: RealtimeVideoFrameListener?
+    )
 
     /**
      * 设置 RTC 网络质量监听器；传 null 注销。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    public suspend fun setNetworkQualityListener(listener: RealtimeNetworkQualityListener?)
+    public suspend fun setNetworkQualityListener(
+        listener: RealtimeNetworkQualityListener?
+    )
 
     /**
      * 设置上行视频统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    public suspend fun setUplinkVideoStatisticsListener(listener: UplinkVideoStatisticsListener?)
+    public suspend fun setUplinkVideoStatisticsListener(
+        listener: UplinkVideoStatisticsListener?
+    )
 
     /**
      * 设置下行结果流统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    public suspend fun setDownlinkVideoStatisticsListener(listener: DownlinkVideoStatisticsListener?)
+    public suspend fun setDownlinkVideoStatisticsListener(
+        listener: DownlinkVideoStatisticsListener?
+    )
 
     /**
      * 设置 RTC 性能告警监听器；传 null 注销。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    public suspend fun setPerformanceAlarmListener(listener: RealtimePerformanceAlarmListener?)
+    public suspend fun setPerformanceAlarmListener(
+        listener: RealtimePerformanceAlarmListener?
+    )
 
     /**
      * 设置本地视频预览音量，取值范围为 `0..1`；成功设置后跨 close 和媒体重建保留。
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    public suspend fun setLocalAudioVolume(volume: Float)
+    public suspend fun setLocalAudioVolume(
+        volume: Float
+    )
 
     /**
      * 设置远端生成音频的播放音量，取值范围为 `0..1`；成功设置后跨 close 保留。
@@ -107,7 +153,9 @@ public interface XmaxRealtimeManaging {
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    public suspend fun setRemoteAudioVolume(volume: Float)
+    public suspend fun setRemoteAudioVolume(
+        volume: Float
+    )
 
     /**
      * 使用当前模型的默认视频规格创建并启动相机输入。
@@ -271,7 +319,9 @@ public interface XmaxRealtimeManaging {
      * @param localStream 本地输入媒体流。
      * @return 可用于预览或生成的媒体流及其视频轨道。
      */
-    public suspend fun connect(localStream: RealtimeMediaStream): RealtimeMediaStream
+    public suspend fun connect(
+        localStream: RealtimeMediaStream
+    ): RealtimeMediaStream
 
     /**
      * 结束生成并关闭会话和 RTC 连接，保留本地媒体源；最终进入 READY 或 IDLE。
@@ -283,7 +333,9 @@ public interface XmaxRealtimeManaging {
      *
      * @param reason 引起状态变化或失败的原因。
      */
-    public suspend fun disconnect(reason: RealtimeReason)
+    public suspend fun disconnect(
+        reason: RealtimeReason
+    )
 
     /**
      * 在已建立的连接上生成；首次生成须提供条件，后续传 null 可复用已缓存条件。
@@ -294,7 +346,10 @@ public interface XmaxRealtimeManaging {
      * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
      * @param faceRestoration 是否回贴原始人脸；默认 false，每次调用均发送本次设置。
      */
-    public suspend fun startGeneration(context: RealtimeContext?, faceRestoration: Boolean = false)
+    public suspend fun startGeneration(
+        context: RealtimeContext?,
+        faceRestoration: Boolean = false
+    )
 
     /**
      * 必要时先建立连接，再开始或更新生成；返回该连接的远端流。并发替换语义与另一重载一致。

@@ -1,10 +1,9 @@
 //
 //  AgoraRtcPlatform.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -48,7 +47,10 @@ import kotlinx.coroutines.cancel
  * @param appId RTC 应用标识，不是应用证书或房间 Token。
  * @return 创建的 RTC 平台引擎；App ID 为空时为 null。
  */
-internal fun createAgoraRtcEngine(context: Context, appId: String): RtcPlatform? =
+internal fun createAgoraRtcEngine(
+    context: Context,
+    appId: String
+): RtcPlatform? =
     appId.trim().takeIf(String::isNotEmpty)?.let { AgoraRtcPlatform(context, it) }
 
 /**
@@ -62,7 +64,9 @@ internal fun destroyAgoraRtcEngine() = RtcEngine.destroy()
  * @param state 当前状态快照。
  * @return 远端视频可订阅时为 true。
  */
-internal fun isAgoraVideoPublished(state: Int): Boolean =
+internal fun isAgoraVideoPublished(
+    state: Int
+): Boolean =
     state and Constants.USER_STATE_MUTE_VIDEO == 0 &&
         state and Constants.USER_STATE_ENABLE_VIDEO != 0 &&
         state and Constants.USER_STATE_ENABLE_LOCAL_VIDEO != 0
@@ -71,35 +75,74 @@ internal fun isAgoraVideoPublished(state: Int): Boolean =
  * 提供 Agora 音视频采集、编码、房间连接和远端渲染能力。
  *
  * @param context 访问 Android 系统服务或媒体资源所需的上下文。
- * @param appId RTC 应用标识，不是应用证书或房间 Token。
  */
-private class AgoraRtcPlatform(context: Context, private val appId: String) : RtcPlatform {
+private class AgoraRtcPlatform(
+    context: Context,
+
+    /**
+     * RTC 应用标识，不是应用证书或房间 Token。
+     */
+    private val appId: String
+) : RtcPlatform {
+
     /**
      * RTC 事件、质量及预览就绪监听器。
      */
     private val listener = AtomicReference<RtcEventListener?>()
+
+    /**
+     * 接收网络质量、性能与音视频统计的监听器。
+     */
     private val qualityListener = AtomicReference<RtcQualityListener?>()
+
+    /**
+     * 本地摄像头预览就绪的监听器。
+     */
     private val previewListener = AtomicReference<(() -> Unit)?>()
 
     /**
      * 当前 RTC 房间及远端视频帧接收器。
      */
     private val activeRoom = AtomicReference<AgoraRoom?>()
+
+    /**
+     * 按远端用户标识保存的视频帧接收器。
+     */
     private val frameSinks = ConcurrentHashMap<String, RtcRemoteVideoSink>()
 
     /**
      * 外部音视频输入开关及自定义音频轨道。
      */
     private var externalVideo = false
+
+    /**
+     * 当前是否使用外部音频输入。
+     */
     private var externalAudio = false
+
+    /**
+     * 声网分配的外部音频轨道标识。
+     */
     private var audioTrackId = -1
 
     /**
      * 相机采集方向、规格及首帧等待状态。
      */
     private val awaitingCameraFrame = AtomicBoolean(false)
+
+    /**
+     * 当前使用的前置或后置摄像头。
+     */
     private var cameraPosition = CameraPosition.FRONT
-    private var captureFormat = CameraCapturerConfiguration.CaptureFormat(1024, 1920, 30)
+
+    /**
+     * 摄像头采集尺寸与帧率。
+     */
+    private var captureFormat = CameraCapturerConfiguration.CaptureFormat(1080, 1920, 30)
+
+    /**
+     * 摄像头采集是否已启动。
+     */
     private var cameraStarted = false
 
     /**
@@ -118,6 +161,7 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
             mAppId = this@AgoraRtcPlatform.appId
             mChannelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
             mEventHandler = object : IRtcEngineEventHandler() {
+
                 /**
                  * 通知本地视频源已产生首帧，供预览就绪判定使用。
                  *
@@ -126,7 +170,12 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
                  * @param height 画面高度，单位为像素。
                  * @param elapsed RTC 事件报告的经过时间，单位为毫秒。
                  */
-                override fun onFirstLocalVideoFrame(source: Constants.VideoSourceType, width: Int, height: Int, elapsed: Int) {
+                override fun onFirstLocalVideoFrame(
+                    source: Constants.VideoSourceType,
+                    width: Int,
+                    height: Int,
+                    elapsed: Int
+                ) {
                     previewListener.get()?.invoke()
                 }
             }
@@ -136,6 +185,7 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
             checkRtc(engine.enableLocalVideo(false), "disable initial camera capture")
             checkRtc(engine.enableLocalAudio(false), "disable initial microphone capture")
             checkRtc(engine.registerVideoFrameObserver(object : IVideoFrameObserver {
+
                 /**
                  * 指定视频帧观察器只读取帧数据，不修改 RTC 原始帧。
                  *
@@ -178,7 +228,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
                  * @param frame 待处理、显示或提交的视频帧。
                  * @return true，允许 RTC 继续使用该帧。
                  */
-                override fun onCaptureVideoFrame(source: Int, frame: io.agora.base.VideoFrame): Boolean {
+                override fun onCaptureVideoFrame(
+                    source: Int,
+                    frame: io.agora.base.VideoFrame
+                ): Boolean {
                     if (awaitingCameraFrame.compareAndSet(true, false)) previewListener.get()?.invoke()
                     return true
                 }
@@ -190,7 +243,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
                  * @param frame 待处理、显示或提交的视频帧。
                  * @return true，允许 RTC 继续编码。
                  */
-                override fun onPreEncodeVideoFrame(source: Int, frame: io.agora.base.VideoFrame) = true
+                override fun onPreEncodeVideoFrame(
+                    source: Int,
+                    frame: io.agora.base.VideoFrame
+                ) = true
 
                 /**
                  * 允许播放器视频帧继续进入 RTC 处理流程。
@@ -199,7 +255,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
                  * @param playerId RTC 媒体播放器标识。
                  * @return true，允许 RTC 继续处理播放器帧。
                  */
-                override fun onMediaPlayerVideoFrame(frame: io.agora.base.VideoFrame, playerId: Int) = true
+                override fun onMediaPlayerVideoFrame(
+                    frame: io.agora.base.VideoFrame,
+                    playerId: Int
+                ) = true
 
                 /**
                  * 将当前远端用户的渲染帧交给已注册的视频帧监听器。
@@ -209,7 +268,11 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
                  * @param frame 待处理、显示或提交的视频帧。
                  * @return true，允许 RTC 继续渲染该帧。
                  */
-                override fun onRenderVideoFrame(channel: String, uid: Int, frame: io.agora.base.VideoFrame): Boolean {
+                override fun onRenderVideoFrame(
+                    channel: String,
+                    uid: Int,
+                    frame: io.agora.base.VideoFrame
+                ): Boolean {
                     val room = activeRoom.get()?.takeIf { !it.closed && it.roomId == channel } ?: return true
                     val sink = frameSinks[room.userId(uid)] ?: return true
                     try {
@@ -233,7 +296,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param configuration 上行视频的尺寸、帧率、码率及编码偏好。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    override fun configureVideoEncoding(configuration: VideoEncodingConfiguration): Int {
+    override fun configureVideoEncoding(
+        configuration: VideoEncodingConfiguration
+    ): Int {
         val encoderConfiguration = RtcVideoConverter.makeEncoderConfiguration(
             configuration,
             cameraPosition = cameraPosition.takeUnless { externalVideo },
@@ -263,10 +328,11 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param frame 待处理、显示或提交的视频帧。
      * @param seiData 附加视频元数据；null 表示不附加，当前 Agora 适配不使用该字段。
      */
-    override fun pushExternalVideoFrame(frame: VideoFrame, seiData: ByteArray?) {
-        /**
-         * 提交外部视频帧；当前协议不附加逐帧 SEI，RTC 拒收单帧时不终止媒体源。
-         */
+    override fun pushExternalVideoFrame(
+        frame: VideoFrame,
+        seiData: ByteArray?
+    ) {
+        // 提交外部视频帧；当前协议不附加逐帧 SEI，RTC 拒收单帧时不终止媒体源。
         engine.pushExternalVideoFrame(RtcVideoConverter.convertFrame(frame))
     }
 
@@ -275,7 +341,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      *
      * @param frame 待播放或提交的 PCM 音频帧。
      */
-    override fun pushExternalAudioFrame(frame: AudioFrame) {
+    override fun pushExternalAudioFrame(
+        frame: AudioFrame
+    ) {
         if (audioTrackId < 0) return
         engine.pushExternalAudioFrame(
             RtcAudioConverter.convertFrame(frame), frame.timestampUs / 1_000L,
@@ -355,7 +423,11 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param frameRate 视频帧率，单位为 fps。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    override fun startVideoCapture(width: Int, height: Int, frameRate: Int): Int {
+    override fun startVideoCapture(
+        width: Int,
+        height: Int,
+        frameRate: Int
+    ): Int {
         val source = engine.setExternalVideoSource(false, false, Constants.ExternalVideoSourceType.VIDEO_FRAME)
         if (source < 0) return source
         externalVideo = false
@@ -391,7 +463,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param position 需要使用的前置或后置摄像头。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    override fun switchCamera(position: CameraPosition): Int {
+    override fun switchCamera(
+        position: CameraPosition
+    ): Int {
         if (cameraStarted && cameraPosition != position) {
             awaitingCameraFrame.set(true)
             val result = engine.switchCamera()
@@ -423,7 +497,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    override fun bindLocalVideo(view: View, contentMode: VideoContentMode): Int =
+    override fun bindLocalVideo(
+        view: View,
+        contentMode: VideoContentMode
+    ): Int =
         engine.setupLocalVideo(RtcVideoConverter.makeLocalCanvas(view, contentMode))
 
     /**
@@ -441,7 +518,11 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    override fun bindRemoteVideo(userId: String, view: View, contentMode: VideoContentMode): Int {
+    override fun bindRemoteVideo(
+        userId: String,
+        view: View,
+        contentMode: VideoContentMode
+    ): Int {
         val room = requireNotNull(activeRoom.get())
         return engine.setupRemoteVideoEx(RtcVideoConverter.makeCanvas(view, contentMode, room.uid(userId)), room.connection())
     }
@@ -452,7 +533,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param userId 房间中的业务用户标识。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    override fun unbindRemoteVideo(userId: String): Int {
+    override fun unbindRemoteVideo(
+        userId: String
+    ): Int {
         val room = activeRoom.get() ?: return 0
         return engine.setupRemoteVideoEx(RtcVideoConverter.makeCanvas(null, VideoContentMode.FILL, room.uid(userId)), room.connection())
     }
@@ -462,7 +545,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setCameraPreviewReadyListener(listener: (() -> Unit)?) { previewListener.set(listener) }
+    override fun setCameraPreviewReadyListener(
+        listener: (() -> Unit)?
+    ) { previewListener.set(listener) }
 
     /**
      * 替换指定远端流的视频帧监听器。
@@ -471,7 +556,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param listener 接收对应事件的监听器；null 表示注销。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    override fun setRemoteVideoFrameListener(streamId: String, listener: RtcRemoteVideoSink?): Int {
+    override fun setRemoteVideoFrameListener(
+        streamId: String,
+        listener: RtcRemoteVideoSink?
+    ): Int {
         if (listener == null) frameSinks.remove(streamId) else frameSinks[streamId] = listener
         return 0
     }
@@ -483,7 +571,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param volume 远端音频播放音量，范围为 0 到 100。
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。
      */
-    override fun setRemoteAudioVolume(streamId: String, volume: Int): Int {
+    override fun setRemoteAudioVolume(
+        streamId: String,
+        volume: Int
+    ): Int {
         val room = requireNotNull(activeRoom.get())
         return engine.adjustUserPlaybackSignalVolumeEx(room.uid(streamId), volume, room.connection())
     }
@@ -493,14 +584,18 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setEventListener(listener: RtcEventListener?) { this.listener.set(listener) }
+    override fun setEventListener(
+        listener: RtcEventListener?
+    ) { this.listener.set(listener) }
 
     /**
      * 设置 RTC 质量事件监听器，传入空值时清除。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setQualityListener(listener: RtcQualityListener?) { qualityListener.set(listener) }
+    override fun setQualityListener(
+        listener: RtcQualityListener?
+    ) { qualityListener.set(listener) }
 
     /**
      * 创建用于加入指定 RTC 房间的操作对象。
@@ -508,39 +603,69 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param roomId RTC 房间标识。
      * @return 指定房间的 RTC 操作对象。
      */
-    override fun createRoom(roomId: String): RtcRoom = AgoraRoom(roomId)
+    override fun createRoom(
+        roomId: String
+    ): RtcRoom = AgoraRoom(roomId)
 
     /**
      * 每轮入房独立事件桥、发送队列和身份映射；离房后拒绝所有迟到回调。
-     *
-     * @param roomId RTC 房间标识。
      */
-    private inner class AgoraRoom(val roomId: String) : RtcRoom {
+    private inner class AgoraRoom(
+        /**
+         * RTC 房间标识。
+         */
+        val roomId: String
+    ) : RtcRoom {
+
         /**
          * 房间生命周期与本地用户身份。
          */
         @Volatile var closed = false
             private set
+
+        /**
+         * 入房后分配的本地数字用户标识。
+         */
         private var localUid = 0
+
+        /**
+         * 本地用户的字符串账号。
+         */
         private var localAccount = ""
 
         /**
          * 数据通道及房间事件通知。
          */
         private var dataStreamId = -1
+
+        /**
+         * 房间连接状态的监听器。
+         */
         private var stateListener: ((String, Boolean, String?) -> Unit)? = null
 
         /**
          * 远端用户账号映射与视频发布状态。
          */
         private val accounts = ConcurrentHashMap<Int, String>()
+
+        /**
+         * 各远端用户的视频发布状态。
+         */
         private val publications = ConcurrentHashMap<Int, Boolean>()
 
         /**
          * 业务信令的分片编解码及有序发送。
          */
         private val codec = RoomMessageCodec()
+
+        /**
+         * 房间信令发送任务的协程作用域。
+         */
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        /**
+         * 按顺序发送房间信令的队列。
+         */
         private val sender = RtcMessageQueue(
             scope = scope,
             send = { bytes ->
@@ -588,7 +713,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param uid RTC 分配的数字用户标识。
          * @return RTC 数字 UID 对应的业务用户账号。
          */
-        fun userId(uid: Int): String = accounts[uid] ?: Integer.toUnsignedString(uid)
+        fun userId(
+            uid: Int
+        ): String = accounts[uid] ?: Integer.toUnsignedString(uid)
 
         /**
          * 将业务用户账号转换为 RTC 数字 UID。
@@ -596,7 +723,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param account RTC 用户账号字符串。
          * @return 对应的 RTC 数字用户标识。
          */
-        fun uid(account: String): Int {
+        fun uid(
+            account: String
+        ): Int {
             accounts.entries.firstOrNull { it.value == account }?.let { return it.key }
             val info = UserInfo()
             if (engine.getUserInfoByUserAccountEx(account, info, connection()) == 0) {
@@ -619,12 +748,13 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param uid RTC 分配的数字用户标识。
          * @param published 远端视频是否处于发布状态。
          */
-        private fun publish(uid: Int, published: Boolean) {
+        private fun publish(
+            uid: Int,
+            published: Boolean
+        ) {
             if (!isCurrent()) return
             publications[uid] = published
-            /**
-             * 远端业务身份使用用户账号；账号映射就绪后才确认生成结果发布者。
-             */
+            // 远端业务身份使用用户账号；账号映射就绪后才确认生成结果发布者。
             if (accounts[uid] != null) listener.get()?.onRemoteVideoPublished(RemoteStream(roomId, userId(uid)), published)
         }
 
@@ -632,6 +762,7 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * 房间级 RTC 回调接收器。
          */
         private val events = object : IRtcEngineEventHandler() {
+
             /**
              * 确认本次 RTC 进房成功并通知等待方。
              *
@@ -639,7 +770,11 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param uid RTC 分配的数字用户标识。
              * @param elapsed RTC 事件报告的经过时间，单位为毫秒。
              */
-            override fun onJoinChannelSuccess(channel: String, uid: Int, elapsed: Int) {
+            override fun onJoinChannelSuccess(
+                channel: String,
+                uid: Int,
+                elapsed: Int
+            ) {
                 if (!isCurrent()) return
                 localUid = uid
                 dataStreamId = engine.createDataStreamEx(DataStreamConfig().apply {
@@ -660,7 +795,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param uid RTC 分配的数字用户标识。
              * @param info RTC 数字 UID 对应的用户账号信息。
              */
-            override fun onUserInfoUpdated(uid: Int, info: UserInfo) {
+            override fun onUserInfoUpdated(
+                uid: Int,
+                info: UserInfo
+            ) {
                 if (!isCurrent()) return
                 val account = info.userAccount?.takeIf(String::isNotBlank) ?: return
                 accounts[uid] = account
@@ -673,7 +811,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param uid RTC 分配的数字用户标识。
              * @param elapsed RTC 事件报告的经过时间，单位为毫秒。
              */
-            override fun onUserJoined(uid: Int, elapsed: Int) {
+            override fun onUserJoined(
+                uid: Int,
+                elapsed: Int
+            ) {
                 val info = UserInfo()
                 if (isCurrent() && engine.getUserInfoByUidEx(uid, info, connection()) == 0) onUserInfoUpdated(uid, info)
             }
@@ -684,7 +825,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param uid RTC 分配的数字用户标识。
              * @param reason 引起状态变化或失败的原因。
              */
-            override fun onUserOffline(uid: Int, reason: Int) {
+            override fun onUserOffline(
+                uid: Int,
+                reason: Int
+            ) {
                 publish(uid, false)
                 accounts.remove(uid)
                 publications.remove(uid)
@@ -696,7 +840,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param uid RTC 分配的数字用户标识。
              * @param muted 是否静音。
              */
-            override fun onUserMuteVideo(uid: Int, muted: Boolean) = publish(uid, !muted)
+            override fun onUserMuteVideo(
+                uid: Int,
+                muted: Boolean
+            ) = publish(uid, !muted)
 
             /**
              * 根据远端视频模块状态更新视频可用性。
@@ -704,7 +851,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param uid RTC 分配的数字用户标识。
              * @param enabled 是否启用对应能力。
              */
-            override fun onUserEnableVideo(uid: Int, enabled: Boolean) = publish(uid, enabled)
+            override fun onUserEnableVideo(
+                uid: Int,
+                enabled: Boolean
+            ) = publish(uid, enabled)
 
             /**
              * 根据远端采集状态更新视频可用性。
@@ -712,7 +862,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param uid RTC 分配的数字用户标识。
              * @param enabled 是否启用对应能力。
              */
-            override fun onUserEnableLocalVideo(uid: Int, enabled: Boolean) = publish(uid, enabled)
+            override fun onUserEnableLocalVideo(
+                uid: Int,
+                enabled: Boolean
+            ) = publish(uid, enabled)
 
             /**
              * 根据远端用户状态更新视频发布信息。
@@ -720,7 +873,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param uid RTC 分配的数字用户标识。
              * @param state 当前状态快照。
              */
-            override fun onUserStateChanged(uid: Int, state: Int) = publish(uid, isAgoraVideoPublished(state))
+            override fun onUserStateChanged(
+                uid: Int,
+                state: Int
+            ) = publish(uid, isAgoraVideoPublished(state))
 
             /**
              * 将远端视频状态转换为可订阅的视频发布状态。
@@ -730,7 +886,12 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param reason 引起状态变化或失败的原因。
              * @param elapsed RTC 事件报告的经过时间，单位为毫秒。
              */
-            override fun onRemoteVideoStateChanged(uid: Int, state: Int, reason: Int, elapsed: Int) {
+            override fun onRemoteVideoStateChanged(
+                uid: Int,
+                state: Int,
+                reason: Int,
+                elapsed: Int
+            ) {
                 if (state == Constants.REMOTE_VIDEO_STATE_STARTING || state == Constants.REMOTE_VIDEO_STATE_DECODING) publish(uid, true)
                 if (reason == Constants.REMOTE_VIDEO_STATE_REASON_REMOTE_MUTED || reason == Constants.REMOTE_VIDEO_STATE_REASON_REMOTE_OFFLINE) publish(uid, false)
             }
@@ -741,7 +902,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param state 当前状态快照。
              * @param reason 引起状态变化或失败的原因。
              */
-            override fun onConnectionStateChanged(state: Int, reason: Int) {
+            override fun onConnectionStateChanged(
+                state: Int,
+                reason: Int
+            ) {
                 if (!isCurrent()) return
                 if (state == Constants.CONNECTION_STATE_FAILED) stateListener?.invoke(roomId, false, "AGORA_CONNECTION_FAILED")
             }
@@ -760,7 +924,11 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param streamId 远端媒体流或数据通道的标识。
              * @param data 待读取、传输或持有的二进制数据。
              */
-            override fun onStreamMessage(uid: Int, streamId: Int, data: ByteArray) {
+            override fun onStreamMessage(
+                uid: Int,
+                streamId: Int,
+                data: ByteArray
+            ) {
                 if (!isCurrent()) return
                 codec.decode(userId(uid), data.toString(Charsets.UTF_8))?.let {
                     listener.get()?.onUserMessageReceived(RemoteStream(roomId, userId(uid)), it)
@@ -774,7 +942,11 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param txQuality RTC 报告的上行网络质量等级。
              * @param rxQuality RTC 报告的下行网络质量等级。
              */
-            override fun onNetworkQuality(uid: Int, txQuality: Int, rxQuality: Int) {
+            override fun onNetworkQuality(
+                uid: Int,
+                txQuality: Int,
+                rxQuality: Int
+            ) {
                 if (isCurrent() && uid == 0) qualityListener.get()?.onNetworkQuality(
                     RtcQualityConverter.convertLevel(txQuality), RtcQualityConverter.convertLevel(rxQuality),
                 )
@@ -786,7 +958,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              * @param source RTC 视频采集来源标识。
              * @param stats RTC 视频统计快照。
              */
-            override fun onLocalVideoStats(source: Constants.VideoSourceType, stats: LocalVideoStats) {
+            override fun onLocalVideoStats(
+                source: Constants.VideoSourceType,
+                stats: LocalVideoStats
+            ) {
                 if (!isCurrent()) return
             val statistics = RtcQualityConverter.uplinkVideoStatistics(stats)
             RtcStatsLogger.logUplinkVideoStatistics(statistics)
@@ -804,7 +979,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
              *
              * @param stats RTC 视频统计快照。
              */
-            override fun onRemoteVideoStats(stats: RemoteVideoStats) {
+            override fun onRemoteVideoStats(
+                stats: RemoteVideoStats
+            ) {
                 if (!isCurrent()) return
                 val account = accounts[stats.uid] ?: return
             val statistics = RtcQualityConverter.downlinkVideoStatistics(account, stats)
@@ -819,7 +996,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param listener 接收对应事件的监听器。
          * @return RTC 操作返回码；非负表示已接受，负值表示失败。
          */
-        override fun setEventListener(listener: (String, Boolean, String?) -> Unit): Int {
+        override fun setEventListener(
+            listener: (String, Boolean, String?) -> Unit
+        ): Int {
             stateListener = listener
             return 0
         }
@@ -830,7 +1009,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param configuration 房间标识、用户账号、App ID 和进房 Token。
          * @return RTC 操作返回码；非负表示已接受，负值表示失败。
          */
-        override fun join(configuration: RoomJoinConfiguration): Int {
+        override fun join(
+            configuration: RoomJoinConfiguration
+        ): Int {
             if (configuration.appId != appId) return -2
             if (!activeRoom.compareAndSet(null, this)) return -5
             localAccount = configuration.userId
@@ -853,7 +1034,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param publish true 发布媒体，false 撤销发布。
          * @return RTC 操作返回码；非负表示已接受，负值表示失败。
          */
-        override fun publishLocalVideo(publish: Boolean): Int {
+        override fun publishLocalVideo(
+            publish: Boolean
+        ): Int {
             val result = engine.updateChannelMediaOptionsEx(ChannelMediaOptions().apply {
                 publishCameraTrack = publish && !externalVideo
                 publishCustomVideoTrack = publish && externalVideo
@@ -872,7 +1055,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param publish true 发布媒体，false 撤销发布。
          * @return RTC 操作返回码；非负表示已接受，负值表示失败。
          */
-        override fun publishLocalAudio(publish: Boolean): Int = engine.updateChannelMediaOptionsEx(ChannelMediaOptions().apply {
+        override fun publishLocalAudio(
+            publish: Boolean
+        ): Int = engine.updateChannelMediaOptionsEx(ChannelMediaOptions().apply {
             publishMicrophoneTrack = publish && !externalAudio
             publishCustomAudioTrack = publish && externalAudio
             if (externalAudio) publishCustomAudioTrackId = audioTrackId
@@ -885,7 +1070,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param subscribe true 订阅媒体，false 取消订阅。
          * @return RTC 操作返回码；非负表示已接受，负值表示失败。
          */
-        override fun subscribeRemoteVideo(userId: String, subscribe: Boolean): Int =
+        override fun subscribeRemoteVideo(
+            userId: String,
+            subscribe: Boolean
+        ): Int =
             engine.muteRemoteVideoStreamEx(uid(userId), !subscribe, connection())
 
         /**
@@ -895,7 +1083,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param subscribe true 订阅媒体，false 取消订阅。
          * @return RTC 操作返回码；非负表示已接受，负值表示失败。
          */
-        override fun subscribeRemoteAudio(userId: String, subscribe: Boolean): Int =
+        override fun subscribeRemoteAudio(
+            userId: String,
+            subscribe: Boolean
+        ): Int =
             engine.muteRemoteAudioStreamEx(uid(userId), !subscribe, connection())
 
         /**
@@ -904,7 +1095,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param userId 房间中的业务用户标识。
          * @return 与业务用户账号一致的远端流标识。
          */
-        override fun resolveRemoteStreamId(userId: String) = userId
+        override fun resolveRemoteStreamId(
+            userId: String
+        ) = userId
 
         /**
          * 向当前 RTC 房间发送消息。
@@ -913,7 +1106,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          * @param replacingPendingMessage 合并键；同键且尚未发送的信令仅保留最新内容。
          * @return RTC 返回的消息标识或错误码。
          */
-        override fun sendRoomMessage(message: String, replacingPendingMessage: String?): Long = synchronized(sendLock) {
+        override fun sendRoomMessage(
+            message: String,
+            replacingPendingMessage: String?
+        ): Long = synchronized(sendLock) {
             if (!isCurrent() || !joined) return -3
             sender.enqueue(message, replacingPendingMessage)
             0L
@@ -924,7 +1120,9 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
          *
          * @param key 要清理的合并键；null 表示清理全部可合并信令。
          */
-        override fun discardPendingMessages(key: String?) {
+        override fun discardPendingMessages(
+            key: String?
+        ) {
             sender.discardPendingMessages(key)
         }
 
@@ -969,7 +1167,10 @@ private class AgoraRtcPlatform(context: Context, private val appId: String) : Rt
      * @param code RTC 返回的状态或错误码。
      * @param operation 用于定位失败原因的操作名称。
      */
-    private fun checkRtc(code: Int, operation: String) {
+    private fun checkRtc(
+        code: Int,
+        operation: String
+    ) {
         check(code >= 0) { "Agora $operation failed: $code" }
     }
 }

@@ -1,10 +1,9 @@
 //
 //  XmaxStorageManager.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -21,12 +20,14 @@ import java.io.File
  * 文件存储公共接口的适配层，将底层结果和进度转换为 SDK 对外模型。
  * 上传校验、临时凭据和安全检查由 StorageService 负责，实际传输及取消由底层存储实现负责。
  * 路径重载统一委托给 File 重载；此层不拦截异常或切换进度回调线程。
- *
- * @param storageService 校验并执行文件上传下载的业务服务。
  */
 internal class XmaxStorageManager(
+    /**
+     * 校验并执行文件上传下载的业务服务。
+     */
     private val storageService: StorageServicing,
 ) : XmaxStorageManaging {
+
     /**
      * 上传图片二进制数据。
      *

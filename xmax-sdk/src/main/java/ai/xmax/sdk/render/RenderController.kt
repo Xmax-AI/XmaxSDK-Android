@@ -1,10 +1,9 @@
 //
 //  RenderController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -44,20 +43,34 @@ import kotlinx.coroutines.withContext
 
 /**
  * 每轮生成使用同一条后处理帧链路提供首帧门控、持续显示和接入方帧回调。
- *
- * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
- * @param remoteFrameReadyTimeoutMillis 等待远端首帧可显示的最大时长，单位为毫秒；默认值为 `REMOTE_FRAME_READY_TIMEOUT_MILLIS`。
- * @param renderDispatcher 执行视图绑定和显示更新的协程调度器；默认值为 `Dispatchers.Main.immediate`。
- * @param frameDispatcher 远端视频帧的派发组件。
- * @param errorListener 接收媒体错误的回调。
  */
 internal class RenderController(
+    /**
+     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     */
     private val rtcManager: RtcManaging,
+
+    /**
+     * 等待远端首帧可显示的最大时长，单位为毫秒；默认值为 `REMOTE_FRAME_READY_TIMEOUT_MILLIS`。
+     */
     private val remoteFrameReadyTimeoutMillis: Long = REMOTE_FRAME_READY_TIMEOUT_MILLIS,
+
+    /**
+     * 执行视图绑定和显示更新的协程调度器；默认值为 `Dispatchers.Main.immediate`。
+     */
     private val renderDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+
+    /**
+     * 远端视频帧的派发组件。
+     */
     private val frameDispatcher: RealtimeVideoFrameDispatcher = RealtimeVideoFrameDispatcher(),
+
+    /**
+     * 接收媒体错误的回调。
+     */
     private val errorListener: (XmaxError) -> Unit = {},
 ) : RenderControlling {
+
     /**
      * 远端渲染状态的并发保护。
      *
@@ -69,8 +82,20 @@ internal class RenderController(
      * 当前结果流及视图、轨道绑定。
      */
     private var generation: RemoteGeneration? = null
+
+    /**
+     * 当前下行视频视图的弱引用。
+     */
     private var remoteView: WeakReference<XmaxVideoView>? = null
+
+    /**
+     * 下行视频的等比缩放与裁剪方式。
+     */
     private var remoteContentMode = VideoContentMode.FILL
+
+    /**
+     * 当前下行视频轨道。
+     */
     private var remoteTrack: RealtimeVideoTrack? = null
 
     /**
@@ -79,7 +104,9 @@ internal class RenderController(
      * @param stream 由房间和用户标识确定的远端媒体流。
      */
     @MainThread
-    override fun setRemoteStream(stream: RemoteStream?) = operationLock.withLock {
+    override fun setRemoteStream(
+        stream: RemoteStream?
+    ) = operationLock.withLock {
         val previous = generation
         val next = stream?.let(::RemoteGeneration)
         generation = next
@@ -100,24 +127,28 @@ internal class RenderController(
                 failure?.let { throw it }
             }
             if (next != null) {
-                /**
-                 * 目标机器人发布确认后注册本轮帧监听；同一流也不能复用上一轮首帧标记。
-                 */
+                // 目标机器人发布确认后注册本轮帧监听；同一流也不能复用上一轮首帧标记。
                 rtcManager.setRemoteVideoFrameListener(next.stream, object : RtcRemoteVideoSink {
+
                     /**
                      * 通知订阅的视频流已到达首帧及其尺寸。
                      *
                      * @param width 画面宽度，单位为像素。
                      * @param height 画面高度，单位为像素。
                      */
-                    override fun onFirstFrame(width: Int, height: Int) = handleRemoteVideoFrame(next, width, height)
+                    override fun onFirstFrame(
+                        width: Int,
+                        height: Int
+                    ) = handleRemoteVideoFrame(next, width, height)
 
                     /**
                      * 接收当前订阅的视频帧。
                      *
                      * @param frame 待处理、显示或提交的视频帧。
                      */
-                    override fun onFrame(frame: RtcRemoteVideoFrame) {
+                    override fun onFrame(
+                        frame: RtcRemoteVideoFrame
+                    ) {
                         operationLock.withLock {
                             if (generation === next) updateDisplayedFormat(frame.displayWidth, frame.displayHeight)
                         }
@@ -129,7 +160,9 @@ internal class RenderController(
                      *
                      * @param error 本次操作失败的异常或 SDK 错误。
                      */
-                    override fun onError(error: XmaxError): Unit = operationLock.withLock {
+                    override fun onError(
+                        error: XmaxError
+                    ): Unit = operationLock.withLock {
                         if (generation !== next) return
                         frameDispatcher.setGeneration(null)
                         if (!next.ready.completeExceptionally(error)) errorListener(error)
@@ -190,10 +223,10 @@ internal class RenderController(
      *
      * @param track 需要显示或绑定的视频轨道。
      */
-    override suspend fun resetRemoteTrack(track: RealtimeVideoTrack?) = withContext(NonCancellable + renderDispatcher) {
-        /**
-         * 在渲染线程执行释放，避免与界面绑定操作互相等待。
-         */
+    override suspend fun resetRemoteTrack(
+        track: RealtimeVideoTrack?
+    ) = withContext(NonCancellable + renderDispatcher) {
+        // 在渲染线程执行释放，避免与界面绑定操作互相等待。
         operationLock.withLock {
             track?.let(VideoRenderRegistry::unregister)
             track?.let(TrajectoryRegistry::unregister)
@@ -213,7 +246,10 @@ internal class RenderController(
      * @param view 需要绑定或解除绑定的显示视图。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    private fun attachRemoteVideo(view: XmaxVideoView, contentMode: VideoContentMode): Unit = operationLock.withLock {
+    private fun attachRemoteVideo(
+        view: XmaxVideoView,
+        contentMode: VideoContentMode
+    ): Unit = operationLock.withLock {
         remoteView = WeakReference(view)
         remoteContentMode = contentMode
         view.invalidateVideoPresentation()
@@ -227,7 +263,9 @@ internal class RenderController(
      *
      * @param view 需要绑定或解除绑定的显示视图。
      */
-    private fun detachRemoteVideo(view: XmaxVideoView): Unit = operationLock.withLock {
+    private fun detachRemoteVideo(
+        view: XmaxVideoView
+    ): Unit = operationLock.withLock {
         if (remoteView?.get() !== view) return
         view.invalidateVideoPresentation()
         remoteView = null
@@ -241,7 +279,11 @@ internal class RenderController(
      * @param width 画面宽度，单位为像素。
      * @param height 画面高度，单位为像素。
      */
-    private fun handleRemoteVideoFrame(current: RemoteGeneration, width: Int, height: Int): Unit = operationLock.withLock {
+    private fun handleRemoteVideoFrame(
+        current: RemoteGeneration,
+        width: Int,
+        height: Int
+    ): Unit = operationLock.withLock {
         if (generation !== current || current.ready.isCompleted || width <= 0 || height <= 0) return
         try {
             updateDisplayedFormat(width, height)
@@ -251,9 +293,7 @@ internal class RenderController(
             current.isReady = true
             current.ready.complete(Unit)
         } catch (error: Throwable) {
-            /**
-             * 通过生成启动调用返回原生渲染配置错误，并按连接故障清理资源。
-             */
+            // 通过生成启动调用返回原生渲染配置错误，并按连接故障清理资源。
             current.ready.completeExceptionally(error)
         }
         Unit
@@ -265,10 +305,11 @@ internal class RenderController(
      * @param current 当前有效的远端生成显示状态。
      * @param view 需要绑定或解除绑定的显示视图。
      */
-    private fun bindRemoteView(current: RemoteGeneration, view: XmaxVideoView) {
-        /**
-         * 同一轨道启动新任务时重新绑定显示资源，并重新等待该任务的首帧。
-         */
+    private fun bindRemoteView(
+        current: RemoteGeneration,
+        view: XmaxVideoView
+    ) {
+        // 同一轨道启动新任务时重新绑定显示资源，并重新等待该任务的首帧。
         view.prepareRtcVideoRendering()
         rtcManager.bindRemoteVideo(current.stream, view.rtcRenderView, remoteContentMode)
     }
@@ -279,7 +320,10 @@ internal class RenderController(
      * @param width 画面宽度，单位为像素。
      * @param height 画面高度，单位为像素。
      */
-    private fun updateDisplayedFormat(width: Int, height: Int) {
+    private fun updateDisplayedFormat(
+        width: Int,
+        height: Int
+    ) {
         if (width <= 0 || height <= 0) return
         val track = remoteTrack ?: return
         val previous = track.videoFormat ?: return
@@ -291,23 +335,32 @@ internal class RenderController(
 
     /**
      * 保存当前远端生成的首帧等待状态和视图绑定。
-     *
-     * @param stream 由房间和用户标识确定的远端媒体流。
      */
-    private class RemoteGeneration(val stream: RemoteStream) {
+    private class RemoteGeneration(
+        /**
+         * 由房间和用户标识确定的远端媒体流。
+         */
+        val stream: RemoteStream
+    ) {
+
         /**
          * 当前结果流的首帧等待与就绪状态。
          */
         val ready = CompletableDeferred<Unit>()
+
+        /**
+         * 当前生成画面是否已就绪。
+         */
         var isReady = false
     }
 
     /**
-     * 提供 RenderController 使用的构造入口、共享配置或常量。
+     * 生成结果首帧显示的等待限制。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 等待生成画面就绪的超时时长，单位为毫秒。
          */
         const val REMOTE_FRAME_READY_TIMEOUT_MILLIS = 10_000L
     }

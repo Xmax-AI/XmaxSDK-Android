@@ -1,10 +1,9 @@
 //
 //  ImageSourceControlling.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -21,6 +20,7 @@ import android.net.Uri
  * 定义本地图片持续输出视频帧的能力。
  */
 internal interface ImageSourceControlling {
+
     /**
      * 解码图片并准备保持原始比例的图片输入规格和视频帧。
      *

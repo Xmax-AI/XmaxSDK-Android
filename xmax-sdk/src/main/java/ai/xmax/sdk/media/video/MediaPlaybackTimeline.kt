@@ -1,10 +1,9 @@
 //
 //  MediaPlaybackTimeline.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -25,11 +24,20 @@ internal class MediaPlaybackTimeline(
     mediaDurationUs: Long,
     nowNanoseconds: Long = SystemClock.elapsedRealtimeNanos(),
 ) {
+
     /**
      * 单轮媒体的采样数量、持续时间及播放起点。
      */
     val cycleSampleCount: Int
+
+    /**
+     * 一次循环播放的时长，单位为纳秒。
+     */
     val cycleDurationNanoseconds: Long
+
+    /**
+     * 播放时间线的单调时钟起点，单位为纳秒。
+     */
     private val anchorNanoseconds: Long
 
     init {
@@ -56,7 +64,10 @@ internal class MediaPlaybackTimeline(
      * @param mediaOffsetUs 本轮媒体内的时间偏移，单位为微秒。
      * @return 对应帧应提交时的单调时钟纳秒数。
      */
-    fun target(loopIndex: Int, mediaOffsetUs: Long): Long =
+    fun target(
+        loopIndex: Int,
+        mediaOffsetUs: Long
+    ): Long =
         anchorNanoseconds + cycleDurationNanoseconds * loopIndex +
             mediaOffsetUs.coerceAtLeast(0L) * NANOSECONDS_PER_MICROSECOND
 
@@ -67,21 +78,37 @@ internal class MediaPlaybackTimeline(
      * @param sampleOffset 音频包在媒体时间线中的起始采样位置。
      * @return 对应帧应提交时的单调时钟纳秒数。
      */
-    fun target(loopIndex: Int, sampleOffset: Int): Long = target(
+    fun target(
+        loopIndex: Int,
+        sampleOffset: Int
+    ): Long = target(
         loopIndex,
         sampleOffset.toLong() * MICROSECONDS_PER_SECOND / AudioFrame.sampleRate,
     )
 
     /**
-     * 提供 MediaPlaybackTimeline 使用的构造入口、共享配置或常量。
+     * 循环播放的起始缓冲与时间单位换算常量。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 播放起点预留的缓冲时长，单位为纳秒。
          */
         const val START_DELAY_NANOSECONDS = 100_000_000L
+
+        /**
+         * 微秒换算为纳秒的倍率。
+         */
         const val NANOSECONDS_PER_MICROSECOND = 1_000L
+
+        /**
+         * 秒换算为纳秒的倍率。
+         */
         const val NANOSECONDS_PER_SECOND = 1_000_000_000L
+
+        /**
+         * 秒换算为微秒的倍率。
+         */
         const val MICROSECONDS_PER_SECOND = 1_000_000L
     }
 }

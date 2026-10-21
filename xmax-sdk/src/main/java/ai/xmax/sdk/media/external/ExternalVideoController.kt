@@ -1,10 +1,9 @@
 //
 //  ExternalVideoController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -22,22 +21,39 @@ import kotlinx.coroutines.withContext
 
 /**
  * 绑定外部供帧，不接管采集器或播放器；沿用 SDK 的轨道所有权、模型规格和媒体错误清理。
- *
- * @param rtc 提供 RTC 操作的管理器。
- * @param mediaService 解析媒体尺寸及模型输入规则的服务。
- * @param requestingFrames 查询当前生成是否需要外部输入帧的函数。
- * @param videoListener 接收本地视频帧的回调。
- * @param audioListener 接收本地音频帧的回调。
- * @param errorListener 接收媒体错误的回调。
  */
 internal class ExternalVideoController(
+    /**
+     * 提供 RTC 操作的管理器。
+     */
     private val rtc: RtcManaging,
+
+    /**
+     * 解析媒体尺寸及模型输入规则的服务。
+     */
     private val mediaService: MediaServicing,
+
+    /**
+     * 查询当前生成是否需要外部输入帧的函数。
+     */
     private val requestingFrames: () -> Boolean,
+
+    /**
+     * 接收本地视频帧的回调。
+     */
     private val videoListener: (VideoFrame) -> Unit,
+
+    /**
+     * 接收本地音频帧的回调。
+     */
     private val audioListener: (AudioFrame) -> Unit,
+
+    /**
+     * 接收媒体错误的回调。
+     */
     private val errorListener: (XmaxError) -> Unit,
 ) {
+
     /**
      * 外部输入状态的并发保护。
      */
@@ -47,9 +63,21 @@ internal class ExternalVideoController(
      * 当前外部源、帧接收器和媒体轨道。
      */
     private var source: RealtimeExternalVideoSource? = null
+
+    /**
+     * 接收当前外部源音视频帧的入口。
+     */
     private var sink: Sink? = null
+
+    /**
+     * 当前外部源对应的本地视频轨道。
+     */
     @Volatile var currentTrack: RealtimeVideoTrack? = null
         private set
+
+    /**
+     * 当前外部源是否提供音频帧。
+     */
     @Volatile var hasAudio = false
         private set
 
@@ -57,6 +85,10 @@ internal class ExternalVideoController(
      * 外部源的本地音频预览配置。
      */
     private var volume = 0.45f
+
+    /**
+     * 外部源的本地音频预览是否静音。
+     */
     private var muted = false
 
     /**
@@ -105,7 +137,10 @@ internal class ExternalVideoController(
      * @param volume 播放音量，范围为 0 到 1。
      * @param muted 是否静音。
      */
-    suspend fun setAudio(volume: Float? = null, muted: Boolean? = null): Unit = withContext(Dispatchers.Main.immediate) {
+    suspend fun setAudio(
+        volume: Float? = null,
+        muted: Boolean? = null
+    ): Unit = withContext(Dispatchers.Main.immediate) {
         volume?.let { this@ExternalVideoController.volume = it }
         muted?.let { this@ExternalVideoController.muted = it }
         source?.setPreviewAudio(this@ExternalVideoController.volume, this@ExternalVideoController.muted)
@@ -134,19 +169,32 @@ internal class ExternalVideoController(
 
     /**
      * 向当前外部媒体输入提交音视频帧和错误的接收器。
-     *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param audioEnabled 是否向 RTC 提供外部音频。
      */
     private inner class Sink(
+        /**
+         * 视频尺寸、帧率及上行编码参数。
+         */
         override val videoFormat: RealtimeVideoFormat,
+
+        /**
+         * 是否向 RTC 提供外部音频。
+         */
         private val audioEnabled: Boolean,
     ) : RealtimeExternalFrameSink {
+
         /**
          * 音视频提交时间及当前供帧需求。
          */
         private var lastVideoUs = -1L
+
+        /**
+         * 最后接收的音频帧时间戳，单位为微秒。
+         */
         private var lastAudioUs = -1L
+
+        /**
+         * 当前生成任务是否需要该外部源供帧。
+         */
         override val isRequestingFrames: Boolean
             get() = synchronized(lock) { sink === this && requestingFrames() }
 
@@ -156,7 +204,10 @@ internal class ExternalVideoController(
          * @param rgba 按当前输入尺寸排列的紧密 RGBA 像素数据。
          * @param timestampUs 帧的单调时间戳，单位为微秒。
          */
-        override fun pushVideo(rgba: ByteArray, timestampUs: Long) = submit {
+        override fun pushVideo(
+            rgba: ByteArray,
+            timestampUs: Long
+        ) = submit {
             if (timestampUs <= lastVideoUs) return@submit
             require(rgba.size.toLong() == videoFormat.width.toLong() * videoFormat.height * 4)
             lastVideoUs = timestampUs
@@ -173,7 +224,10 @@ internal class ExternalVideoController(
          * @param pcm 48 kHz、单声道、PCM16 小端音频字节。
          * @param timestampUs 帧的单调时间戳，单位为微秒。
          */
-        override fun pushAudio(pcm: ByteArray, timestampUs: Long) = submit {
+        override fun pushAudio(
+            pcm: ByteArray,
+            timestampUs: Long
+        ) = submit {
             if (!audioEnabled || timestampUs <= lastAudioUs) return@submit
             require(pcm.size == 960)
             lastAudioUs = timestampUs
@@ -185,7 +239,9 @@ internal class ExternalVideoController(
          *
          * @param error 本次操作失败的异常或 SDK 错误。
          */
-        override fun reportError(error: Throwable) {
+        override fun reportError(
+            error: Throwable
+        ) {
             if (synchronized(lock) { sink === this }) {
                 errorListener(XmaxError(XmaxErrorCode.MEDIA_ERROR, "External media source failed", cause = error))
             }
@@ -196,7 +252,9 @@ internal class ExternalVideoController(
          *
          * @param action 需要执行的操作。
          */
-        private fun submit(action: () -> Unit) {
+        private fun submit(
+            action: () -> Unit
+        ) {
             try {
                 synchronized(lock) {
                     if (sink !== this || !requestingFrames()) return

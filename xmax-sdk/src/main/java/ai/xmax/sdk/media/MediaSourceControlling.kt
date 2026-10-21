@@ -1,10 +1,9 @@
 //
 //  MediaSourceControlling.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -19,6 +18,7 @@ import android.net.Uri
  * 定义本地视频文件准备、循环播放和预览能力。
  */
 internal interface MediaSourceControlling {
+
     /**
      * 当前输入媒体的音轨能力。
      */
@@ -44,14 +44,18 @@ internal interface MediaSourceControlling {
      *
      * @param muted 是否静音。
      */
-    suspend fun setLocalAudioPreviewMuted(muted: Boolean)
+    suspend fun setLocalAudioPreviewMuted(
+        muted: Boolean
+    )
 
     /**
      * 设置当前本地媒体的预览音量，范围为 0 到 1，不影响提交给 RTC 的音频数据。
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    suspend fun setLocalAudioVolume(volume: Float)
+    suspend fun setLocalAudioVolume(
+        volume: Float
+    )
 
     /**
      * 将本地媒体预览绑定到指定视图并应用显示模式。
@@ -59,14 +63,19 @@ internal interface MediaSourceControlling {
      * @param view 需要绑定或解除绑定的显示视图。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    fun attachPreview(view: XmaxVideoView, contentMode: VideoContentMode)
+    fun attachPreview(
+        view: XmaxVideoView,
+        contentMode: VideoContentMode
+    )
 
     /**
      * 解除指定视图的本地媒体预览绑定。
      *
      * @param view 需要绑定或解除绑定的显示视图。
      */
-    fun detachPreview(view: XmaxVideoView)
+    fun detachPreview(
+        view: XmaxVideoView
+    )
 
     /**
      * 停止本地视频输出并释放媒体资源。

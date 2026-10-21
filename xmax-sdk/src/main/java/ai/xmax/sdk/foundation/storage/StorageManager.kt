@@ -1,10 +1,9 @@
 //
 //  StorageManager.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -50,7 +49,10 @@ import kotlin.coroutines.resumeWithException
  *
  * @param context 访问 Android 系统服务或媒体资源所需的上下文。
  */
-internal class StorageManager(context: Context) : StorageManaging {
+internal class StorageManager(
+    context: Context
+) : StorageManaging {
+
     /**
      * Android 媒体或文件访问环境。
      */
@@ -78,9 +80,7 @@ internal class StorageManager(context: Context) : StorageManaging {
         try {
             val serviceConfig = makeServiceConfiguration(configuration)
             val service = CosXmlSimpleService(applicationContext, serviceConfig)
-            /**
-             * 使用临时凭据允许的 PutObject 上传方式，不要求额外的分片上传权限。
-             */
+            // 使用临时凭据允许的 PutObject 上传方式，不要求额外的分片上传权限。
             val transferConfig = TransferConfig.Builder()
                 .setForceSimpleUpload(source is StorageSource.LocalFile)
                 .build()
@@ -110,13 +110,17 @@ internal class StorageManager(context: Context) : StorageManaging {
             }
             task.setCosXmlResultListener(
                 object : CosXmlResultListener {
+
                     /**
                      * 完成存储传输的成功结果回调。
                      *
                      * @param request 本次对象存储请求。
                      * @param result 存储服务返回的传输结果。
                      */
-                    override fun onSuccess(request: CosXmlRequest, result: CosXmlResult) {
+                    override fun onSuccess(
+                        request: CosXmlRequest,
+                        result: CosXmlResult
+                    ) {
                         if (!continuation.isActive || !completed.compareAndSet(false, true)) return
                         try {
                             val uploadResult = result as? COSXMLUploadTask.COSXMLUploadTaskResult
@@ -192,7 +196,9 @@ internal class StorageManager(context: Context) : StorageManaging {
      * @param configuration 对象存储端点、地域、存储桶及临时凭据。
      * @return 用于创建 COS 客户端的地域和端点配置。
      */
-    private fun makeServiceConfiguration(configuration: StorageConfiguration): CosXmlServiceConfig {
+    private fun makeServiceConfiguration(
+        configuration: StorageConfiguration
+    ): CosXmlServiceConfig {
         val builder = CosXmlServiceConfig.Builder()
             .setRegion(configuration.region)
             .setVerifySSLEnable(true)
@@ -222,7 +228,11 @@ internal class StorageManager(context: Context) : StorageManaging {
      * @param objectKey 对象在存储桶内的完整键名。
      * @return 解析后的资源或请求地址。
      */
-    private fun resolveUrl(candidate: String?, configuration: StorageConfiguration, objectKey: String): String {
+    private fun resolveUrl(
+        candidate: String?,
+        configuration: StorageConfiguration,
+        objectKey: String
+    ): String {
         val value = candidate?.trim().orEmpty()
         if (value.startsWith("//")) return "https:$value"
         if (value.startsWith("https://") || value.startsWith("http://")) return value
@@ -346,6 +356,9 @@ internal suspend fun downloadFile(
     } finally { activeDownloads.remove(destinationKey) }
 }
 
+/**
+ * 正在写入的下载目标，防止并发下载覆盖同一文件。
+ */
 private val activeDownloads = ConcurrentHashMap<String, Unit>()
 
 /**
@@ -354,7 +367,10 @@ private val activeDownloads = ConcurrentHashMap<String, Unit>()
  * @param source 准备替换目标文件的完整下载文件。
  * @param destination 下载成功后保存内容的目标文件。
  */
-private fun replaceAtomically(source: File, destination: File) {
+private fun replaceAtomically(
+    source: File,
+    destination: File
+) {
     try {
         Files.move(
             source.toPath(),

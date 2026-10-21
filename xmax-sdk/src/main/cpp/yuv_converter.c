@@ -1,10 +1,9 @@
 //
 //  yuv_converter.c
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -17,17 +16,30 @@
  * 描述可安全访问的像素平面及其内存布局。
  */
 typedef struct {
+
     /**
-     * 像素数据的地址、可访问容量及有效起点。
+     * 像素平面的起始内存地址。
      */
     const uint8_t *data;
+
+    /**
+     * 缓冲区可访问的字节容量。
+     */
     jlong capacity;
+
+    /**
+     * 有效像素数据的起始字节偏移。
+     */
     jint offset;
 
     /**
-     * 相邻行与相邻像素之间的字节距离。
+     * 相邻像素行起点之间的字节距离。
      */
     jint row_stride;
+
+    /**
+     * 相邻像素之间的字节距离。
+     */
     jint pixel_stride;
 } Plane;
 
@@ -37,7 +49,9 @@ typedef struct {
  * @param value 待限制的颜色通道值。
  * @return 位于 0 到 255 范围内的通道值。
  */
-static jint clamp_color(jint value) {
+static jint clamp_color(
+    jint value
+) {
     if (value < 0) return 0;
     if (value > 255) return 255;
     return value;

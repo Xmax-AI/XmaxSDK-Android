@@ -1,7 +1,7 @@
 //
 //  RealtimeModelStore.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -27,7 +27,7 @@ internal class RealtimeModelStore(context: Context) {
     fun load(): RealtimeModel {
         val storedModelId = preferences.getString(MODEL_KEY, null)
         return RealtimeModel.entries.firstOrNull { it.id == storedModelId }
-            ?: RealtimeModel.X2_1_1_PREVIEW_CN
+            ?: RealtimeModel.X2_1
     }
 
     fun save(model: RealtimeModel) {

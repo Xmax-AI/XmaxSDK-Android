@@ -1,10 +1,9 @@
 //
 //  StorageManaging.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -17,6 +16,7 @@ import java.io.File
  * 定义基础文件上传和下载能力。
  */
 internal interface StorageManaging {
+
     /**
      * 上传文件或字节至指定存储对象，并返回可访问的对象信息。
      *

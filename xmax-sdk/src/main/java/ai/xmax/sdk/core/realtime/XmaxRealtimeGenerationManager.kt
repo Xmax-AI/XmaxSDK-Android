@@ -1,10 +1,9 @@
 //
 //  XmaxRealtimeGenerationManager.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -21,20 +20,24 @@ import java.util.UUID
  * 协调单次生成的业务标识、条件缓存和交互绑定；操作互斥由上层 RealtimeCoordinator 保证。
  * Core 创建 taskId，并将同一个标识交给 Stream 和 Interaction，以关联信令、帧和轨迹。
  * 此处只等待 Stream 的远端确认，远端视频帧就绪条件由 XmaxRealtimeManager 继续等待。
- *
- * @param interactionController 提交触控轨迹的控制器。
- * @param streamController 控制 RTC 发布、订阅及生成信令的组件。
- * @param taskIdGenerator 生成唯一任务标识的函数。
  */
 internal class XmaxRealtimeGenerationManager(
+    /**
+     * 提交触控轨迹的控制器。
+     */
     private val interactionController: InteractionControlling,
+
+    /**
+     * 控制 RTC 发布、订阅及生成信令的组件。
+     */
     private val streamController: StreamControlling,
 
     /**
-     * 可注入固定标识以测试生命周期；生产环境每次 start 分配一个新任务标识。
+     * 为每次新生成请求分配任务标识。
      */
     private val taskIdGenerator: () -> String = ::createTaskId,
 ) {
+
     /**
      * 生成条件缓存的并发保护。
      */
@@ -44,6 +47,10 @@ internal class XmaxRealtimeGenerationManager(
      * 最近一次有效的生成条件及只读快照。
      */
     private var currentContext: RealtimeContext? = null
+
+    /**
+     * 当前生成是否启用人脸修复。
+     */
     private var currentFaceRestoration = false
 
     /**
@@ -61,7 +68,9 @@ internal class XmaxRealtimeGenerationManager(
      *
      * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
      */
-    fun validateContext(context: RealtimeContext?) {
+    fun validateContext(
+        context: RealtimeContext?
+    ) {
         if (context == null && synchronized(stateLock) { currentContext } == null) {
             throw XmaxError(
                 XmaxErrorCode.INVALID_CONFIGURATION,
@@ -161,7 +170,9 @@ internal class XmaxRealtimeGenerationManager(
      *
      * @param taskId 用于关联本次生成请求和结果流的任务标识。
      */
-    suspend fun stop(taskId: String) {
+    suspend fun stop(
+        taskId: String
+    ) {
         cleanupResources(
             { interactionController.stopInteraction() },
             { streamController.stopGeneration(taskId) },
@@ -173,7 +184,9 @@ internal class XmaxRealtimeGenerationManager(
      *
      * @param taskId 用于关联本次生成请求和结果流的任务标识。
      */
-    suspend fun reset(taskId: String = "") {
+    suspend fun reset(
+        taskId: String = ""
+    ) {
         synchronized(stateLock) {
             currentContext = null
             currentFaceRestoration = false
@@ -182,9 +195,10 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * 提供 XmaxRealtimeGenerationManager 使用的构造入口、共享配置或常量。
+     * 生成任务标识的编码规则。
      */
     internal companion object {
+
         /**
          * UUID 原始 16 字节使用无填充的 Base64URL 编码，并通过查询参数标记平台。
          *

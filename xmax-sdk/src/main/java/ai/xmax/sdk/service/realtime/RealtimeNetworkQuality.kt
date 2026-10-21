@@ -1,10 +1,9 @@
 //
 //  RealtimeNetworkQuality.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -13,10 +12,14 @@ package ai.xmax.sdk
 
 /**
  * RTC 网络质量等级。
- *
- * @param value 需要规范化、校验或显示的文本。
  */
-public enum class RealtimeNetworkQualityLevel(public val value: String) {
+public enum class RealtimeNetworkQualityLevel(
+    /**
+     * 需要规范化、校验或显示的文本。
+     */
+    public val value: String
+) {
+
     /**
      * 尚无可用网络质量样本。
      */
@@ -55,12 +58,16 @@ public enum class RealtimeNetworkQualityLevel(public val value: String) {
 
 /**
  * 实时会话的上下行网络质量。
- *
- * @param uplink 上行网络质量等级。
- * @param downlink 下行网络质量等级。
  */
 public data class RealtimeNetworkQuality(
+    /**
+     * 上行网络质量等级。
+     */
     public val uplink: RealtimeNetworkQualityLevel,
+
+    /**
+     * 下行网络质量等级。
+     */
     public val downlink: RealtimeNetworkQualityLevel,
 )
 
@@ -68,10 +75,13 @@ public data class RealtimeNetworkQuality(
  * 实时网络质量监听器。
  */
 public fun interface RealtimeNetworkQualityListener {
+
     /**
      * 通知当前上下行网络质量变化。
      *
      * @param quality 当前网络质量样本。
      */
-    public fun onNetworkQualityChanged(quality: RealtimeNetworkQuality)
+    public fun onNetworkQualityChanged(
+        quality: RealtimeNetworkQuality
+    )
 }

@@ -1,10 +1,9 @@
 //
 //  RealtimeVideoFrameDispatcher.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -29,6 +28,7 @@ import kotlinx.coroutines.launch
 internal class RealtimeVideoFrameDispatcher(
     dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
 ) {
+
     /**
      * 远端视频帧的后台派发作用域。
      */
@@ -43,9 +43,25 @@ internal class RealtimeVideoFrameDispatcher(
      * 当前监听器、生成归属及最新待派发帧。
      */
     private var listener: RealtimeVideoFrameListener? = null
+
+    /**
+     * 当前远端生成结果的标识。
+     */
     private var generation: Any? = null
+
+    /**
+     * 帧分发版本，用于丢弃过期的投递任务。
+     */
     private var version = 0L
+
+    /**
+     * 等待投递的最新远端视频帧。
+     */
     private var pending: Pending? = null
+
+    /**
+     * 是否正在向监听器投递视频帧。
+     */
     private var draining = false
 
     /**
@@ -53,7 +69,9 @@ internal class RealtimeVideoFrameDispatcher(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setListener(listener: RealtimeVideoFrameListener?) = synchronized(lock) {
+    fun setListener(
+        listener: RealtimeVideoFrameListener?
+    ) = synchronized(lock) {
         this.listener = listener
         version++
         pending = null
@@ -64,7 +82,9 @@ internal class RealtimeVideoFrameDispatcher(
      *
      * @param generation 用于识别当前生成请求或事件归属的标识。
      */
-    fun setGeneration(generation: Any?) = synchronized(lock) {
+    fun setGeneration(
+        generation: Any?
+    ) = synchronized(lock) {
         this.generation = generation
         version++
         pending = null
@@ -76,14 +96,15 @@ internal class RealtimeVideoFrameDispatcher(
      * @param generation 用于识别当前生成请求或事件归属的标识。
      * @param frame 待处理、显示或提交的视频帧。
      */
-    fun dispatch(generation: Any, frame: RtcRemoteVideoFrame) {
+    fun dispatch(
+        generation: Any,
+        frame: RtcRemoteVideoFrame
+    ) {
         val version = synchronized(lock) {
             if (this.generation !== generation || listener == null) return
             version
         }
-        /**
-         * 无监听器时不复制；借用的原生像素只在当前 RTC 回调内访问。
-         */
+        // 无监听器时不复制；借用的原生像素只在当前 RTC 回调内访问。
         val copy = frame.copy()
         val launch = synchronized(lock) {
             if (this.version != version || this.generation !== generation || listener == null) return
@@ -108,9 +129,7 @@ internal class RealtimeVideoFrameDispatcher(
             try {
                 delivery.second?.onFrame(delivery.first)
             } catch (error: Throwable) {
-                /**
-                 * 接入方回调异常仅记录诊断，不能中断渲染或触发 SDK 致命错误通知。
-                 */
+                // 接入方回调异常仅记录诊断，不能中断渲染或触发 SDK 致命错误通知。
                 XmaxLogger.render.warn(
                     message = { "Remote video frame listener failed: ${error.message}" },
                 )
@@ -120,9 +139,16 @@ internal class RealtimeVideoFrameDispatcher(
 
     /**
      * 保存待派发视频帧及其所属生成代次。
-     *
-     * @param version 用于识别当前任务或回调归属的版本号。
-     * @param frame 待处理、显示或提交的视频帧。
      */
-    private data class Pending(val version: Long, val frame: RealtimeVideoFrame)
+    private data class Pending(
+        /**
+         * 用于识别当前任务或回调归属的版本号。
+         */
+        val version: Long,
+
+        /**
+         * 待处理、显示或提交的视频帧。
+         */
+        val frame: RealtimeVideoFrame
+    )
 }

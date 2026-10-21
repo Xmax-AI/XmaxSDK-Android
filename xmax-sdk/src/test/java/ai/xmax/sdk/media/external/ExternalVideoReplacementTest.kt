@@ -1,7 +1,7 @@
 //
 //  ExternalVideoReplacementTest.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -56,7 +56,7 @@ class ExternalVideoReplacementTest {
                 next
             }
             assertTrue(controller.owns(stream))
-            oldSink.pushVideo(ByteArray(1024 * 1920 * 4), 1)
+            oldSink.pushVideo(ByteArray(1080 * 1920 * 4), 1)
             oldSink.reportError(IllegalStateException("late"))
             assertTrue(frames.isEmpty())
             assertTrue(errors.isEmpty())
@@ -77,7 +77,7 @@ class ExternalVideoReplacementTest {
     }
 
     private class Source : RealtimeExternalVideoSource {
-        override val videoFormat = RealtimeVideoFormat(1024, 1920, 30)
+        override val videoFormat = RealtimeVideoFormat(1080, 1920, 30)
         override val hasAudio = true
         var sink: RealtimeExternalFrameSink? = null
         var stops = 0

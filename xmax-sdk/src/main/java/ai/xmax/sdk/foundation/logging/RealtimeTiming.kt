@@ -1,10 +1,9 @@
 //
 //  RealtimeTiming.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -19,12 +18,16 @@ import kotlinx.coroutines.withContext
 
 /**
  * 记录生成启动的总耗时、连接阶段和首帧等待时间，并按性能日志配置输出。
- *
- * @param clockNanos 返回单调时钟纳秒数的函数。
- * @param log 接收完整日志文本的输出函数。
  */
 internal class RealtimeTiming(
+    /**
+     * 返回单调时钟纳秒数的函数。
+     */
     private val clockNanos: () -> Long = System::nanoTime,
+
+    /**
+     * 接收完整日志文本的输出函数。
+     */
     private val log: (String) -> Unit = {
         XmaxLogger.timing.info(
             message = { it },
@@ -32,13 +35,16 @@ internal class RealtimeTiming(
         )
     },
 ) {
+
     /**
      * 统计生成启动的阶段耗时，并在成功或非取消失败时输出结果。
      *
      * @param action 需要执行的操作。
      * @return 传入操作成功执行后的结果。
      */
-    suspend fun <T> measure(action: suspend () -> T): T {
+    suspend fun <T> measure(
+        action: suspend () -> T
+    ): T {
         val attempt = Attempt(clockNanos, log)
         return try {
             withContext(attempt) { action() }
@@ -52,14 +58,19 @@ internal class RealtimeTiming(
 
     /**
      * 记录单次生成任务的启动阶段及最终结果，忽略其他任务的事件。
-     *
-     * @param clock 返回单调时钟纳秒数的函数。
-     * @param log 接收完整日志文本的输出函数。
      */
     internal class Attempt(
+        /**
+         * 返回单调时钟纳秒数的函数。
+         */
         private val clock: () -> Long,
+
+        /**
+         * 接收完整日志文本的输出函数。
+         */
         private val log: (String) -> Unit,
     ) : AbstractCoroutineContextElement(Key) {
+
         /**
          * 启动统计的并发保护。
          */
@@ -69,12 +80,20 @@ internal class RealtimeTiming(
          * 本次启动的起点及已记录阶段。
          */
         private val startedAt = clock()
+
+        /**
+         * 各启动阶段的单调时钟时间戳，单位为纳秒。
+         */
         private val times = mutableMapOf<Stage, Long>()
 
         /**
          * 统计归属的生成任务及完成标记。
          */
         private var taskId: String? = null
+
+        /**
+         * 本次启动耗时是否已结算。
+         */
         private var completed = false
 
         /**
@@ -82,7 +101,9 @@ internal class RealtimeTiming(
          *
          * @param stage 需要记录的启动阶段。
          */
-        fun mark(stage: Stage) = synchronized(lock) {
+        fun mark(
+            stage: Stage
+        ) = synchronized(lock) {
             if (!completed) times.putIfAbsent(stage, clock())
             Unit
         }
@@ -92,7 +113,9 @@ internal class RealtimeTiming(
          *
          * @param taskId 用于关联本次生成请求和结果流的任务标识。
          */
-        fun beginSignal(taskId: String) = synchronized(lock) {
+        fun beginSignal(
+            taskId: String
+        ) = synchronized(lock) {
             if (!completed && this.taskId == null) {
                 this.taskId = taskId
                 times[Stage.SIGNAL_START] = clock()
@@ -104,7 +127,9 @@ internal class RealtimeTiming(
          *
          * @param taskId 用于关联本次生成请求和结果流的任务标识。
          */
-        fun confirmRemoteStream(taskId: String) = markTask(taskId, Stage.STREAM_CONFIRMED)
+        fun confirmRemoteStream(
+            taskId: String
+        ) = markTask(taskId, Stage.STREAM_CONFIRMED)
 
         /**
          * 记录指定任务的阶段时间，忽略非当前任务及重复事件。
@@ -112,7 +137,10 @@ internal class RealtimeTiming(
          * @param taskId 用于关联本次生成请求和结果流的任务标识。
          * @param stage 需要记录的启动阶段。
          */
-        private fun markTask(taskId: String, stage: Stage) = synchronized(lock) {
+        private fun markTask(
+            taskId: String,
+            stage: Stage
+        ) = synchronized(lock) {
             if (!completed && this.taskId == taskId) times.putIfAbsent(stage, clock())
             Unit
         }
@@ -122,7 +150,9 @@ internal class RealtimeTiming(
          *
          * @param taskId 用于关联本次生成请求和结果流的任务标识。
          */
-        fun finish(taskId: String) {
+        fun finish(
+            taskId: String
+        ) {
             val message = synchronized(lock) {
                 if (completed || this.taskId != taskId) return
                 completed = true
@@ -136,7 +166,9 @@ internal class RealtimeTiming(
          *
          * @param error 本次操作失败的异常或 SDK 错误。
          */
-        fun fail(error: Throwable) {
+        fun fail(
+            error: Throwable
+        ) {
             val message = synchronized(lock) {
                 if (completed) return
                 completed = true
@@ -160,7 +192,10 @@ internal class RealtimeTiming(
          * @param end 阶段终点的单调时钟纳秒数；null 表示尚未记录。
          * @return 非负毫秒差；任一时间点缺失时为 null。
          */
-        private fun elapsed(start: Long?, end: Long?): Double? =
+        private fun elapsed(
+            start: Long?,
+            end: Long?
+        ): Double? =
             if (start == null || end == null) null else (end - start).coerceAtLeast(0L) / 1_000_000.0
 
         /**
@@ -169,7 +204,9 @@ internal class RealtimeTiming(
          * @param value 需要格式化的毫秒耗时。
          * @return 保留一位小数并附带 ms 单位的文本。
          */
-        private fun ms(value: Double): String = String.format(Locale.ROOT, "%.1f ms", value)
+        private fun ms(
+            value: Double
+        ): String = String.format(Locale.ROOT, "%.1f ms", value)
 
         /**
          * 根据日志环境选择中文或英文文本。
@@ -178,7 +215,10 @@ internal class RealtimeTiming(
          * @param english 海外环境使用的英文文本。
          * @return 符合当前日志语言配置的文本。
          */
-        private fun label(chinese: String, english: String): String = XmaxLogger.localized(chinese, english)
+        private fun label(
+            chinese: String,
+            english: String
+        ): String = XmaxLogger.localized(chinese, english)
 
         /**
          * 在时间点完整且达到阈值时，将阶段耗时追加到日志行列表。
@@ -188,7 +228,12 @@ internal class RealtimeTiming(
          * @param end 阶段终点的单调时钟纳秒数；null 表示尚未记录。
          * @param minimum 需要输出的最小阶段耗时，单位为毫秒。
          */
-        private fun MutableList<String>.addDuration(title: String, start: Long?, end: Long?, minimum: Double = 0.0) {
+        private fun MutableList<String>.addDuration(
+            title: String,
+            start: Long?,
+            end: Long?,
+            minimum: Double = 0.0
+        ) {
             elapsed(start, end)?.takeIf { it >= minimum }?.let {
                 add("$title${label("：", ": ")}${ms(it)}")
             }
@@ -200,7 +245,9 @@ internal class RealtimeTiming(
          * @param readyAt 首帧就绪时的单调时钟纳秒数。
          * @return 本次生成启动成功的分行耗时文本。
          */
-        private fun successMessage(readyAt: Long): String {
+        private fun successMessage(
+            readyAt: Long
+        ): String {
             val lines = mutableListOf(label("实时生成启动耗时", "Realtime Generation Startup Timing"))
             lines.addDuration("└─ ${label("总耗时", "Total")}", startedAt, readyAt)
             lines.addDuration(
@@ -233,7 +280,10 @@ internal class RealtimeTiming(
          * @param error 本次操作失败的异常或 SDK 错误。
          * @return 本次生成启动失败的分行诊断文本。
          */
-        private fun failureMessage(failedAt: Long, error: Throwable): String {
+        private fun failureMessage(
+            failedAt: Long,
+            error: Throwable
+        ): String {
             val lines = mutableListOf(
                 "实时生成启动未完成耗时 " +
                     "(Incomplete Realtime Generation Startup Timing)",
@@ -288,6 +338,7 @@ internal class RealtimeTiming(
      * 用于区分生成启动各时间节点的阶段标识。
      */
     enum class Stage {
+
         /**
          * 开始建立实时连接。
          */

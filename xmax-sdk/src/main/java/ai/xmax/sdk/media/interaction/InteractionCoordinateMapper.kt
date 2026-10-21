@@ -1,10 +1,9 @@
 //
 //  InteractionCoordinateMapper.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -23,6 +22,7 @@ import kotlin.math.min
  * 将渲染视口坐标映射到固定媒体基准的归一化坐标。
  */
 internal object InteractionCoordinateMapper {
+
     /**
      * 按处理后的媒体比例和显示模式计算视口中的媒体区域。
      *

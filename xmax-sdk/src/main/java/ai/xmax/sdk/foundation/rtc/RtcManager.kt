@@ -1,10 +1,9 @@
 //
 //  RtcManager.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -46,15 +45,22 @@ import kotlinx.coroutines.withTimeout
 /**
  * 提供基于声网引擎的 RTC 生命周期和房间连接能力。
  *
- * @param engineManager 负责进程级 RTC 引擎生命周期的管理器。
- * @param joinTimeoutMillis 等待 RTC 进房结果的最大时长，单位为毫秒；默认值为 `JOIN_TIMEOUT_MILLIS`。
  * @param callbackScope 派发异步回调的协程作用域。
  */
 internal class RtcManager(
+    /**
+     * 负责进程级 RTC 引擎生命周期的管理器。
+     */
     private val engineManager: RtcEngineManager,
+
+    /**
+     * 等待 RTC 进房结果的最大时长，单位为毫秒；默认值为 `JOIN_TIMEOUT_MILLIS`。
+     */
     private val joinTimeoutMillis: Long = JOIN_TIMEOUT_MILLIS,
+
     callbackScope: CoroutineScope? = null,
 ) : RtcManaging {
+
     /**
      * RTC 事件回调的派发作用域。
      */
@@ -66,39 +72,80 @@ internal class RtcManager(
      * 引擎、房间及原生调用的并发保护。
      */
     private val lifecycleMutex = Mutex()
+
     /**
      * 原生资源在读取期间保持有效，销毁前等待所有读取结束。
      */
     private val nativeGate = ReentrantReadWriteLock(true)
+
+    /**
+     * 保护房间、预览与回调注册状态的锁。
+     */
     private val stateLock = Any()
 
     /**
      * 当前引擎租约和活动或等待中的房间。
      */
     private var engineLease: RtcEngineLease? = null
+
+    /**
+     * 当前已连接的房间上下文。
+     */
     private var activeRoom: RoomContext? = null
+
+    /**
+     * 尚未完成的入房请求。
+     */
     private var pendingJoin: PendingJoin? = null
 
     /**
      * RTC 事件与质量监听器。
      */
     private var eventListener: WeakReference<RtcEventListener>? = null
+
+    /**
+     * RTC 网络质量与统计事件的监听器。
+     */
     private var qualityListener: WeakReference<RtcQualityListener>? = null
 
     /**
      * 预览通知版本及远端帧订阅。
      */
     private var cameraListenerVersion = 0L
+
+    /**
+     * 摄像头输入版本，用于隔离过期的预览回调。
+     */
     private var cameraSourceVersion = 0L
+
+    /**
+     * 当前摄像头预览就绪的监听器。
+     */
     private var cameraPreviewReadyListener: RealtimeCameraPreviewReadyListener? = null
+
+    /**
+     * 当前远端帧监听器的注册信息。
+     */
     private var remoteFrameRegistration: RemoteFrameRegistration? = null
 
     /**
      * 本地相机采集、画布绑定及首帧就绪条件。
      */
     private var isCameraVideoSourceActive = false
+
+    /**
+     * 当前摄像头是否已采集首帧。
+     */
     private var hasCapturedFirstLocalVideoFrame = false
+
+    /**
+     * 当前摄像头是否已绑定本地预览画布。
+     */
     private var hasBoundLocalVideoCanvas = false
+
+    /**
+     * 是否已通知当前摄像头预览就绪。
+     */
     private var hasReportedCameraPreviewReady = false
 
     /**
@@ -106,7 +153,9 @@ internal class RtcManager(
      *
      * @param context 访问 Android 系统服务或媒体资源所需的上下文。
      */
-    internal constructor(context: Context) : this(
+    internal constructor(
+        context: Context
+    ) : this(
         engineManager = RtcEngineManager.shared(context.applicationContext),
     )
 
@@ -128,13 +177,17 @@ internal class RtcManager(
                 nativeGate.write {
                     synchronized(stateLock) { engineLease = lease }
                     val bridge = object : RtcEventListener {
+
                         /**
                          * 处理指定房间内远端用户的视频发布状态变化，避免旧房间事件串入新连接。
                          *
                          * @param stream 由房间和用户标识确定的远端媒体流。
                          * @param published 远端视频是否处于发布状态。
                          */
-                        override fun onRemoteVideoPublished(stream: RemoteStream, published: Boolean) {
+                        override fun onRemoteVideoPublished(
+                            stream: RemoteStream,
+                            published: Boolean
+                        ) {
                             if (isCurrentLease(lease)) handleRemoteVideoPublished(stream, published)
                         }
 
@@ -144,7 +197,10 @@ internal class RtcManager(
                          * @param stream 由房间和用户标识确定的远端媒体流。
                          * @param message 待发送或记录的消息文本。
                          */
-                        override fun onUserMessageReceived(stream: RemoteStream, message: String) {
+                        override fun onUserMessageReceived(
+                            stream: RemoteStream,
+                            message: String
+                        ) {
                             if (isCurrentLease(lease)) handleUserMessageReceived(stream, message)
                         }
 
@@ -154,7 +210,10 @@ internal class RtcManager(
                          * @param stream 由房间和用户标识确定的远端媒体流。
                          * @param message 待发送或记录的消息文本。
                          */
-                        override fun onSeiMessageReceived(stream: RemoteStream, message: String) {
+                        override fun onSeiMessageReceived(
+                            stream: RemoteStream,
+                            message: String
+                        ) {
                             if (isCurrentLease(lease)) handleSeiMessageReceived(stream, message)
                         }
                     }
@@ -206,7 +265,9 @@ internal class RtcManager(
      *
      * @param configuration 上行视频的尺寸、帧率、码率及编码偏好。
      */
-    override fun configureVideoEncoding(configuration: VideoEncodingConfiguration) {
+    override fun configureVideoEncoding(
+        configuration: VideoEncodingConfiguration
+    ) {
         nativeGate.read {
             validateVideoDimensions(
                 width = configuration.width,
@@ -247,7 +308,9 @@ internal class RtcManager(
      *
      * @param frame 待播放或提交的 PCM 音频帧。
      */
-    override fun pushExternalAudioFrame(frame: AudioFrame) {
+    override fun pushExternalAudioFrame(
+        frame: AudioFrame
+    ) {
         withEngine("pushExternalAudioFrame") { engine ->
             engine.pushExternalAudioFrame(frame)
         }
@@ -349,7 +412,9 @@ internal class RtcManager(
      *
      * @param position 需要使用的前置或后置摄像头。
      */
-    override fun switchCamera(position: CameraPosition) {
+    override fun switchCamera(
+        position: CameraPosition
+    ) {
         performEngineOperation("switchCamera") {
             it.switchCamera(position)
         }
@@ -409,7 +474,9 @@ internal class RtcManager(
      *
      * @param stream 由房间和用户标识确定的远端媒体流。
      */
-    override fun unbindRemoteVideo(stream: RemoteStream) {
+    override fun unbindRemoteVideo(
+        stream: RemoteStream
+    ) {
         performOptionalEngineOperation("setRemoteVideoCanvas") {
             it.unbindRemoteVideo(stream.userId)
         }
@@ -420,7 +487,9 @@ internal class RtcManager(
      *
      * @param configuration 房间标识、用户账号、App ID 和进房 Token。
      */
-    override suspend fun joinRoom(configuration: RoomJoinConfiguration) {
+    override suspend fun joinRoom(
+        configuration: RoomJoinConfiguration
+    ) {
         val normalizedConfiguration = configuration.normalized()
         val pending = lifecycleMutex.withLock {
             beginJoin(normalizedConfiguration)
@@ -563,7 +632,10 @@ internal class RtcManager(
      * @param message 待发送或记录的消息文本。
      * @param replacingPendingMessage 合并键；同键且尚未发送的信令仅保留最新内容。
      */
-    override fun sendRoomMessage(message: String, replacingPendingMessage: String?) {
+    override fun sendRoomMessage(
+        message: String,
+        replacingPendingMessage: String?
+    ) {
         nativeGate.read {
             if (message.isEmpty()) {
                 throw XmaxError(
@@ -590,7 +662,9 @@ internal class RtcManager(
      *
      * @param key 要清理的合并键；null 表示清理全部可合并信令。
      */
-    override fun discardPendingMessages(key: String?) {
+    override fun discardPendingMessages(
+        key: String?
+    ) {
         nativeGate.read {
             val room = synchronized(stateLock) { activeRoom?.room }
             room?.discardPendingMessages(key)
@@ -610,7 +684,9 @@ internal class RtcManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setEventListener(listener: RtcEventListener?) {
+    override fun setEventListener(
+        listener: RtcEventListener?
+    ) {
         synchronized(stateLock) {
             eventListener = listener?.let(::WeakReference)
         }
@@ -621,7 +697,9 @@ internal class RtcManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) {
+    override fun setCameraPreviewReadyListener(
+        listener: RealtimeCameraPreviewReadyListener?
+    ) {
         val shouldNotify = synchronized(stateLock) {
             cameraListenerVersion++
             cameraPreviewReadyListener = listener
@@ -657,13 +735,17 @@ internal class RtcManager(
             synchronized(stateLock) { remoteFrameRegistration = registration }
             try {
                 val result = registration.lease.engine.setRemoteVideoFrameListener(registration.streamId, object : RtcRemoteVideoSink {
+
                     /**
                      * 通知订阅的视频流已到达首帧及其尺寸。
                      *
                      * @param width 画面宽度，单位为像素。
                      * @param height 画面高度，单位为像素。
                      */
-                    override fun onFirstFrame(width: Int, height: Int) {
+                    override fun onFirstFrame(
+                        width: Int,
+                        height: Int
+                    ) {
                         handleRemoteVideoFrame(registration, width, height)
                     }
 
@@ -672,10 +754,10 @@ internal class RtcManager(
                      *
                      * @param frame 待处理、显示或提交的视频帧。
                      */
-                    override fun onFrame(frame: RtcRemoteVideoFrame) {
-                        /**
-                         * 原生帧不能跨线程；不持有 nativeGate/stateLock 调用消费者。
-                         */
+                    override fun onFrame(
+                        frame: RtcRemoteVideoFrame
+                    ) {
+                        // 原生帧不能跨线程；不持有 nativeGate/stateLock 调用消费者。
                         val active = synchronized(stateLock) { isCurrentFrameRegistration(registration) }
                         if (active) registration.listener.onFrame(frame)
                     }
@@ -685,7 +767,9 @@ internal class RtcManager(
                      *
                      * @param error 本次操作失败的异常或 SDK 错误。
                      */
-                    override fun onError(error: XmaxError) {
+                    override fun onError(
+                        error: XmaxError
+                    ) {
                         eventCallbackScope.launch {
                             val active = synchronized(stateLock) { isCurrentFrameRegistration(registration) }
                             if (active) registration.listener.onError(error)
@@ -719,7 +803,9 @@ internal class RtcManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override fun setQualityListener(listener: RtcQualityListener?) {
+    override fun setQualityListener(
+        listener: RtcQualityListener?
+    ) {
         nativeGate.read {
             synchronized(stateLock) {
                 qualityListener = listener?.let(::WeakReference)
@@ -840,7 +926,10 @@ internal class RtcManager(
      * @param operation 当前执行的 RTC 操作名称。
      * @param result RTC 操作返回的状态或错误码。
      */
-    private fun checkResult(operation: String, result: Int) {
+    private fun checkResult(
+        operation: String,
+        result: Int
+    ) {
         if (result < 0) throw rtcResultError(operation, result)
     }
 
@@ -878,10 +967,8 @@ internal class RtcManager(
         stream: RemoteStream,
         published: Boolean,
     ) {
-        /**
-         * 发布通知可能紧随原生入房回调到达，此时主线程尚未激活房间。
-         * 按用户保留最新发布状态；取消或失败时随 PendingJoin 丢弃，不能借用后续连接。
-         */
+        // 发布通知可能紧随原生入房回调到达，此时主线程尚未激活房间。
+        // 按用户保留最新发布状态；取消或失败时随 PendingJoin 丢弃，不能借用后续连接。
         val room = synchronized(stateLock) {
             val pending = pendingJoin?.takeIf { it.context.roomId == stream.roomId }
             if (pending != null) {
@@ -904,7 +991,10 @@ internal class RtcManager(
      * @param stream 由房间和用户标识确定的远端媒体流。
      * @param message 待发送或记录的消息文本。
      */
-    private fun handleUserMessageReceived(stream: RemoteStream, message: String) {
+    private fun handleUserMessageReceived(
+        stream: RemoteStream,
+        message: String
+    ) {
         val room = synchronized(stateLock) { activeRoom?.takeIf { it.roomId == stream.roomId } } ?: return
         eventCallbackScope.launch {
             val listener = synchronized(stateLock) {
@@ -969,28 +1059,49 @@ internal class RtcManager(
      * @param registration 本次远端帧订阅的注册信息。
      * @return 注册仍属于当前活动连接时为 true。
      */
-    private fun isCurrentFrameRegistration(registration: RemoteFrameRegistration): Boolean =
+    private fun isCurrentFrameRegistration(
+        registration: RemoteFrameRegistration
+    ): Boolean =
         registration.isActive && remoteFrameRegistration === registration && activeRoom === registration.room &&
             engineLease === registration.lease
 
     /**
      * 保存远端帧监听器及其所属房间和引擎，防止跨连接派发帧。
-     *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param streamId 远端媒体流或数据通道的标识。
-     * @param room 当前操作关联的 RTC 房间。
-     * @param lease 当前引擎的独占使用凭据。
-     * @param listener 接收对应事件的监听器。
-     * @param isActive 当前订阅是否仍有效；默认值为 `true`。
-     * @param framePending 是否仍在等待首帧通知；默认值为 `false`。
      */
     private class RemoteFrameRegistration(
+        /**
+         * 由房间和用户标识确定的远端媒体流。
+         */
         val stream: RemoteStream,
+
+        /**
+         * 远端媒体流或数据通道的标识。
+         */
         val streamId: String,
+
+        /**
+         * 当前操作关联的 RTC 房间。
+         */
         val room: RoomContext,
+
+        /**
+         * 当前引擎的独占使用凭据。
+         */
         val lease: RtcEngineLease,
+
+        /**
+         * 接收对应事件的监听器。
+         */
         val listener: RtcRemoteVideoSink,
+
+        /**
+         * 当前订阅是否仍有效；默认值为 `true`。
+         */
         var isActive: Boolean = true,
+
+        /**
+         * 是否仍在等待首帧通知；默认值为 `false`。
+         */
         var framePending: Boolean = false,
     )
 
@@ -1021,7 +1132,9 @@ internal class RtcManager(
      *
      * @param cameraSourceActive 当前视频输入是否为相机采集。
      */
-    private fun resetCameraPreviewReadinessLocked(cameraSourceActive: Boolean) {
+    private fun resetCameraPreviewReadinessLocked(
+        cameraSourceActive: Boolean
+    ) {
         cameraSourceVersion++
         isCameraVideoSourceActive = cameraSourceActive
         hasCapturedFirstLocalVideoFrame = false
@@ -1051,7 +1164,9 @@ internal class RtcManager(
      *
      * @param shouldNotify 是否已满足预览就绪的通知条件。
      */
-    private fun notifyCameraPreviewReady(shouldNotify: Boolean) {
+    private fun notifyCameraPreviewReady(
+        shouldNotify: Boolean
+    ) {
         if (!shouldNotify) return
         val registration = synchronized(stateLock) {
             Triple(cameraListenerVersion, cameraSourceVersion, cameraPreviewReadyListener)
@@ -1074,7 +1189,9 @@ internal class RtcManager(
      * @param configuration 房间标识、用户账号、App ID 和进房 Token。
      * @return 用于跟踪进房结果及等待事件的操作对象。
      */
-    private fun beginJoin(configuration: RoomJoinConfiguration): PendingJoin {
+    private fun beginJoin(
+        configuration: RoomJoinConfiguration
+    ): PendingJoin {
         nativeGate.write {
             val lease = synchronized(stateLock) {
                 engineLease
@@ -1163,9 +1280,7 @@ internal class RtcManager(
                 }
             }
             if (publications != null) {
-                /**
-                 * 此处已在回调队列上，先补发入房期间的最新状态，再处理后续排队事件。
-                 */
+                // 此处已在回调队列上，先补发入房期间的最新状态，再处理后续排队事件。
                 try {
                     publications.forEach { (stream, published) ->
                         val listener = synchronized(stateLock) {
@@ -1319,7 +1434,9 @@ internal class RtcManager(
      * @param name 用于错误提示的字段名称。
      * @return 去除首尾空白后的非空字段值。
      */
-    private fun String.requireValue(name: String): String = takeIf(String::isNotEmpty)
+    private fun String.requireValue(
+        name: String
+    ): String = takeIf(String::isNotEmpty)
         ?: throw rtcError("$name cannot be empty")
 
     /**
@@ -1328,7 +1445,9 @@ internal class RtcManager(
      * @param userId 房间中的业务用户标识。
      * @return 经过规范化的非空远端用户标识。
      */
-    private fun normalizeRemoteUserId(userId: String): String =
+    private fun normalizeRemoteUserId(
+        userId: String
+    ): String =
         userId.trim().takeIf(String::isNotEmpty) ?: throw XmaxError(
             code = XmaxErrorCode.INVALID_CONFIGURATION,
             message = "RTC user ID cannot be empty",
@@ -1339,7 +1458,9 @@ internal class RtcManager(
      *
      * @param stream 由房间和用户标识确定的远端媒体流。
      */
-    private fun requireActiveRemoteStream(stream: RemoteStream) {
+    private fun requireActiveRemoteStream(
+        stream: RemoteStream
+    ) {
         val isActive = synchronized(stateLock) {
             activeRoom?.roomId == stream.roomId
         }
@@ -1352,53 +1473,77 @@ internal class RtcManager(
      * @param lease 当前引擎的独占使用凭据。
      * @return 租约仍属于当前活动引擎时为 true。
      */
-    private fun isCurrentLease(lease: RtcEngineLease): Boolean = synchronized(stateLock) { engineLease === lease }
+    private fun isCurrentLease(
+        lease: RtcEngineLease
+    ): Boolean = synchronized(stateLock) { engineLease === lease }
 
     /**
      * 保存活动 RTC 房间及其本地操作标识。
-     *
-     * @param roomId RTC 房间标识。
-     * @param room 当前操作关联的 RTC 房间。
-     * @param id 用于区分当前对象或操作的唯一标识。
      */
     private data class RoomContext(
+        /**
+         * RTC 房间标识。
+         */
         val roomId: String,
+
+        /**
+         * 当前操作关联的 RTC 房间。
+         */
         val room: RtcRoom,
+
+        /**
+         * 本次房间连接的标识，用于隔离旧连接回调。
+         */
         val id: UUID = UUID.randomUUID(),
     )
 
     /**
      * 保存进房等待结果和进房期间到达的远端发布事件。
-     *
-     * @param context 本次 RTC 房间操作的资源和标识。
-     * @param id 用于区分当前对象或操作的唯一标识；默认值为 `context.id`。
-     * @param result 用于通知操作完成的等待器。
-     * @param remoteVideoPublications 进房期间记录的远端视频发布状态。
      */
     private data class PendingJoin(
+        /**
+         * 本次 RTC 房间操作的资源和标识。
+         */
         val context: RoomContext,
+
+        /**
+         * 本次入房请求所属的房间连接标识。
+         */
         val id: UUID = context.id,
+
+        /**
+         * 用于通知操作完成的等待器。
+         */
         val result: CompletableDeferred<Unit> = CompletableDeferred(),
+
+        /**
+         * 进房期间记录的远端视频发布状态。
+         */
         val remoteVideoPublications: MutableMap<RemoteStream, Boolean> = linkedMapOf(),
     )
 
     /**
      * 汇总离房时需要清理的活动房间和等待中的进房操作。
-     *
-     * @param active 当前已加入的房间；null 表示没有活动房间。
-     * @param pending 尚未完成的进房操作；null 表示没有等待中的进房。
      */
     private data class RoomResources(
+        /**
+         * 当前已加入的房间；null 表示没有活动房间。
+         */
         val active: RoomContext?,
+
+        /**
+         * 尚未完成的进房操作；null 表示没有等待中的进房。
+         */
         val pending: PendingJoin?,
     )
 
     /**
-     * 提供 RtcManager 使用的构造入口、共享配置或常量。
+     * 入房超时配置与 RTC 错误的构造入口。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 等待 RTC 入房结果的超时时长，单位为毫秒。
          */
         const val JOIN_TIMEOUT_MILLIS: Long = 15_000L
 
@@ -1408,7 +1553,9 @@ internal class RtcManager(
          * @param message 待发送或记录的消息文本。
          * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
          */
-        fun rtcError(message: String): XmaxError = XmaxError(
+        fun rtcError(
+            message: String
+        ): XmaxError = XmaxError(
             code = XmaxErrorCode.RTC_ERROR,
             message = message,
         )
@@ -1420,7 +1567,10 @@ internal class RtcManager(
          * @param result RTC 操作返回的状态或错误码。
          * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
          */
-        fun rtcResultError(operation: String, result: Number): XmaxError = rtcError(
+        fun rtcResultError(
+            operation: String,
+            result: Number
+        ): XmaxError = rtcError(
             "RTC $operation failed: $result",
         )
 
@@ -1431,7 +1581,10 @@ internal class RtcManager(
          * @param cause 触发当前错误的底层异常。
          * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
          */
-        fun rtcOperationError(operation: String, cause: Throwable): XmaxError = XmaxError(
+        fun rtcOperationError(
+            operation: String,
+            cause: Throwable
+        ): XmaxError = XmaxError(
             code = XmaxErrorCode.RTC_ERROR,
             message = "RTC $operation failed: ${cause.message ?: cause.javaClass.simpleName}",
             cause = cause,
@@ -1443,7 +1596,9 @@ internal class RtcManager(
          * @param operation 当前执行的 RTC 操作名称。
          * @return 表示当前操作已取消的协程异常。
          */
-        fun cancelledError(operation: String): CancellationException =
+        fun cancelledError(
+            operation: String
+        ): CancellationException =
             CancellationException("$operation was cancelled")
     }
 }

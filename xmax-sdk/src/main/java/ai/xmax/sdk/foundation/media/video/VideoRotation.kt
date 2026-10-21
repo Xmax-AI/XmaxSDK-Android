@@ -1,10 +1,9 @@
 //
 //  VideoRotation.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -13,10 +12,14 @@ package ai.xmax.sdk
 
 /**
  * 视频帧需要顺时针旋转的角度。
- *
- * @param degrees 旋转角度，单位为度。
  */
-internal enum class VideoRotation(val degrees: Int) {
+internal enum class VideoRotation(
+    /**
+     * 旋转角度，单位为度。
+     */
+    val degrees: Int
+) {
+
     /**
      * 画面无需旋转。
      */

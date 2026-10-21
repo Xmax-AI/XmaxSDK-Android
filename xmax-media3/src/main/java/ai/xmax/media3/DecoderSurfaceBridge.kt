@@ -1,10 +1,9 @@
 //
 //  DecoderSurfaceBridge.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -29,66 +28,142 @@ import kotlinx.coroutines.CompletableDeferred
 
 /**
  * 单个解码 Surface：GL 线程分发到本地预览和 RTC 像素输入，不做主线程截图。
- *
- * @param input 取得当前外部音视频帧接收器的函数。
  */
-internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFrameSink?) {
+internal class DecoderSurfaceBridge(
+    /**
+     * 取得当前外部音视频帧接收器的函数。
+     */
+    private val input: () -> RealtimeExternalFrameSink?
+) {
+
     /**
      * OpenGL 绘制线程、任务派发与就绪等待。
      */
     private val thread = HandlerThread("Xmax-Media3-GL").apply { start() }
+
+    /**
+     * 在专用渲染线程执行 OpenGL 操作的调度器。
+     */
     private val handler = Handler(thread.looper)
+
+    /**
+     * 解码输入 Surface 准备完成的等待结果。
+     */
     private val ready = CompletableDeferred<Surface>()
 
     /**
      * EGL 上下文、配置及绘制表面。
      */
     private var display = EGL14.EGL_NO_DISPLAY
+
+    /**
+     * 纹理处理与预览绘制使用的 EGL 上下文。
+     */
     private var context = EGL14.EGL_NO_CONTEXT
+
+    /**
+     * 无可见预览时维持渲染上下文的离屏表面。
+     */
     private var pbuffer = EGL14.EGL_NO_SURFACE
+
+    /**
+     * 向预览窗口绘制画面的 EGL 表面。
+     */
     private var window = EGL14.EGL_NO_SURFACE
+
+    /**
+     * 创建 EGL 上下文与表面使用的配置。
+     */
     private lateinit var config: EGLConfig
 
     /**
      * 解码纹理、着色程序及离屏帧缓冲。
      */
     private var textureId = 0
+
+    /**
+     * 将解码纹理绘制到目标表面的着色器程序。
+     */
     private var program = 0
+
+    /**
+     * 保存缩放后采集画面的纹理。
+     */
     private var frameTexture = 0
+
+    /**
+     * 读取采集画面像素的离屏帧缓冲区。
+     */
     private var framebuffer = 0
 
     /**
      * 外部视频帧读取的尺寸与像素缓冲。
      */
     private var captureWidth = 0
+
+    /**
+     * 外部供帧的目标高度，单位为像素。
+     */
     private var captureHeight = 0
+
+    /**
+     * 读取采集画面 RGBA 像素的直接缓冲区。
+     */
     private var pixels: ByteBuffer? = null
 
     /**
      * 解码器输出与本地预览的 Surface 绑定。
      */
     private var decoderTexture: SurfaceTexture? = null
+
+    /**
+     * 接收播放器解码画面的 Surface。
+     */
     private var decoderSurface: Surface? = null
+
+    /**
+     * 当前本地预览视图提供的绘制表面。
+     */
     private var previewSurface: Surface? = null
 
     /**
      * 预览容器和视频显示尺寸。
      */
     private var previewWidth = 1
+
+    /**
+     * 预览表面的高度，单位为像素。
+     */
     private var previewHeight = 1
+
+    /**
+     * 播放器报告的视频宽度，单位为像素。
+     */
     private var videoWidth = 1
+
+    /**
+     * 播放器报告的视频高度，单位为像素。
+     */
     private var videoHeight = 1
 
     /**
      * 预览显示模式及纹理坐标变换。
      */
     private var contentMode = VideoContentMode.FILL
+
+    /**
+     * 解码纹理的坐标变换矩阵。
+     */
     private val transform = FloatArray(16)
 
     /**
      * 解码帧时间戳与外部供帧节奏。
      */
     private var lastTextureTimestamp = Long.MIN_VALUE
+
+    /**
+     * 下一次允许采集的媒体时间戳，单位为微秒。
+     */
     private var nextCaptureUs = 0L
 
     /**
@@ -102,10 +177,22 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      * 资源释放状态与处理性能统计。
      */
     @Volatile private var closed = false
+
+    /**
+     * 累计处理的解码纹理帧数。
+     */
     @Volatile var renderedFrames = 0L
         private set
+
+    /**
+     * 累计向 SDK 提交的采集帧数。
+     */
     @Volatile var capturedFrames = 0L
         private set
+
+    /**
+     * 单帧采集的最大耗时，单位为毫秒。
+     */
     @Volatile var maximumCaptureMs = 0L
         private set
 
@@ -130,7 +217,10 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      * @param width 画面宽度，单位为像素。
      * @param height 画面高度，单位为像素。
      */
-    fun videoSize(width: Int, height: Int) { handler.post { videoWidth = width.coerceAtLeast(1); videoHeight = height.coerceAtLeast(1) } }
+    fun videoSize(
+        width: Int,
+        height: Int
+    ) { handler.post { videoWidth = width.coerceAtLeast(1); videoHeight = height.coerceAtLeast(1) } }
 
     /**
      * 设置预览输出纹理、尺寸和显示模式。
@@ -140,7 +230,12 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      * @param height 画面高度，单位为像素；默认值为 `1`。
      * @param mode 视频等比适配或等比裁切的显示方式；默认值为 `VideoContentMode.FILL`。
      */
-    fun preview(texture: SurfaceTexture?, width: Int = 1, height: Int = 1, mode: VideoContentMode = VideoContentMode.FILL) {
+    fun preview(
+        texture: SurfaceTexture?,
+        width: Int = 1,
+        height: Int = 1,
+        mode: VideoContentMode = VideoContentMode.FILL
+    ) {
         handler.post { guard {
             makeCurrent(pbuffer)
             if (window != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, window)
@@ -160,7 +255,9 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      *
      * @param texture 接收预览画面的纹理。
      */
-    fun destroyPreview(texture: SurfaceTexture) {
+    fun destroyPreview(
+        texture: SurfaceTexture
+    ) {
         handler.post { guard {
             makeCurrent(pbuffer)
             if (window != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, window)
@@ -281,7 +378,10 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      * @param sink SDK 提供的外部音视频帧接收器。
      * @param timestampUs 帧的单调时间戳，单位为微秒。
      */
-    private fun capture(sink: RealtimeExternalFrameSink, timestampUs: Long) {
+    private fun capture(
+        sink: RealtimeExternalFrameSink,
+        timestampUs: Long
+    ) {
         val width = sink.videoFormat.width; val height = sink.videoFormat.height
         if (width != captureWidth || height != captureHeight) {
             GLES20.glDeleteTextures(1, intArrayOf(frameTexture), 0)
@@ -318,7 +418,11 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      * @param height 画面高度，单位为像素。
      * @param mode 视频等比适配或等比裁切的显示方式。
      */
-    private fun draw(width: Int, height: Int, mode: VideoContentMode) {
+    private fun draw(
+        width: Int,
+        height: Int,
+        mode: VideoContentMode
+    ) {
         GLES20.glViewport(0, 0, width, height)
         GLES20.glClearColor(0f, 0f, 0f, 1f); GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         GLES20.glUseProgram(program)
@@ -345,7 +449,10 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      * @param source 待编译的着色器源码。
      * @return 编译成功的 OpenGL 着色器标识。
      */
-    private fun shader(type: Int, source: String): Int = GLES20.glCreateShader(type).also {
+    private fun shader(
+        type: Int,
+        source: String
+    ): Int = GLES20.glCreateShader(type).also {
         GLES20.glShaderSource(it, source); GLES20.glCompileShader(it)
         val status = IntArray(1); GLES20.glGetShaderiv(it, GLES20.GL_COMPILE_STATUS, status, 0)
         check(status[0] != 0) { GLES20.glGetShaderInfoLog(it) }
@@ -356,7 +463,9 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      *
      * @param target OpenGL 纹理目标类型。
      */
-    private fun textureParameters(target: Int) {
+    private fun textureParameters(
+        target: Int
+    ) {
         GLES20.glTexParameteri(target, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
         GLES20.glTexParameteri(target, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
         GLES20.glTexParameteri(target, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
@@ -368,14 +477,18 @@ internal class DecoderSurfaceBridge(private val input: () -> RealtimeExternalFra
      *
      * @param surface 作为当前绘制目标的 EGL 表面。
      */
-    private fun makeCurrent(surface: EGLSurface) { check(EGL14.eglMakeCurrent(display, surface, surface, context)) }
+    private fun makeCurrent(
+        surface: EGLSurface
+    ) { check(EGL14.eglMakeCurrent(display, surface, surface, context)) }
 
     /**
      * 在 OpenGL 操作失败时报告错误，防止异常丢失。
      *
      * @param action 需要执行的操作。
      */
-    private fun guard(action: () -> Unit) {
+    private fun guard(
+        action: () -> Unit
+    ) {
         if (closed) return
         try { action() } catch (error: Exception) {
             failure = error

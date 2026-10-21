@@ -1,10 +1,9 @@
 //
 //  EncodingBitratePolicy.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -20,6 +19,7 @@ import kotlin.math.round
  * 根据视频尺寸和帧率计算默认编码码率范围，单位为 kbps。
  */
 internal object EncodingBitratePolicy {
+
     /**
      * 默认码率相对参考表计算结果的预算系数。
      */
@@ -33,7 +33,11 @@ internal object EncodingBitratePolicy {
      * @param fps 视频帧率，单位为 fps。
      * @return 最低与最高下行编码码率，单位为 kbps。
      */
-    fun resolve(width: Int, height: Int, fps: Int): Pair<Int, Int> {
+    fun resolve(
+        width: Int,
+        height: Int,
+        fps: Int
+    ): Pair<Int, Int> {
         RealtimeVideoFormat(width, height, fps).validate()
         val maximum = resolveMaximumBitrate(
             pixels = width.toDouble() * height,
@@ -52,11 +56,18 @@ internal object EncodingBitratePolicy {
 
     /**
      * 用于编码码率插值的参考点。
-     *
-     * @param value 用于查表或插值的分辨率像素数或帧率。
-     * @param bitrate 编码码率，单位为 kbps。
      */
-    private data class BitratePoint(val value: Double, val bitrate: Double)
+    private data class BitratePoint(
+        /**
+         * 用于查表或插值的分辨率像素数或帧率。
+         */
+        val value: Double,
+
+        /**
+         * 编码码率，单位为 kbps。
+         */
+        val bitrate: Double
+    )
 
     /**
      * 默认编码预算系数与分辨率码率参考表。
@@ -81,6 +92,9 @@ internal object EncodingBitratePolicy {
         BitratePoint(1920.0 * 1080, 2080.0),
     )
 
+    /**
+     * 30 fps 下不同像素数量对应的参考码率，单位为 kbps。
+     */
     private val referenceBitratesAt30Fps = listOf(
         BitratePoint(360.0 * 360, 400.0),
         BitratePoint(480.0 * 360, 490.0),
@@ -99,7 +113,10 @@ internal object EncodingBitratePolicy {
      * @param fps 视频帧率，单位为 fps。
      * @return 计算得到的最高编码码率，单位为 kbps。
      */
-    private fun resolveMaximumBitrate(pixels: Double, fps: Double): Double {
+    private fun resolveMaximumBitrate(
+        pixels: Double,
+        fps: Double
+    ): Double {
         val bitrate15 = interpolate(pixels, referenceBitratesAt15Fps)
         val first30 = referenceBitratesAt30Fps.first()
         val bitrate30 = if (pixels < first30.value) {
@@ -128,7 +145,10 @@ internal object EncodingBitratePolicy {
      * @param points 按横坐标排序的码率参考点。
      * @return 参考点插值或比例外推得到的码率值。
      */
-    private fun interpolate(value: Double, points: List<BitratePoint>): Double {
+    private fun interpolate(
+        value: Double,
+        points: List<BitratePoint>
+    ): Double {
         val first = points.first()
         if (value <= first.value) return first.bitrate * (value / first.value)
         points.drop(1).forEachIndexed { index, upper ->

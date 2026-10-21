@@ -1,10 +1,9 @@
 //
 //  VideoFrame.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -16,19 +15,32 @@ import java.util.UUID
 /**
  * 持有中性像素数据及时间信息的视频帧。
  *
- * @param format 视频像素尺寸、排列格式及旋转信息。
- * @param timestampUs 帧的单调时间戳，单位为微秒。
  * @param planes 按像素格式顺序排列的像素平面。
- * @param rotation 应用到源画面的旋转方向；默认值为 `VideoRotation.ROTATION_0`。
- * @param bufferReuseId 用于识别可复用像素缓冲的标识；null 表示没有复用标识。
  */
 internal class VideoFrame(
+    /**
+     * 视频像素尺寸、排列格式及旋转信息。
+     */
     val format: VideoFormat,
+
+    /**
+     * 帧的单调时间戳，单位为微秒。
+     */
     val timestampUs: Long,
+
     planes: List<VideoFramePlane>,
+
+    /**
+     * 应用到源画面的旋转方向；默认值为 `VideoRotation.ROTATION_0`。
+     */
     val rotation: VideoRotation = VideoRotation.ROTATION_0,
+
+    /**
+     * 用于识别可复用像素缓冲的标识；null 表示没有复用标识。
+     */
     val bufferReuseId: UUID? = null,
 ) {
+
     /**
      * 视频或图片的尺寸与像素数据。
      */
@@ -73,7 +85,9 @@ internal class VideoFrame(
      * @param other 用于比较或组合的另一个对象。
      * @return 对象的内容相等时为 true，否则为 false。
      */
-    override fun equals(other: Any?): Boolean =
+    override fun equals(
+        other: Any?
+    ): Boolean =
         this === other ||
             other is VideoFrame &&
             format == other.format &&

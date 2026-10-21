@@ -1,10 +1,9 @@
 //
 //  RealtimeCallbacks.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -23,15 +22,16 @@ import kotlinx.coroutines.launch
  * 排队时捕获注册版本，执行前再次校验，使已替换或注销监听器的待执行通知失效。
  *
  * @param dispatcher 派发主线程通知的协程调度器；默认值为 `Dispatchers.Main`。
- * @param remoteVideoFrames 向接入方派发远端视频帧的组件。
  */
 internal class RealtimeCallbacks(
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
+
     /**
      * 生命周期与 Manager 一致，运行时重建后仍使用同一串行队列。
      */
     val remoteVideoFrames: RealtimeVideoFrameDispatcher = RealtimeVideoFrameDispatcher(),
 ) {
+
     /**
      * 回调注册的并发保护。
      */
@@ -46,6 +46,10 @@ internal class RealtimeCallbacks(
      * 状态监听器及其注册版本。
      */
     private var stateListener: RealtimeStateListener? = null
+
+    /**
+     * 状态通知版本，用于丢弃已过期的回调。
+     */
     private var stateVersion = 0L
 
     /**
@@ -54,7 +58,10 @@ internal class RealtimeCallbacks(
      * @param listener 接收对应事件的监听器；null 表示注销。
      * @param state 当前状态快照。
      */
-    fun setStateListener(listener: RealtimeStateListener?, state: RealtimeState) = synchronized(lock) {
+    fun setStateListener(
+        listener: RealtimeStateListener?,
+        state: RealtimeState
+    ) = synchronized(lock) {
         stateVersion++
         stateListener = listener
         state(state)
@@ -65,7 +72,9 @@ internal class RealtimeCallbacks(
      *
      * @param state 当前状态快照。
      */
-    fun state(state: RealtimeState) = synchronized(lock) {
+    fun state(
+        state: RealtimeState
+    ) = synchronized(lock) {
         val version = stateVersion
         val listener = stateListener ?: return@synchronized
         scope.launch {
@@ -79,7 +88,9 @@ internal class RealtimeCallbacks(
      *
      * @param action 需要执行的操作。
      */
-    private inline fun protect(action: () -> Unit) {
+    private inline fun protect(
+        action: () -> Unit
+    ) {
         try {
             action()
         } catch (error: Throwable) {

@@ -1,7 +1,7 @@
 //
 //  RealtimeScreen.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -119,6 +119,7 @@ import ai.xmax.sdk.XmaxRealtimeVideo
 import ai.xmax.sdk.UplinkVideoStatistics
 import ai.xmax.sdk.DownlinkVideoStatistics
 import ai.xmax.sdk.RealtimeNetworkQuality
+import ai.xmax.sdk.RealtimeQualityLevel
 import coil3.compose.AsyncImage
 import com.xmax.xlab.R
 import com.xmax.xlab.LocalXLabLanguage
@@ -194,7 +195,7 @@ private data class PromptReference(
 public fun RealtimeScreen(
     apiKey: String,
     environment: XmaxEnvironment = XmaxEnvironment.CHINA,
-    model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN,
+    model: RealtimeModel = RealtimeModel.X2_1,
     source: RealtimeSource,
     trajectoryStyle: RealtimeTrajectoryStyle = RealtimeTrajectoryStyle.SDK_DEFAULT,
     onBack: () -> Unit,
@@ -308,6 +309,11 @@ public fun RealtimeScreen(
     var uplinkStatistics by remember(realtimeManager) { mutableStateOf<UplinkVideoStatistics?>(null) }
     var downlinkStatistics by remember(realtimeManager) { mutableStateOf<DownlinkVideoStatistics?>(null) }
     var networkQuality by remember(realtimeManager) { mutableStateOf<RealtimeNetworkQuality?>(null) }
+    var uplinkLevel by remember(realtimeManager) { mutableStateOf<RealtimeQualityLevel?>(null) }
+    var downlinkLevel by remember(realtimeManager) { mutableStateOf<RealtimeQualityLevel?>(null) }
+    var qualityConnectionState by remember(realtimeManager) { mutableStateOf(realtimeManager.currentState.connectionState) }
+    var qualityAdjustmentJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
+    var qualityError by remember(realtimeManager) { mutableStateOf<String?>(null) }
     var isSuspendedForBackground by remember { mutableStateOf(false) }
     var sourceImageReferenceUrl by remember(currentSource) { mutableStateOf<String?>(null) }
     var sourceImageUploadState by remember(currentSource) {
@@ -393,6 +399,20 @@ public fun RealtimeScreen(
         onDispose { lifecycle.removeObserver(observer) }
     }
 
+    fun refreshQualityLevels() {
+        uplinkLevel = realtimeManager.uplinkQualityLevel
+        downlinkLevel = realtimeManager.downlinkQualityLevel
+    }
+
+    LaunchedEffect(realtimeManager, statisticsVisible) {
+        if (statisticsVisible) {
+            while (true) {
+                refreshQualityLevels()
+                delay(500)
+            }
+        }
+    }
+
     LaunchedEffect(realtimeManager) {
         try {
             realtimeManager.setUplinkVideoStatisticsListener { uplinkStatistics = it }
@@ -404,6 +424,12 @@ public fun RealtimeScreen(
                 }
             }
             realtimeManager.setStateListener { state ->
+                qualityConnectionState = state.connectionState
+                refreshQualityLevels()
+                if (state.connectionState != RealtimeConnectionState.GENERATING) {
+                    qualityAdjustmentJob?.cancel()
+                    qualityError = null
+                }
                 if (state.connectionState == RealtimeConnectionState.IDLE ||
                     state.connectionState == RealtimeConnectionState.READY ||
                     state.connectionState == RealtimeConnectionState.PREPARING
@@ -431,6 +457,7 @@ public fun RealtimeScreen(
                 recordingController.stopAndSave()
                 try {
                     invalidateGeneration()
+                    qualityAdjustmentJob?.cancelAndJoin()
                     cameraSwitchJob?.cancelAndJoin()
                     realtimeOperationMutex.withLock {
                         // Manager 的公共监听器跨 close 保留；页面销毁时由拥有者显式注销。
@@ -902,6 +929,32 @@ public fun RealtimeScreen(
                     uplink = uplinkStatistics,
                     downlink = downlinkStatistics,
                     quality = networkQuality,
+                    uplinkLevel = uplinkLevel,
+                    downlinkLevel = downlinkLevel,
+                    canAdjustQuality = qualityConnectionState == RealtimeConnectionState.GENERATING && !isSuspendedForBackground,
+                    isAdjustingQuality = qualityAdjustmentJob != null,
+                    qualityError = qualityError,
+                    onQualityLevel = { level, downlink ->
+                        if (qualityAdjustmentJob == null && qualityConnectionState == RealtimeConnectionState.GENERATING) {
+                            qualityError = null
+                            qualityAdjustmentJob = scope.launch(start = CoroutineStart.LAZY) {
+                                try {
+                                    if (downlink) realtimeManager.setDownlinkQualityLevel(level)
+                                    else realtimeManager.setUplinkQualityLevel(level)
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (error: Throwable) {
+                                    if (qualityConnectionState == RealtimeConnectionState.GENERATING) {
+                                        qualityError = xLabErrorText(error.message, sessionEndedMessage, localizedContext)
+                                    }
+                                } finally {
+                                    refreshQualityLevels()
+                                    qualityAdjustmentJob = null
+                                }
+                            }
+                            qualityAdjustmentJob?.start()
+                        }
+                    },
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .statusBarsPadding()

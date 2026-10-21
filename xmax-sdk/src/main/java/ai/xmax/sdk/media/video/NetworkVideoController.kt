@@ -1,10 +1,9 @@
 //
 //  NetworkVideoController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -41,21 +40,34 @@ import kotlinx.coroutines.withContext
 
 /**
  * 网络参考视频只用于本地预览，服务端独立读取同一个 URL 进行生成。
- *
- * @param context 访问 Android 系统服务或媒体资源所需的上下文。
- * @param mediaService 解析媒体尺寸及模型输入规则的服务。
  */
 internal class NetworkVideoController(
+    /**
+     * 访问 Android 系统服务或媒体资源所需的上下文。
+     */
     private val context: Context,
+
+    /**
+     * 解析媒体尺寸及模型输入规则的服务。
+     */
     private val mediaService: MediaServicing,
 ) {
+
     /**
      * 网络视频轨道、服务端输入信息及完成通知。
      */
     @Volatile var currentTrack: RealtimeVideoTrack? = null
         private set
+
+    /**
+     * 交由服务端读取的网络视频配置。
+     */
     @Volatile var reference: RealtimeReferenceVideo? = null
         private set
+
+    /**
+     * 本次网络视频生成结束时的回调。
+     */
     @Volatile var onFinish: (() -> Unit)? = null
         private set
 
@@ -117,7 +129,9 @@ internal class NetworkVideoController(
  * @param value 需要规范化、校验或显示的文本。
  * @return 经校验的 HTTP 或 HTTPS 视频地址。
  */
-internal fun validateNetworkVideoUrl(value: String): String {
+internal fun validateNetworkVideoUrl(
+    value: String
+): String {
     val parsed = runCatching { URI(value) }.getOrNull()
     if (parsed == null || parsed.scheme?.lowercase() !in setOf("http", "https") ||
         parsed.host.isNullOrBlank() || parsed.rawUserInfo != null
@@ -129,30 +143,62 @@ internal fun validateNetworkVideoUrl(value: String): String {
 
 /**
  * 所有播放器与 Surface 操作由主线程串行执行；预览异常不终止独立的服务端任务。
- *
- * @param context 访问 Android 系统服务或媒体资源所需的上下文。
- * @param uri 应用有读取权限的媒体地址。
  */
-private class NetworkVideoPreview(private val context: Context, private val uri: Uri) {
+private class NetworkVideoPreview(
+    /**
+     * 访问 Android 系统服务或媒体资源所需的上下文。
+     */
+    private val context: Context,
+
+    /**
+     * 应用有读取权限的媒体地址。
+     */
+    private val uri: Uri
+) {
+
     /**
      * 播放器及其 Surface、纹理和视图绑定。
      */
     private var player: MediaPlayer? = null
+
+    /**
+     * 播放器输出视频帧的绘制目标。
+     */
     private var surface: Surface? = null
+
+    /**
+     * 承载本地网络视频预览的视图。
+     */
     private var view: XmaxVideoView? = null
+
+    /**
+     * 承载播放器输出的纹理视图。
+     */
     private var texture: TextureView? = null
 
     /**
      * 预览的显示模式和播放状态。
      */
     private var contentMode = VideoContentMode.FIT
+
+    /**
+     * 网络视频播放器是否已准备完成。
+     */
     private var prepared = false
+
+    /**
+     * 网络视频是否已播放结束。
+     */
     private var completed = false
 
     /**
      * 视频显示尺寸，单位为像素。
      */
     private var videoWidth = 0
+
+    /**
+     * 网络视频的原始高度，单位为像素。
+     */
     private var videoHeight = 0
 
     /**
@@ -161,12 +207,16 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
      * @param view 需要绑定或解除绑定的显示视图。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    fun attach(view: XmaxVideoView, contentMode: VideoContentMode) {
+    fun attach(
+        view: XmaxVideoView,
+        contentMode: VideoContentMode
+    ) {
         this.view = view
         this.contentMode = contentMode
         val texture = view.prepareNetworkVideoRendering()
         this.texture = texture
         texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+
             /**
              * 在预览纹理可用后建立视频输出绑定。
              *
@@ -174,7 +224,11 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
              * @param width 画面宽度，单位为像素。
              * @param height 画面高度，单位为像素。
              */
-            override fun onSurfaceTextureAvailable(value: SurfaceTexture, width: Int, height: Int) {
+            override fun onSurfaceTextureAvailable(
+                value: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
                 if (this@NetworkVideoPreview.texture !== texture) return
                 bindSurface(value)
                 updateTransform()
@@ -187,7 +241,11 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
              * @param width 画面宽度，单位为像素。
              * @param height 画面高度，单位为像素。
              */
-            override fun onSurfaceTextureSizeChanged(value: SurfaceTexture, width: Int, height: Int) {
+            override fun onSurfaceTextureSizeChanged(
+                value: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
                 updateTransform()
             }
 
@@ -197,7 +255,9 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
              * @param value 预览使用的 SurfaceTexture。
              * @return 是否由 TextureView 释放纹理的判定结果。
              */
-            override fun onSurfaceTextureDestroyed(value: SurfaceTexture): Boolean {
+            override fun onSurfaceTextureDestroyed(
+                value: SurfaceTexture
+            ): Boolean {
                 if (this@NetworkVideoPreview.texture === texture) detachSurface()
                 return true
             }
@@ -207,7 +267,9 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
              *
              * @param value 预览使用的 SurfaceTexture。
              */
-            override fun onSurfaceTextureUpdated(value: SurfaceTexture) = Unit
+            override fun onSurfaceTextureUpdated(
+                value: SurfaceTexture
+            ) = Unit
         }
         texture.surfaceTexture?.let(::bindSurface)
     }
@@ -217,7 +279,9 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
      *
      * @param view 需要绑定或解除绑定的显示视图。
      */
-    fun detach(view: XmaxVideoView) {
+    fun detach(
+        view: XmaxVideoView
+    ) {
         if (this.view !== view) return
         detachSurface()
         texture?.surfaceTextureListener = null
@@ -231,7 +295,9 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
      *
      * @param value 预览使用的 SurfaceTexture。
      */
-    private fun bindSurface(value: SurfaceTexture) {
+    private fun bindSurface(
+        value: SurfaceTexture
+    ) {
         runCatching {
             surface?.release()
             surface = Surface(value)
@@ -275,12 +341,12 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
      *
      * @param player 用于本地媒体预览和解码的播放器。
      */
-    private fun resumePreview(player: MediaPlayer) {
+    private fun resumePreview(
+        player: MediaPlayer
+    ) {
         if (!prepared || surface == null) return
         if (completed) {
-            /**
-             * 重绑视图时恢复尾帧，不重新播放整段视频。
-             */
+            // 重绑视图时恢复尾帧，不重新播放整段视频。
             player.seekTo((player.duration - 1).coerceAtLeast(0).toLong(), MediaPlayer.SEEK_CLOSEST)
         } else {
             player.start()
@@ -319,7 +385,9 @@ private class NetworkVideoPreview(private val context: Context, private val uri:
      *
      * @param error 本次操作失败的异常或 SDK 错误。
      */
-    private fun previewFailed(error: Throwable) {
+    private fun previewFailed(
+        error: Throwable
+    ) {
         player?.release()
         player = null
         prepared = false

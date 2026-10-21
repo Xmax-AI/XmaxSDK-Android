@@ -1,10 +1,9 @@
 //
 //  MediaService.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -27,19 +26,23 @@ import kotlin.math.ln
 
 /**
  * 统一解析本地媒体、模型生成画布和回传尺寸。
- *
- * @param model 用于确定服务端能力、地址及输入规格的模型；默认值为 `RealtimeModel.X2_1_1_PREVIEW_CN`。
  */
 internal class MediaService(
-    override val model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN,
+    /**
+     * 用于确定服务端能力、地址及输入规格的模型；默认值为 `RealtimeModel.X2_1`。
+     */
+    override val model: RealtimeModel = RealtimeModel.X2_1,
 ) : MediaServicing {
+
     /**
      * 为保留媒体比例的实时流选择比例最接近的模型生成画布。
      *
      * @param size 媒体输入的显示尺寸，单位为像素。
      * @return 比例最接近的模型画布尺寸。
      */
-    override fun resolveGenerationSize(size: IntSize): IntSize {
+    override fun resolveGenerationSize(
+        size: IntSize
+    ): IntSize {
         if (size.width <= 0 || size.height <= 0) {
             throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Media input dimensions must be positive")
         }
@@ -57,7 +60,10 @@ internal class MediaService(
      * @param source 媒体来源；只有摄像头需要精确匹配分辨率桶。
      * @return 优先保持精确比例的媒体宽高。
      */
-    override fun resolveMediaSize(size: IntSize, source: RealtimeMediaSource): IntSize {
+    override fun resolveMediaSize(
+        size: IntSize,
+        source: RealtimeMediaSource
+    ): IntSize {
         if (size.width <= 0 || size.height <= 0) {
             throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Media dimensions must be positive")
         }
@@ -86,7 +92,10 @@ internal class MediaService(
      * @param maximumSize 下行宽高上限，可包含小数像素。
      * @return 优先保持精确比例且不超过上限的回传尺寸。
      */
-    override fun resolveTargetSize(sourceSize: IntSize, maximumSize: Size): IntSize {
+    override fun resolveTargetSize(
+        sourceSize: IntSize,
+        maximumSize: Size
+    ): IntSize {
         if (sourceSize.width <= 0 || sourceSize.height <= 0 || !maximumSize.width.isFinite() || !maximumSize.height.isFinite() || maximumSize.width <= 0f || maximumSize.height <= 0f) {
             throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Source dimensions and target bounds must be positive and finite")
         }
@@ -102,7 +111,10 @@ internal class MediaService(
      * @param scale 不超过 1 的等比缩放比例。
      * @return 不超过缩放边界的 4 对齐尺寸。
      */
-    private fun alignedSize(size: IntSize, scale: Double): IntSize {
+    private fun alignedSize(
+        size: IntSize,
+        scale: Double
+    ): IntSize {
         var divisor = size.width
         var remainder = size.height
         while (remainder != 0) {
@@ -130,7 +142,9 @@ internal class MediaService(
      * @param size 媒体输入尺寸，单位为像素。
      * @return 满足模型面积上下限的生成画布尺寸。
      */
-    private fun resolveGenerationCanvas(size: IntSize): IntSize {
+    private fun resolveGenerationCanvas(
+        size: IntSize
+    ): IntSize {
         val width = size.width
         val height = size.height
         if (width <= 0 || height <= 0) {
@@ -165,9 +179,7 @@ internal class MediaService(
             return IntSize(alignedWidth, alignedHeight)
         }
 
-        /**
-         * 分别对齐可能使边界附近的面积越界；选择满足限制且最接近目标的尺寸。
-         */
+        // 分别对齐可能使边界附近的面积越界；选择满足限制且最接近目标的尺寸。
         return boundedAlignedSize(
             width = size.width * scale,
             height = size.height * scale,
@@ -181,7 +193,10 @@ internal class MediaService(
      * @param height 画面高度，单位为像素。
      * @return 满足当前计算约束的视频宽度和高度。
      */
-    private fun boundedAlignedSize(width: Double, height: Double): IntSize {
+    private fun boundedAlignedSize(
+        width: Double,
+        height: Double
+    ): IntSize {
         val alignment = model.inputSizeAlignment
         val unitPixels = alignment.toLong() * alignment
         val minimumUnits = (model.minimumInputPixels.toLong() + unitPixels - 1L) / unitPixels

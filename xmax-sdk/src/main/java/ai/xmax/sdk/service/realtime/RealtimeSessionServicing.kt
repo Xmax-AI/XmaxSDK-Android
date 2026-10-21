@@ -1,10 +1,9 @@
 //
 //  RealtimeSessionServicing.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -17,13 +16,16 @@ import ai.xmax.sdk.RealtimeModel
  * 定义实时会话 API 与心跳生命周期能力。
  */
 internal interface RealtimeSessionServicing {
+
     /**
      * 创建实时会话并返回 RTC 连接信息。
      *
      * @param model 用于确定服务端能力、地址及输入规格的模型。
      * @return 服务端会话标识、状态及可用的 RTC 连接信息。
      */
-    suspend fun createSession(model: RealtimeModel): RealtimeSession
+    suspend fun createSession(
+        model: RealtimeModel
+    ): RealtimeSession
 
     /**
      * 启动指定会话的周期心跳。
@@ -46,5 +48,7 @@ internal interface RealtimeSessionServicing {
      *
      * @param sessionId 服务端会话标识。
      */
-    suspend fun closeSession(sessionId: String)
+    suspend fun closeSession(
+        sessionId: String
+    )
 }

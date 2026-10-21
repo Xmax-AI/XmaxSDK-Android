@@ -1,7 +1,7 @@
 //
 //  ExternalVideoControllerTest.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -27,7 +27,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExternalVideoControllerTest {
     private val media = object : MediaServicing by MediaService() {
-        override val model = RealtimeModel.X2_1_1_PREVIEW_CN
+        override val model = RealtimeModel.X2_1
         override fun resolveMediaSize(size: IntSize, source: RealtimeMediaSource) = size
     }
 
@@ -137,8 +137,8 @@ class ExternalVideoControllerTest {
         val controller = ExternalVideoController(RtcManagingStub(), MediaService(), { true }, {}, {}, {})
         try {
             for ((input, expected) in listOf(
-                RealtimeVideoFormat(1024, 1920, 24) to RealtimeVideoFormat(1024, 1920, 30),
-                RealtimeVideoFormat(1920, 1024, 60) to RealtimeVideoFormat(1920, 1024, 30),
+                RealtimeVideoFormat(1080, 1920, 24) to RealtimeVideoFormat(1080, 1920, 30),
+                RealtimeVideoFormat(1920, 1080, 60) to RealtimeVideoFormat(1920, 1080, 30),
             )) {
                 val source = Source(videoFormat = input)
                 val stream = controller.create(source)
@@ -154,7 +154,7 @@ class ExternalVideoControllerTest {
         val controller = ExternalVideoController(RtcManagingStub(), MediaService(), { true }, {}, {}, {})
         try {
             val source = Source(videoFormat = RealtimeVideoFormat(1080, 1920, 30))
-            val requested = RealtimeVideoFormat(1024, 1920, 24, minimumBitrate = 800,
+            val requested = RealtimeVideoFormat(1080, 1920, 24, minimumBitrate = 800,
                 maximumBitrate = 2000, encoderPreference = RealtimeVideoEncoderPreference.MAINTAIN_QUALITY)
             val stream = controller.create(source, requested)
             assertEquals(requested, stream.videoTrack!!.videoFormat)
@@ -162,16 +162,16 @@ class ExternalVideoControllerTest {
         } finally { controller.stop(); Dispatchers.resetMain() }
     }
 
-    @Test fun `pro accepts explicit resolution bucket and rejects unsupported source size before binding`() = runTest {
+    @Test fun `x21 accepts explicit resolution bucket and rejects unsupported source size before binding`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val rtc = RtcManagingStub()
-        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN), { true }, {}, {}, {})
+        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1), { true }, {}, {}, {})
         try {
-            val source = Source(videoFormat = RealtimeVideoFormat(1080, 1920, 30))
+            val source = Source(videoFormat = RealtimeVideoFormat(1024, 1920, 30))
             try { controller.create(source); fail("Expected unsupported resolution") } catch (_: XmaxError) { }
             assertNull(source.sink)
             assertTrue(rtc.calls.isEmpty())
-            val requested = RealtimeVideoFormat(1024, 1920, 30)
+            val requested = RealtimeVideoFormat(1080, 1920, 30)
             assertEquals(requested, controller.create(source, requested).videoTrack!!.videoFormat)
             assertEquals(requested, source.sink!!.videoFormat)
         } finally { controller.stop(); Dispatchers.resetMain() }

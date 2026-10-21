@@ -1,10 +1,9 @@
 //
 //  XmaxRealtimeManager.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -44,23 +43,42 @@ import kotlinx.coroutines.withContext
  * 生命周期状态及操作所有权由 RealtimeCoordinator 管理，用户通知交给 RealtimeCallbacks。
  * 组件按需创建；每代 Runtime 独立标识错误来源，防止已释放组件的迟到回调影响新连接。
  *
- * @param options 实时生成的模型与业务配置。
- * @param componentFactory 按错误回调及帧派发器创建实时业务组件的工厂。
- * @param callbacks 向接入方派发状态与视频帧的回调组件。
  * @param dispatcher 执行后台操作的协程调度器；默认值为 `Dispatchers.Default`。
- * @param timing 记录本次生成启动耗时的统计对象。
- * @param qualityHistory 按模型及方向保存成功质量档位的存储。
- * @param qualityNow 返回单调时钟毫秒数的函数，供质量策略计算时间间隔。
  */
 internal class XmaxRealtimeManager(
+    /**
+     * 实时生成的模型与业务配置。
+     */
     override val options: RealtimeConfiguration,
+
+    /**
+     * 按错误回调及帧派发器创建实时业务组件的工厂。
+     */
     private val componentFactory: ((XmaxError) -> Unit, (XmaxError) -> Unit, RealtimeVideoFrameDispatcher) -> RealtimeComponents,
+
+    /**
+     * 向接入方派发状态与视频帧的回调组件。
+     */
     private val callbacks: RealtimeCallbacks = RealtimeCallbacks(),
+
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
+
+    /**
+     * 记录本次生成启动耗时的统计对象。
+     */
     private val timing: RealtimeTiming = RealtimeTiming(),
+
+    /**
+     * 按模型及方向保存成功质量档位的存储。
+     */
     private val qualityHistory: QualityHistory = QualityHistory(),
+
+    /**
+     * 返回单调时钟毫秒数的函数，供质量策略计算时间间隔。
+     */
     private val qualityNow: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : XmaxRealtimeManaging {
+
     /**
      * 创建 XmaxRealtimeManager，并配置其依赖和运行参数。
      *
@@ -68,7 +86,11 @@ internal class XmaxRealtimeManager(
      * @param context 访问 Android 系统服务或媒体资源所需的上下文。
      * @param apiService 发起服务端 API 请求的客户端。
      */
-    constructor(options: RealtimeConfiguration, context: Context, apiService: ApiServicing) :
+    constructor(
+        options: RealtimeConfiguration,
+        context: Context,
+        apiService: ApiServicing
+    ) :
         this(options, { onError, onMediaError, frames ->
             createRealtimeComponents(context, apiService, options.model, onError, onMediaError, frames)
         }, qualityHistory = QualityHistory.create(context, options.model.id))
@@ -77,6 +99,10 @@ internal class XmaxRealtimeManager(
      * 自动调档任务及样本有效性标识。
      */
     private val qualityScope = CoroutineScope(SupervisorJob() + dispatcher)
+
+    /**
+     * 画质配置的版本，用于识别过期的调档请求。
+     */
     private val qualityRevision = AtomicLong()
 
     /**
@@ -90,6 +116,10 @@ internal class XmaxRealtimeManager(
      * 音量配置在媒体资源释放后仍保留；null 表示使用来源默认值。
      */
     @Volatile private var configuredLocalAudioVolume: Float? = null
+
+    /**
+     * 接入方指定的下行音量；未指定时使用默认音量。
+     */
     @Volatile private var configuredRemoteAudioVolume: Float? = null
 
     /**
@@ -98,9 +128,25 @@ internal class XmaxRealtimeManager(
      * 只保护监听配置与已存在组件的绑定；不持锁创建组件、执行媒体操作或调用用户回调。
      */
     private val listenerLock = Any()
+
+    /**
+     * 网络质量变化的监听器。
+     */
     private var networkQualityListener: RealtimeNetworkQualityListener? = null
+
+    /**
+     * 设备性能告警的监听器。
+     */
     private var performanceAlarmListener: RealtimePerformanceAlarmListener? = null
+
+    /**
+     * 上行视频统计的监听器。
+     */
     private var uplinkVideoStatisticsListener: UplinkVideoStatisticsListener? = null
+
+    /**
+     * 下行视频统计的监听器。
+     */
     private var downlinkVideoStatisticsListener: DownlinkVideoStatisticsListener? = null
 
     /**
@@ -112,12 +158,102 @@ internal class XmaxRealtimeManager(
         hasLocalMedia = { runtime?.components?.media?.currentTrack != null },
         cleanup = ::cleanup,
     )
+
+    /**
+     * 当前实时媒体与生成状态。
+     */
     override val currentState: RealtimeState get() = coordinator.currentState
+
+    /**
+     * 当前连接成功应用的上行档位。
+     */
+    override val uplinkQualityLevel: RealtimeQualityLevel?
+        get() = currentQualityLevel(downlink = false)
+
+    /**
+     * 当前连接成功提交的下行档位。
+     */
+    override val downlinkQualityLevel: RealtimeQualityLevel?
+        get() = currentQualityLevel(downlink = true)
+
+    /**
+     * 读取已连接会话的档位，断开期间不暴露旧配置。
+     *
+     * @param downlink 是否读取下行档位。
+     * @return 已成功应用的档位；当前方向不可用时为 null。
+     */
+    private fun currentQualityLevel(
+        downlink: Boolean,
+    ): RealtimeQualityLevel? {
+        val owner = runtime ?: return null
+        val state = currentState.connectionState
+        if (state != RealtimeConnectionState.CONNECTED && state != RealtimeConnectionState.GENERATING) return null
+        val direction = if (downlink) owner.downlinkQuality else owner.uplinkQuality
+        return direction?.level?.let { value -> RealtimeQualityLevel.entries.first { it.rawValue == value } }
+    }
+
+    /**
+     * 在生成中调整上行编码档位，保留后续自动调档能力。
+     *
+     * @param level 目标上行档位。
+     */
+    override suspend fun setUplinkQualityLevel(
+        level: RealtimeQualityLevel,
+    ) {
+        setQualityLevel(level, downlink = false)
+    }
+
+    /**
+     * 在生成中调整下行回传档位，保留后续自动调档能力。
+     *
+     * @param level 目标下行档位。
+     */
+    override suspend fun setDownlinkQualityLevel(
+        level: RealtimeQualityLevel,
+    ) {
+        setQualityLevel(level, downlink = true)
+    }
+
+    /**
+     * 串行应用手动调档请求，防止与生成切换或连接清理交叉提交。
+     *
+     * @param level 目标传输档位。
+     * @param downlink 是否调整下行。
+     */
+    private suspend fun setQualityLevel(
+        level: RealtimeQualityLevel,
+        downlink: Boolean,
+    ) {
+        coordinator.run(OperationKind.CONFIGURATION) { token ->
+            token.ensureCurrent()
+            val owner = runtime ?: throw invalid("Quality levels can only be changed while generating")
+            val state = currentState
+            val taskId = state.taskId
+            if (state.connectionState != RealtimeConnectionState.GENERATING || taskId == null || owner.qualityTaskId != taskId) {
+                throw invalid("Quality levels can only be changed while generating")
+            }
+            val direction = (if (downlink) owner.downlinkQuality else owner.uplinkQuality)
+                ?: throw invalid("No ${if (downlink) "downlink" else "uplink"} quality configuration is available")
+            qualityRevision.incrementAndGet()
+            applyQualityLevel(owner, direction, QualityController.Direction.Change(direction.level, level.rawValue, "manual"), taskId) {
+                token.ensureCurrent()
+                val current = currentState
+                val ownsTask = runtime === owner && owner.qualityTaskId == taskId && current.taskId == taskId
+                if (!ownsTask || current.connectionState != RealtimeConnectionState.GENERATING) {
+                    throw CancellationException("Quality adjustment belongs to an inactive generation")
+                }
+            }
+        }
+    }
 
     /**
      * 接入方可读取的当前播放音量。
      */
     override val localAudioVolume: Float get() = configuredLocalAudioVolume ?: 0.45f
+
+    /**
+     * 下行播放音量，范围为 0 到 1，默认值为 1。
+     */
     override val remoteAudioVolume: Float get() = configuredRemoteAudioVolume ?: 1f
 
     /**
@@ -125,7 +261,9 @@ internal class XmaxRealtimeManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override suspend fun setStateListener(listener: RealtimeStateListener?) {
+    override suspend fun setStateListener(
+        listener: RealtimeStateListener?
+    ) {
         callbacks.setStateListener(listener, currentState)
     }
 
@@ -134,7 +272,9 @@ internal class XmaxRealtimeManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override suspend fun setUplinkVideoStatisticsListener(listener: UplinkVideoStatisticsListener?) {
+    override suspend fun setUplinkVideoStatisticsListener(
+        listener: UplinkVideoStatisticsListener?
+    ) {
         synchronized(listenerLock) {
             uplinkVideoStatisticsListener = listener
             runtime?.takeIf { it.listenersApplied }?.components?.stream?.setUplinkVideoStatisticsListener(listener)
@@ -146,7 +286,9 @@ internal class XmaxRealtimeManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override suspend fun setDownlinkVideoStatisticsListener(listener: DownlinkVideoStatisticsListener?) {
+    override suspend fun setDownlinkVideoStatisticsListener(
+        listener: DownlinkVideoStatisticsListener?
+    ) {
         synchronized(listenerLock) {
             downlinkVideoStatisticsListener = listener
             runtime?.takeIf { it.listenersApplied }?.components?.stream?.setDownlinkVideoStatisticsListener(listener)
@@ -161,7 +303,9 @@ internal class XmaxRealtimeManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override suspend fun setRemoteVideoFrameListener(listener: RealtimeVideoFrameListener?) {
+    override suspend fun setRemoteVideoFrameListener(
+        listener: RealtimeVideoFrameListener?
+    ) {
         callbacks.remoteVideoFrames.setListener(listener)
     }
 
@@ -170,7 +314,9 @@ internal class XmaxRealtimeManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override suspend fun setNetworkQualityListener(listener: RealtimeNetworkQualityListener?) {
+    override suspend fun setNetworkQualityListener(
+        listener: RealtimeNetworkQualityListener?
+    ) {
         synchronized(listenerLock) {
             networkQualityListener = listener
             runtime?.takeIf { it.listenersApplied }?.components?.stream?.setNetworkQualityListener(listener)
@@ -182,7 +328,9 @@ internal class XmaxRealtimeManager(
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    override suspend fun setPerformanceAlarmListener(listener: RealtimePerformanceAlarmListener?) {
+    override suspend fun setPerformanceAlarmListener(
+        listener: RealtimePerformanceAlarmListener?
+    ) {
         synchronized(listenerLock) {
             performanceAlarmListener = listener
             runtime?.takeIf { it.listenersApplied }?.components?.stream?.setPerformanceAlarmListener(listener)
@@ -194,7 +342,9 @@ internal class XmaxRealtimeManager(
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    override suspend fun setLocalAudioVolume(volume: Float) {
+    override suspend fun setLocalAudioVolume(
+        volume: Float
+    ) {
         execute(OperationKind.SETTING) { _, c ->
             validateAudioVolume(volume)
             c.media.setLocalAudioVolume(volume)
@@ -208,7 +358,9 @@ internal class XmaxRealtimeManager(
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    override suspend fun setRemoteAudioVolume(volume: Float) {
+    override suspend fun setRemoteAudioVolume(
+        volume: Float
+    ) {
         execute(OperationKind.SETTING) { _, c ->
             validateAudioVolume(volume)
             c.stream.setRemoteAudioVolume(volume)
@@ -244,7 +396,9 @@ internal class XmaxRealtimeManager(
      * @param imageData 可解码的图片文件字节，不是裸像素数据。
      * @return 可用于预览或生成的媒体流及其视频轨道。
      */
-    override suspend fun createLocalImageStream(imageData: ByteArray): RealtimeMediaStream =
+    override suspend fun createLocalImageStream(
+        imageData: ByteArray
+    ): RealtimeMediaStream =
         mediaOperation(sourceRemoteAudioVolume = 0f) { it.createLocalImageStream(imageData) }
 
     /**
@@ -254,7 +408,9 @@ internal class XmaxRealtimeManager(
      * @param bitmap 待处理或显示的 Android 图片。
      * @return 可用于预览或生成的媒体流及其视频轨道。
      */
-    override suspend fun createLocalImageStream(bitmap: Bitmap): RealtimeMediaStream =
+    override suspend fun createLocalImageStream(
+        bitmap: Bitmap
+    ): RealtimeMediaStream =
         mediaOperation(sourceRemoteAudioVolume = 0f) { it.createLocalImageStream(bitmap) }
 
     /**
@@ -265,7 +421,9 @@ internal class XmaxRealtimeManager(
      * @param uri 应用有读取权限的媒体地址。
      * @return 可用于预览或生成的媒体流及其视频轨道。
      */
-    override suspend fun createLocalImageStream(uri: Uri): RealtimeMediaStream =
+    override suspend fun createLocalImageStream(
+        uri: Uri
+    ): RealtimeMediaStream =
         mediaOperation(sourceRemoteAudioVolume = 0f) { it.createLocalImageStream(uri) }
 
     /**
@@ -276,7 +434,9 @@ internal class XmaxRealtimeManager(
      * @param uri 应用有读取权限的媒体地址。
      * @return 可用于预览或生成的媒体流及其视频轨道。
      */
-    override suspend fun createLocalVideoStream(uri: Uri): RealtimeMediaStream =
+    override suspend fun createLocalVideoStream(
+        uri: Uri
+    ): RealtimeMediaStream =
         mediaOperation(sourceRemoteAudioVolume = 1f) { it.createLocalVideoStream(uri) }
 
     /**
@@ -332,15 +492,11 @@ internal class XmaxRealtimeManager(
         videoFormat: RealtimeVideoFormat?,
         targetSource: suspend () -> RealtimeExternalVideoSource,
     ): RealtimeStreamReplacement {
-        /**
-         * 保留调用方的调度上下文；回调的取消由本次 SDK 切流操作统一管理。
-         */
+        // 保留调用方的调度上下文；回调的取消由本次 SDK 切流操作统一管理。
         val preparationContext = currentCoroutineContext().minusKey(Job)
 
         return execute(OperationKind.REPLACEMENT) { token, c ->
-            /**
-             * 校验当前输入，并为本次操作保留生成条件，供取消接管或重连后恢复。
-             */
+            // 校验当前输入，并为本次操作保留生成条件，供取消接管或重连后恢复。
             if (!c.media.isExternalVideo) {
                 throw invalid("The current local media source is not an external video")
             }
@@ -348,9 +504,7 @@ internal class XmaxRealtimeManager(
             token.inheritGenerationContext(c.generation.cachedContext, c.generation.cachedFaceRestoration)
             token.setFailureScope(TerminationScope.CONNECTION)
 
-            /**
-             * 停止旧生成任务，暂时保留房间连接；是否需要重连由新视频的规格决定。
-             */
+            // 停止旧生成任务，暂时保留房间连接；是否需要重连由新视频的规格决定。
             c.generation.stop(currentState.taskId.orEmpty())
 
             token.commit(
@@ -364,9 +518,7 @@ internal class XmaxRealtimeManager(
                 )
             )
 
-            /**
-             * 媒体层先解除旧帧输入，再回调 App 切换播放器，最后接入返回的视频源。
-             */
+            // 媒体层先解除旧帧输入，再回调 App 切换播放器，最后接入返回的视频源。
             val local = c.media.replaceExternalVideoStream(videoFormat) {
                 withContext(preparationContext) {
                     targetSource()
@@ -377,9 +529,7 @@ internal class XmaxRealtimeManager(
 
             token.ensureCurrent()
 
-            /**
-             * 音视频规格兼容时复用房间；规格变化时断开旧连接，保留引擎和生成条件。
-             */
+            // 音视频规格兼容时复用房间；规格变化时断开旧连接，保留引擎和生成条件。
             val format = checkNotNull(local.videoTrack?.videoFormat)
 
             if (
@@ -391,16 +541,12 @@ internal class XmaxRealtimeManager(
                 token.commit(RealtimeState(RealtimeConnectionState.READY))
             }
 
-            /**
-             * 切换前仅预览时，返回新的本地流，不启动生成。
-             */
+            // 切换前仅预览时，返回新的本地流，不启动生成。
             if (!token.resumeGeneration) {
                 return@execute RealtimeStreamReplacement(local, null)
             }
 
-            /**
-             * 恢复已有或正在启动的生成请求，沿用参考图和提示词创建新任务。
-             */
+            // 恢复已有或正在启动的生成请求，沿用参考图和提示词创建新任务。
             val remote = c.connection.currentRemoteStream
                 ?: connect(token, c, local, resetGeneration = false)
 
@@ -496,7 +642,9 @@ internal class XmaxRealtimeManager(
      * @param localStream 本地输入媒体流。
      * @return 可用于预览或生成的媒体流及其视频轨道。
      */
-    override suspend fun connect(localStream: RealtimeMediaStream): RealtimeMediaStream =
+    override suspend fun connect(
+        localStream: RealtimeMediaStream
+    ): RealtimeMediaStream =
         execute(OperationKind.CONNECTION) { token, c -> connect(token, c, localStream) }
 
     /**
@@ -529,9 +677,7 @@ internal class XmaxRealtimeManager(
                 publishLocalMedia = c.media.networkVideoReference == null,
                 isCurrent = { try { token.ensureCurrent(); true } catch (_: CancellationException) { false } },
                 onHeartbeatFailure = { sessionId, error ->
-                    /**
-                     * 同时校验组件代际与会话，避免旧心跳结束一个后续建立的连接。
-                     */
+                    // 同时校验组件代际与会话，避免旧心跳结束一个后续建立的连接。
                     if (runtime === owner && c.connection.currentSessionId == sessionId) {
                         coordinator.reportFailure(error, TerminationScope.CONNECTION)
                     }
@@ -559,7 +705,10 @@ internal class XmaxRealtimeManager(
      * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
      * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`。
      */
-    override suspend fun startGeneration(context: RealtimeContext?, faceRestoration: Boolean) {
+    override suspend fun startGeneration(
+        context: RealtimeContext?,
+        faceRestoration: Boolean
+    ) {
         execute(OperationKind.GENERATION, context, faceRestoration) { token, c ->
             measureStartup { start(token, c, context, faceRestoration) }
         }
@@ -585,9 +734,7 @@ internal class XmaxRealtimeManager(
                     c.connection.currentRemoteStream ?: throw XmaxError(XmaxErrorCode.RTC_ERROR, "Realtime connection has no remote stream")
                 } else {
                     try {
-                        /**
-                         * 文件视频继续推送媒体帧，但从用户开始生成起就停止本地出声。
-                         */
+                        // 文件视频继续推送媒体帧，但从用户开始生成起就停止本地出声。
                         c.media.setLocalAudioPreviewMuted(true)
                         connect(token, c, localStream)
                     } catch (error: Throwable) {
@@ -606,7 +753,9 @@ internal class XmaxRealtimeManager(
      * @param action 需要执行的操作。
      * @return 传入操作成功执行后的结果。
      */
-    private suspend fun <T> measureStartup(action: suspend () -> T): T =
+    private suspend fun <T> measureStartup(
+        action: suspend () -> T
+    ): T =
         if (currentState.connectionState == RealtimeConnectionState.GENERATING) action() else timing.measure(action)
 
     /**
@@ -710,7 +859,9 @@ internal class XmaxRealtimeManager(
      *
      * @param reason 引起状态变化或失败的原因。
      */
-    override suspend fun disconnect(reason: RealtimeReason) {
+    override suspend fun disconnect(
+        reason: RealtimeReason
+    ) {
         invalidateQualitySamples()
         coordinator.disconnect(reason)
     }
@@ -728,7 +879,9 @@ internal class XmaxRealtimeManager(
      *
      * @param target 需要终止的资源范围。
      */
-    private suspend fun cleanup(target: TerminationScope) {
+    private suspend fun cleanup(
+        target: TerminationScope
+    ) {
         val owner = runtime ?: return
         owner.qualityTaskId = null
         owner.downlinkQuality = null
@@ -737,9 +890,7 @@ internal class XmaxRealtimeManager(
         cleanupResources(
             { if (target == TerminationScope.ALL) {
                 synchronized(listenerLock) {
-                    /**
-                     * 先解除旧组件绑定；清理期间的新注册仅保留配置，供下一代 Runtime 使用。
-                     */
+                    // 先解除旧组件绑定；清理期间的新注册仅保留配置，供下一代 Runtime 使用。
                     owner.listenersApplied = false
                     c.stream.setAdaptiveQualityListener(null)
                     c.stream.setNetworkQualityListener(null)
@@ -820,9 +971,7 @@ internal class XmaxRealtimeManager(
             runtime = created
         }
         if (!owner.audioSettingsApplied) {
-            /**
-             * 在创建、启动媒体之前恢复设置；失败或取消时保持未完成，后续操作重新尝试。
-             */
+            // 在创建、启动媒体之前恢复设置；失败或取消时保持未完成，后续操作重新尝试。
             configuredLocalAudioVolume?.let { owner.components.media.setLocalAudioVolume(it) }
             configuredRemoteAudioVolume?.let { owner.components.stream.setRemoteAudioVolume(it) }
             owner.audioSettingsApplied = true
@@ -852,7 +1001,11 @@ internal class XmaxRealtimeManager(
      * @param error 本次操作失败的异常或 SDK 错误。
      * @param target 需要终止的资源范围。
      */
-    private fun forwardFailure(owner: Runtime, error: XmaxError, target: TerminationScope) {
+    private fun forwardFailure(
+        owner: Runtime,
+        error: XmaxError,
+        target: TerminationScope
+    ) {
         if (runtime !== owner) return
         if (error.code != XmaxErrorCode.CANCELLED) {
             coordinator.reportFailure(error, target)
@@ -868,7 +1021,9 @@ internal class XmaxRealtimeManager(
      *
      * @param c 当前操作使用的实时组件集合。
      */
-    private fun requireDisconnected(c: RealtimeComponents) {
+    private fun requireDisconnected(
+        c: RealtimeComponents
+    ) {
         if (c.connection.currentSessionId.isNotEmpty() || currentState.connectionState in setOf(
                 RealtimeConnectionState.CONNECTING, RealtimeConnectionState.CONNECTED,
                 RealtimeConnectionState.GENERATING, RealtimeConnectionState.DISCONNECTING,
@@ -880,7 +1035,9 @@ internal class XmaxRealtimeManager(
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    private fun validateAudioVolume(volume: Float) {
+    private fun validateAudioVolume(
+        volume: Float
+    ) {
         if (!volume.isFinite() || volume !in 0f..1f) throw invalid("Audio volume must be between 0 and 1")
     }
 
@@ -890,7 +1047,9 @@ internal class XmaxRealtimeManager(
      * @param message 待发送或记录的消息文本。
      * @return 配置无效的 SDK 错误。
      */
-    private fun invalid(message: String) = XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, message)
+    private fun invalid(
+        message: String
+    ) = XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, message)
 
     /**
      * 按当前媒体原始规格恢复上行档位，采集和生成尺寸保持不变。
@@ -898,7 +1057,10 @@ internal class XmaxRealtimeManager(
      * @param c 当前操作使用的实时组件集合。
      * @param baseline 用于计算各质量档位的原始输入规格。
      */
-    private fun prepareUplinkQuality(c: RealtimeComponents, baseline: RealtimeVideoFormat) {
+    private fun prepareUplinkQuality(
+        c: RealtimeComponents,
+        baseline: RealtimeVideoFormat
+    ) {
         val owner = checkNotNull(runtime)
         if (c.media.networkVideoReference != null) {
             owner.uplinkQuality = null
@@ -925,7 +1087,10 @@ internal class XmaxRealtimeManager(
      * @param level 下行目标档位，范围为 1 到 5。
      * @return 满足下行尺寸上限的规格，24 fps 仅用于码率估算。
      */
-    private fun resolveTargetVideoFormat(baseline: RealtimeVideoFormat, level: Int): RealtimeVideoFormat {
+    private fun resolveTargetVideoFormat(
+        baseline: RealtimeVideoFormat,
+        level: Int
+    ): RealtimeVideoFormat {
         val maximumSize = QualityVideoFormat.resolveDownlinkMaximumSize(baseline, level)
         val size = MediaService(options.model).resolveTargetSize(IntSize(baseline.width, baseline.height), maximumSize)
         return baseline.copy(width = size.width, height = size.height, fps = 24)
@@ -937,7 +1102,10 @@ internal class XmaxRealtimeManager(
      * @param owner 创建本次操作的实时运行状态。
      * @param quality 当前网络质量样本。
      */
-    private fun handleAdaptiveQuality(owner: Runtime, quality: RealtimeNetworkQuality) {
+    private fun handleAdaptiveQuality(
+        owner: Runtime,
+        quality: RealtimeNetworkQuality
+    ) {
         if (runtime !== owner) return
 
         val revision = qualityRevision.get()
@@ -979,31 +1147,13 @@ internal class XmaxRealtimeManager(
                         if (direction == null) continue
                         val change = direction.observe(sample, sampleAt, qualityNow()) ?: continue
                         try {
-                            val target = if (direction.downlink) {
-                                resolveTargetVideoFormat(direction.baseline, change.to)
-                            } else {
-                                QualityVideoFormat.resolve(direction.baseline, change.to, false)
-                            }
-                            if (direction.downlink) {
-                                owner.components.stream.updateDownlinkVideoResolution(taskId, target, ::ensureCurrent)
-                            } else {
-                                owner.components.stream.setVideoEncoderConfig(target)
-                            }
-                            ensureCurrent()
-                            direction.complete(change, true, qualityNow())
-                            qualityHistory.write(direction.downlink, change.to)
-                            XmaxLogger.realtime.debug(message = {
-                                val frameRate = if (direction.downlink) "" else ", ${target.fps} fps"
-                                "Adaptive ${if (direction.downlink) "downlink target" else "uplink"}: L${change.from} -> L${change.to}, " +
-                                    "${target.width}x${target.height}$frameRate, ${change.reason}"
-                            })
+                            applyQualityLevel(owner, direction, change, taskId, ::ensureCurrent)
                         } catch (cancelled: CancellationException) {
                             direction.resetSamples()
                             throw cancelled
                         } catch (error: Throwable) {
                             ensureCurrent()
-                            direction.complete(change, false, qualityNow())
-                            XmaxLogger.realtime.warn(message = { "Adaptive quality failed: ${ErrorMessageFormatter.format(error)}" })
+                            XmaxLogger.realtime.warn(message = { "Quality adjustment failed: ${ErrorMessageFormatter.format(error)}" })
                         }
                     }
                 }.also { applied ->
@@ -1026,23 +1176,94 @@ internal class XmaxRealtimeManager(
     }
 
     /**
+     * 应用传输规格，仅在成功后更新档位快照与历史记录。
+     *
+     * @param owner 当前实时运行实例。
+     * @param direction 需要调整的传输方向。
+     * @param change 原档位、目标档位与调档原因。
+     * @param taskId 当前生成任务标识。
+     * @param ensureCurrent 确认本次操作仍属于当前生成任务。
+     */
+    private suspend fun applyQualityLevel(
+        owner: Runtime,
+        direction: QualityController.Direction,
+        change: QualityController.Direction.Change,
+        taskId: String,
+        ensureCurrent: () -> Unit,
+    ) {
+        try {
+            ensureCurrent()
+            val target = if (direction.downlink) {
+                resolveTargetVideoFormat(direction.baseline, change.to)
+            } else {
+                QualityVideoFormat.resolve(direction.baseline, change.to, false)
+            }
+            if (direction.downlink) {
+                owner.components.stream.updateDownlinkVideoResolution(taskId, target, ensureCurrent)
+            } else {
+                if (!QualityVideoFormat.supportsEncoding(target)) throw invalid("Quality level conflicts with the configured bitrate range")
+                owner.components.stream.setVideoEncoderConfig(target)
+            }
+            ensureCurrent()
+            direction.complete(change, true, qualityNow())
+            qualityHistory.write(direction.downlink, change.to)
+            XmaxLogger.realtime.debug(message = {
+                "Quality adjustment ${if (direction.downlink) "downlink" else "uplink"}: L${change.from} -> L${change.to}, " +
+                    "${target.width}x${target.height}, ${change.reason}"
+            })
+        } catch (cancelled: CancellationException) {
+            direction.resetSamples()
+            throw cancelled
+        } catch (error: Throwable) {
+            ensureCurrent()
+            direction.complete(change, false, qualityNow())
+            throw error
+        }
+    }
+
+    /**
      * 保存一个实时管理器当前使用的媒体、连接和质量调节状态。
      */
     private class Runtime {
+
         /**
          * 当前使用的组件及配置恢复状态。
          */
         lateinit var components: RealtimeComponents
+
+        /**
+         * 音量配置是否已应用到当前运行实例。
+         */
         var audioSettingsApplied = false
+
+        /**
+         * 监听器是否已绑定到当前运行实例。
+         */
         var listenersApplied = false
 
         /**
          * 当前生成的上下行自动调档状态。
          */
         @Volatile var qualityTaskId: String? = null
+
+        /**
+         * 当前上行画质档位及调整状态。
+         */
         @Volatile var uplinkQuality: QualityController.Direction? = null
+
+        /**
+         * 当前下行画质档位及调整状态。
+         */
         @Volatile var downlinkQuality: QualityController.Direction? = null
+
+        /**
+         * 当前画质配置所属的本地轨道。
+         */
         var qualityTrack: RealtimeVideoTrack? = null
+
+        /**
+         * 是否有待应用的画质调整。
+         */
         val qualityPending = AtomicBoolean(false)
     }
 

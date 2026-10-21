@@ -1,10 +1,9 @@
 //
 //  TrajectoryBinding.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -19,14 +18,19 @@ import android.os.Looper
 
 /**
  * 将渲染层触摸输入转交给媒体交互层。
- *
- * @param interactionListener 接收触控轨迹帧的回调。
- * @param resolvedMediaSize 处理后的本地媒体尺寸，作为固定的交互坐标基准。
  */
 internal class TrajectoryBinding(
+    /**
+     * 接收触控轨迹帧的回调。
+     */
     private val interactionListener: (InteractionFrame) -> Unit,
+
+    /**
+     * 处理后的本地媒体尺寸，作为固定的交互坐标基准。
+     */
     private val resolvedMediaSize: IntSize,
 ) {
+
     /**
      * 轨迹绑定状态的并发保护。
      */
@@ -36,6 +40,10 @@ internal class TrajectoryBinding(
      * 交互覆盖层及视频坐标换算配置。
      */
     private var overlayView: TrajectoryOverlayView? = null
+
+    /**
+     * 轨迹映射所使用的视频缩放与裁剪方式。
+     */
     private var contentMode = VideoContentMode.FILL
 
     /**
@@ -44,7 +52,10 @@ internal class TrajectoryBinding(
      * @param view 需要绑定或解除绑定的显示视图。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    fun attach(view: TrajectoryOverlayView, contentMode: VideoContentMode) {
+    fun attach(
+        view: TrajectoryOverlayView,
+        contentMode: VideoContentMode
+    ) {
         synchronized(stateLock) {
             if (overlayView !== view) overlayView?.clearBinding(this)
             overlayView = view
@@ -60,7 +71,9 @@ internal class TrajectoryBinding(
      *
      * @param view 需要绑定或解除绑定的显示视图。
      */
-    fun detach(view: TrajectoryOverlayView) {
+    fun detach(
+        view: TrajectoryOverlayView
+    ) {
         val shouldDetach = synchronized(stateLock) {
             if (overlayView !== view) false else {
                 overlayView = null
@@ -84,7 +97,9 @@ internal class TrajectoryBinding(
      *
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    fun update(contentMode: VideoContentMode) {
+    fun update(
+        contentMode: VideoContentMode
+    ) {
         synchronized(stateLock) {
             this.contentMode = contentMode
             overlayView
@@ -96,7 +111,9 @@ internal class TrajectoryBinding(
      *
      * @param frame 当前触控轨迹及显示画面尺寸。
      */
-    fun submit(frame: InteractionFrame) {
+    fun submit(
+        frame: InteractionFrame
+    ) {
         interactionListener(frame)
     }
 
@@ -105,7 +122,9 @@ internal class TrajectoryBinding(
      *
      * @param action 需要执行的操作。
      */
-    private inline fun TrajectoryOverlayView.runOnMain(crossinline action: TrajectoryOverlayView.() -> Unit) {
+    private inline fun TrajectoryOverlayView.runOnMain(
+        crossinline action: TrajectoryOverlayView.() -> Unit
+    ) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             action()
         } else {
@@ -114,11 +133,12 @@ internal class TrajectoryBinding(
     }
 
     /**
-     * 提供 TrajectoryBinding 使用的构造入口、共享配置或常量。
+     * 轨迹视图更新的主线程调度入口。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 将轨迹绑定更新投递到主线程的调度器。
          */
         val MAIN_HANDLER = Handler(Looper.getMainLooper())
     }

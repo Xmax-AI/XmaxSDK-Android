@@ -1,10 +1,9 @@
 //
 //  MediaServicing.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -18,6 +17,7 @@ import androidx.compose.ui.geometry.Size
  * 定义本地媒体、模型生成画布和回传尺寸的业务规则。
  */
 public interface MediaServicing {
+
     /**
      * 当前媒体规则使用的实时生成模型。
      */
@@ -31,7 +31,10 @@ public interface MediaServicing {
      * @return 满足面积上限、比例和 4 对齐约束的媒体尺寸。
      * @throws XmaxError 尺寸无效、摄像头未匹配分辨率桶或无法形成至少 4 × 4 的输出。
      */
-    public fun resolveMediaSize(size: IntSize, source: RealtimeMediaSource): IntSize
+    public fun resolveMediaSize(
+        size: IntSize,
+        source: RealtimeMediaSource
+    ): IntSize
 
     /**
      * 为媒体选择比例最接近的模型生成画布，不改变本地媒体规格。
@@ -40,7 +43,9 @@ public interface MediaServicing {
      * @return 匹配的模型分辨率桶；无分辨率桶时返回满足模型面积范围和对齐要求的画布。
      * @throws XmaxError 媒体宽高不是正数。
      */
-    public fun resolveGenerationSize(size: IntSize): IntSize
+    public fun resolveGenerationSize(
+        size: IntSize
+    ): IntSize
 
     /**
      * 按下行宽高上限计算最终回传尺寸，不放大媒体并优先保持精确比例。
@@ -50,5 +55,8 @@ public interface MediaServicing {
      * @return 不超过上限且宽高均为 4 的倍数的回传尺寸。
      * @throws XmaxError 尺寸无效或上限内无法容纳至少 4 × 4 像素。
      */
-    public fun resolveTargetSize(sourceSize: IntSize, maximumSize: Size): IntSize
+    public fun resolveTargetSize(
+        sourceSize: IntSize,
+        maximumSize: Size
+    ): IntSize
 }

@@ -1,7 +1,7 @@
 //
 //  XmaxRealtimeManagerTest.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
+//  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
 //  GitHub: https://github.com/WengYuehTing
@@ -36,6 +36,136 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class XmaxRealtimeManagerTest {
     @Test
+    fun `quality controls reject idle and connected states without terminating media`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        assertNull(f.manager.uplinkQualityLevel)
+        assertNull(f.manager.downlinkQualityLevel)
+        val idleError = runCatching { f.manager.setUplinkQualityLevel(RealtimeQualityLevel.L1) }.exceptionOrNull()
+        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (idleError as XmaxError).code)
+        val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        f.manager.connect(local)
+        val connectedError = runCatching { f.manager.setDownlinkQualityLevel(RealtimeQualityLevel.L1) }.exceptionOrNull()
+        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (connectedError as XmaxError).code)
+        assertEquals(RealtimeConnectionState.CONNECTED, f.manager.currentState.connectionState)
+        assertTrue(f.session.closed.isEmpty())
+        f.manager.close()
+        assertNull(f.manager.uplinkQualityLevel)
+        assertNull(f.manager.downlinkQualityLevel)
+    }
+
+    @Test
+    fun `manual quality changes preserve media task and independent direction history`() = runTest {
+        val history = QualityHistory(now = { 1000L })
+        val f = Fixture(StandardTestDispatcher(testScheduler), qualityHistory = history)
+        val input = RealtimeVideoFormat(1080, 1920, 30)
+        val local = f.manager.createLocalCameraStream(input, CameraPosition.FRONT)
+        f.stream.confirmation.complete(Unit)
+        f.manager.startGeneration(local, RealtimeContext("first"))
+        val taskId = f.manager.currentState.taskId
+        assertEquals(RealtimeQualityLevel.L2, f.manager.uplinkQualityLevel)
+        assertEquals(RealtimeQualityLevel.L2, f.manager.downlinkQualityLevel)
+        f.manager.setUplinkQualityLevel(RealtimeQualityLevel.L5)
+        assertEquals(RealtimeVideoFormat(540, 960, 16), f.stream.encoderFormats.last())
+        assertEquals(RealtimeQualityLevel.L5, f.manager.uplinkQualityLevel)
+        assertEquals(RealtimeQualityLevel.L2, f.manager.downlinkQualityLevel)
+        f.manager.setDownlinkQualityLevel(RealtimeQualityLevel.L1)
+        assertEquals(RealtimeVideoFormat(1080, 1920, 24), f.stream.downlinkUpdates.single())
+        assertEquals(RealtimeQualityLevel.L1, f.manager.downlinkQualityLevel)
+        assertEquals(input, local.videoTrack?.videoFormat)
+        assertEquals(taskId, f.manager.currentState.taskId)
+        assertEquals(1, f.stream.startedFormats.size)
+        assertEquals(5, history.read(false))
+        assertEquals(1, history.read(true))
+        assertTrue(f.session.closed.isEmpty())
+        f.manager.disconnect()
+        assertNull(f.manager.uplinkQualityLevel)
+        assertNull(f.manager.downlinkQualityLevel)
+        f.manager.startGeneration(local, RealtimeContext("again"))
+        assertEquals(RealtimeQualityLevel.L5, f.manager.uplinkQualityLevel)
+        assertEquals(RealtimeQualityLevel.L1, f.manager.downlinkQualityLevel)
+        f.manager.close()
+    }
+
+    @Test
+    fun `failed manual adjustments do not publish new levels or history`() = runTest {
+        val history = QualityHistory(now = { 1000L })
+        val f = Fixture(StandardTestDispatcher(testScheduler), qualityHistory = history)
+        val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        f.stream.confirmation.complete(Unit)
+        f.manager.startGeneration(local, RealtimeContext("first"))
+        f.stream.encoderError = IllegalStateException("encoder failed")
+        assertTrue(runCatching { f.manager.setUplinkQualityLevel(RealtimeQualityLevel.L3) }.isFailure)
+        f.stream.downlinkError = IllegalStateException("signal failed")
+        assertTrue(runCatching { f.manager.setDownlinkQualityLevel(RealtimeQualityLevel.L3) }.isFailure)
+        assertEquals(RealtimeQualityLevel.L2, f.manager.uplinkQualityLevel)
+        assertEquals(RealtimeQualityLevel.L2, f.manager.downlinkQualityLevel)
+        assertEquals(2, history.read(false))
+        assertEquals(2, history.read(true))
+        assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
+        assertTrue(f.session.closed.isEmpty())
+        f.manager.close()
+    }
+
+    @Test
+    fun `disconnect cancels manual signal before committing tier and rejects overlapping adjustment`() = runTest {
+        val history = QualityHistory(now = { 1000L })
+        val f = Fixture(StandardTestDispatcher(testScheduler), qualityHistory = history)
+        val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        f.stream.confirmation.complete(Unit)
+        f.manager.startGeneration(local, RealtimeContext("first"))
+        f.stream.downlinkBarrier = CompletableDeferred()
+        val adjustment = async { runCatching { f.manager.setDownlinkQualityLevel(RealtimeQualityLevel.L3) } }
+        runCurrent()
+        assertEquals(RealtimeQualityLevel.L2, f.manager.downlinkQualityLevel)
+        assertTrue(runCatching { f.manager.setUplinkQualityLevel(RealtimeQualityLevel.L3) }.isFailure)
+        assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
+        f.manager.disconnect()
+        assertTrue(adjustment.await().exceptionOrNull() is CancellationException)
+        f.stream.downlinkBarrier?.complete(Unit)
+        runCurrent()
+        assertTrue(f.stream.downlinkUpdates.isEmpty())
+        assertEquals(2, history.read(true))
+        assertNull(f.manager.downlinkQualityLevel)
+        assertNull(f.manager.uplinkQualityLevel)
+        f.manager.close()
+    }
+
+    @Test
+    fun `manual quality choice does not disable later automatic changes`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler), qualityNow = { testScheduler.currentTime })
+        val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        f.stream.confirmation.complete(Unit)
+        f.manager.startGeneration(local, RealtimeContext("first"))
+        f.manager.setUplinkQualityLevel(RealtimeQualityLevel.L1)
+        f.manager.setDownlinkQualityLevel(RealtimeQualityLevel.L1)
+        advanceTimeBy(4000)
+        repeat(3) {
+            f.stream.adaptiveListener?.invoke(RealtimeNetworkQuality(RealtimeNetworkQualityLevel.BAD, RealtimeNetworkQualityLevel.BAD))
+            runCurrent()
+            advanceTimeBy(1000)
+        }
+        assertEquals(RealtimeQualityLevel.L2, f.manager.uplinkQualityLevel)
+        assertEquals(RealtimeQualityLevel.L2, f.manager.downlinkQualityLevel)
+        f.manager.close()
+    }
+
+    @Test
+    fun `network video supports manual downlink but has no local uplink quality`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        f.media.networkVideoReference = RealtimeReferenceVideo("https://example.test/video.mp4")
+        f.stream.confirmation.complete(Unit)
+        f.manager.startGeneration(local, RealtimeContext("first"))
+        assertNull(f.manager.uplinkQualityLevel)
+        assertTrue(runCatching { f.manager.setUplinkQualityLevel(RealtimeQualityLevel.L1) }.isFailure)
+        f.manager.setDownlinkQualityLevel(RealtimeQualityLevel.L5)
+        assertEquals(RealtimeQualityLevel.L5, f.manager.downlinkQualityLevel)
+        assertTrue(f.stream.encoderFormats.isEmpty())
+        assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
+        f.manager.close()
+    }
+
+    @Test
     fun `local image and video keep input baseline while generation uses a separate model canvas`() = runTest {
         val cases = listOf(RealtimeVideoFormat(1280, 720, 24), RealtimeVideoFormat(720, 1280, 30))
             .flatMap { input -> listOf(input to true, input to false) }
@@ -48,7 +178,7 @@ class XmaxRealtimeManagerTest {
             f.stream.confirmation.complete(Unit)
             f.manager.startGeneration(local, RealtimeContext("first"))
             val taskId = f.manager.currentState.taskId
-            val canvas = if (input.width > input.height) input.copy(width = 1920, height = 1024) else input.copy(width = 1024, height = 1920)
+            val canvas = if (input.width > input.height) input.copy(width = 1920, height = 1080) else input.copy(width = 1080, height = 1920)
             val l2 = if (input.width > input.height) RealtimeVideoFormat(1024, 576, 24) else RealtimeVideoFormat(576, 1024, 24)
             assertEquals(input, local.videoTrack?.videoFormat)
             assertEquals(canvas, f.stream.startedFormats.single())
@@ -1531,6 +1661,7 @@ private class MediaStub : MediaControlling {
     override fun submitInteraction(frame: InteractionFrame) = Unit
 }
 private class StreamStub : StreamControlling {
+    var encoderError: Throwable? = null
     val startedPadding = mutableListOf<Boolean>()
     val updatedPadding = mutableListOf<Boolean>()
     val updatedFormats = mutableListOf<RealtimeVideoFormat>()
@@ -1559,7 +1690,10 @@ private class StreamStub : StreamControlling {
     var registeredPerformanceAlarmListener: RealtimePerformanceAlarmListener? = null
     var registeredUplinkStatisticsListener: UplinkVideoStatisticsListener? = null
     var registeredDownlinkStatisticsListener: DownlinkVideoStatisticsListener? = null
-    override fun setVideoEncoderConfig(videoFormat: RealtimeVideoFormat) { encoderFormats += videoFormat }
+    override fun setVideoEncoderConfig(videoFormat: RealtimeVideoFormat) {
+        encoderError?.let { throw it }
+        encoderFormats += videoFormat
+    }
     override fun setAdaptiveQualityListener(listener: ((RealtimeNetworkQuality) -> Unit)?) { adaptiveListener = listener }
     override fun setUplinkVideoStatisticsListener(listener: UplinkVideoStatisticsListener?) {
         registeredUplinkStatisticsListener = listener

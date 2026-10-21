@@ -1,10 +1,9 @@
 //
 //  QualityHistory.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -15,16 +14,24 @@ import android.content.Context
 
 /**
  * 按 RTC 厂商、模型及方向保存一小时内成功提交的档位；无有效记录时使用 L2。
- *
- * @param readValue 根据方向键读取历史档位的函数。
- * @param writeValue 保存方向键对应的历史档位和时间的函数。
- * @param now 返回 Unix 毫秒时间的函数，用于判断历史记录是否过期。
  */
 internal class QualityHistory(
+    /**
+     * 根据方向键读取历史档位的函数。
+     */
     private val readValue: (String) -> Entry? = { null },
+
+    /**
+     * 保存方向键对应的历史档位和时间的函数。
+     */
     private val writeValue: (String, Entry) -> Unit = { _, _ -> },
+
+    /**
+     * 返回 Unix 毫秒时间的函数，用于判断历史记录是否过期。
+     */
     private val now: () -> Long = System::currentTimeMillis,
 ) {
+
     /**
      * 按上下行方向保存的历史档位缓存。
      */
@@ -37,7 +44,9 @@ internal class QualityHistory(
      * @return 有效历史档位；记录缺失或过期时为 L2。
      */
     @Synchronized
-    fun read(downlink: Boolean): Int {
+    fun read(
+        downlink: Boolean
+    ): Int {
         val key = if (downlink) "downlink" else "uplink"
         val entry = values[key] ?: runCatching { readValue(key) }.getOrNull() ?: return QualityTiers.INITIAL_LEVEL
         val currentTime = now()
@@ -55,7 +64,10 @@ internal class QualityHistory(
      * @param level 需要应用或保存的质量档位，1 为最高档。
      */
     @Synchronized
-    fun write(downlink: Boolean, level: Int) {
+    fun write(
+        downlink: Boolean,
+        level: Int
+    ) {
         if (level !in 1..QualityTiers.percentages.size) return
         val key = if (downlink) "downlink" else "uplink"
         val entry = Entry(level, now())
@@ -65,18 +77,26 @@ internal class QualityHistory(
 
     /**
      * 历史档位及其保存时间，时间单位为 Unix 毫秒。
-     *
-     * @param level 需要应用或保存的质量档位，1 为最高档。
-     * @param savedAt 成功保存档位时的 Unix 毫秒时间。
      */
-    data class Entry(val level: Int, val savedAt: Long)
+    data class Entry(
+        /**
+         * 需要应用或保存的质量档位，1 为最高档。
+         */
+        val level: Int,
+
+        /**
+         * 成功保存档位时的 Unix 毫秒时间。
+         */
+        val savedAt: Long
+    )
 
     /**
-     * 提供 QualityHistory 使用的构造入口、共享配置或常量。
+     * 历史画质档位的存储入口与有效期。
      */
     companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 历史画质档位的最长保留时间，单位为毫秒。
          */
         private const val EXPIRATION_MILLIS = 60 * 60 * 1000L
 
@@ -87,7 +107,10 @@ internal class QualityHistory(
          * @param model 用于确定服务端能力、地址及输入规格的模型。
          * @return 按模型和上下行方向隔离的历史档位存储。
          */
-        fun create(context: Context, model: String): QualityHistory = runCatching {
+        fun create(
+            context: Context,
+            model: String
+        ): QualityHistory = runCatching {
             val preferences = context.applicationContext.getSharedPreferences("xmax_quality_v1", Context.MODE_PRIVATE)
             val prefix = "agora:$model:"
             QualityHistory(

@@ -1,10 +1,9 @@
 //
 //  RoomController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -32,18 +31,27 @@ import org.json.JSONObject
 
 /**
  * 管理 RTC 房间生命周期、心跳和实时生成信令。
- *
- * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
- * @param heartbeat 维持 RTC 房间活跃状态的心跳组件。
  */
 internal class RoomController(
+    /**
+     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     */
     private val rtcManager: RtcManaging,
+
+    /**
+     * 维持 RTC 房间活跃状态的心跳组件。
+     */
     private val heartbeat: RoomHeartbeat = RoomHeartbeat(rtcManager),
 ) : RoomControlling {
+
     /**
      * 房间状态及离房操作的并发保护。
      */
     private val stateLock = Any()
+
+    /**
+     * 串行执行退房操作的互斥锁。
+     */
     private val leaveMutex = Mutex()
 
     /**
@@ -189,7 +197,11 @@ internal class RoomController(
      * @param targetVideoFormat 下行输出的视频规格。
      * @param ensureActive 检查当前操作是否仍可继续的函数，取消时应抛出异常。
      */
-    override fun changeTargetSize(taskId: String, targetVideoFormat: RealtimeVideoFormat, ensureActive: () -> Unit) {
+    override fun changeTargetSize(
+        taskId: String,
+        targetVideoFormat: RealtimeVideoFormat,
+        ensureActive: () -> Unit
+    ) {
         ensureActive()
         if (taskId.isBlank()) {
             throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Realtime generation task ID cannot be empty")
@@ -207,7 +219,9 @@ internal class RoomController(
      * @param videoFormat 视频尺寸、帧率及上行编码参数。
      * @return 最低与最高下行编码码率，单位为 kbps。
      */
-    private fun downlinkBitrates(videoFormat: RealtimeVideoFormat): Pair<Int, Int> {
+    private fun downlinkBitrates(
+        videoFormat: RealtimeVideoFormat
+    ): Pair<Int, Int> {
         val (_, maximum) = EncodingBitratePolicy.resolve(videoFormat.width, videoFormat.height, fps = 24)
         return 100 to maximum.coerceIn(100, 10_000)
     }
@@ -246,7 +260,9 @@ internal class RoomController(
      *
      * @param taskId 用于关联本次生成请求和结果流的任务标识。
      */
-    override fun stopGeneration(taskId: String) {
+    override fun stopGeneration(
+        taskId: String
+    ) {
         val userId = synchronized(stateLock) {
             if (taskId.isEmpty()) return
             (state as? State.Joined)?.userId ?: return
@@ -282,7 +298,11 @@ internal class RoomController(
      * @param replacingPendingMessage 合并键；同键且尚未发送的信令仅保留最新内容。
      * @param discardPending 是否先清理尚未发送的轨迹。
      */
-    private fun send(message: String, replacingPendingMessage: String? = null, discardPending: Boolean = false) {
+    private fun send(
+        message: String,
+        replacingPendingMessage: String? = null,
+        discardPending: Boolean = false
+    ) {
         if (discardPending) rtcManager.discardPendingMessages()
         rtcManager.sendRoomMessage(message, replacingPendingMessage)
         XmaxLogger.room.debug(
@@ -296,7 +316,9 @@ internal class RoomController(
      * @param message 待发送或记录的消息文本。
      * @return 用于日志输出的格式化信令文本。
      */
-    internal fun formatSignalLog(message: String): String = try {
+    internal fun formatSignalLog(
+        message: String
+    ): String = try {
         val event = JSONObject(message)
         val eventType = event.optString("event", "unknown")
         val formattedMessage = event.toString(2).replace("\n", "\n   ")
@@ -325,6 +347,7 @@ internal class RoomController(
      * 保存控制器当前的生命周期或发布订阅状态。
      */
     private sealed interface State {
+
         /**
          * 表示当前未加入 RTC 房间。
          */
@@ -332,17 +355,23 @@ internal class RoomController(
 
         /**
          * 表示当前正在等待指定进房操作完成。
-         *
-         * @param id 用于区分当前对象或操作的唯一标识。
          */
-        data class Joining(val id: UUID) : State
+        data class Joining(
+            /**
+             * 当前入房操作的标识，用于隔离旧请求结果。
+             */
+            val id: UUID
+        ) : State
 
         /**
          * 表示当前已加入房间并可以发送业务信令。
-         *
-         * @param userId 房间中的业务用户标识。
          */
-        data class Joined(val userId: String) : State
+        data class Joined(
+            /**
+             * 房间中的业务用户标识。
+             */
+            val userId: String
+        ) : State
 
         /**
          * 表示正在释放 RTC 房间资源。

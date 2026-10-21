@@ -1,10 +1,9 @@
 //
 //  DefaultTrajectoryEffectRenderer.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -33,8 +32,11 @@ import kotlin.math.sin
  *
  * @param context Android 上下文；视图应使用具备当前界面主题的 Context。
  */
-public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
+public class DefaultTrajectoryEffectRenderer(
+    context: Context
+) : View(context),
     TrajectoryEffectRendering {
+
     /**
      * 提供给交互覆盖层的效果视图。
      */
@@ -50,14 +52,30 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      * 轨迹绘制所需的画笔与混合模式。
      */
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    /**
+     * 叠加轨迹光效时使用的颜色混合模式。
+     */
     private val additiveXfermode = PorterDuffXfermode(PorterDuff.Mode.ADD)
 
     /**
      * 拖尾绘制缓冲及淡出状态。
      */
     private var trailBitmap: Bitmap? = null
+
+    /**
+     * 绘制轨迹残影的离屏画布。
+     */
     private var trailCanvas: Canvas? = null
+
+    /**
+     * 残影缓冲区是否仍有可见内容。
+     */
     private var hasTrailPixels = false
+
+    /**
+     * 停止移动后已执行的残影衰减帧数。
+     */
     private var idleFadeFrameCount = 0
 
     init {
@@ -71,7 +89,9 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      *
      * @param points 包含位置和时间戳的触控轨迹点。
      */
-    override fun renderBegan(points: List<TrajectoryPoint>) {
+    override fun renderBegan(
+        points: List<TrajectoryPoint>
+    ) {
         points.forEach { point ->
             activeTrajectories[point.id] = ActiveTrajectory(
                 location = PointF(point.location.x, point.location.y),
@@ -86,7 +106,9 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      *
      * @param points 包含位置和时间戳的触控轨迹点。
      */
-    override fun renderMoved(points: List<TrajectoryPoint>) {
+    override fun renderMoved(
+        points: List<TrajectoryPoint>
+    ) {
         points.forEach { point ->
             val trajectory = activeTrajectories[point.id]
             if (trajectory == null) {
@@ -109,7 +131,9 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      *
      * @param identifiers 需要结束的轨迹标识集合。
      */
-    override fun renderEnded(identifiers: List<TrajectoryID>) {
+    override fun renderEnded(
+        identifiers: List<TrajectoryID>
+    ) {
         identifiers.forEach(activeTrajectories::remove)
         invalidate()
     }
@@ -131,7 +155,12 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      * @param oldWidth 视图变化前的宽度，单位为像素。
      * @param oldHeight 视图变化前的高度，单位为像素。
      */
-    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+    override fun onSizeChanged(
+        width: Int,
+        height: Int,
+        oldWidth: Int,
+        oldHeight: Int
+    ) {
         super.onSizeChanged(width, height, oldWidth, oldHeight)
         rebuildTrailBitmap(width, height)
     }
@@ -160,7 +189,9 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      *
      * @param canvas 用于绘制当前视图的画布。
      */
-    override fun onDraw(canvas: Canvas) {
+    override fun onDraw(
+        canvas: Canvas
+    ) {
         super.onDraw(canvas)
         fadeTrailBitmap()
         trailBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
@@ -183,7 +214,10 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      * @param width 画面宽度，单位为像素。
      * @param height 画面高度，单位为像素。
      */
-    private fun rebuildTrailBitmap(width: Int, height: Int) {
+    private fun rebuildTrailBitmap(
+        width: Int,
+        height: Int
+    ) {
         trailBitmap?.recycle()
         trailBitmap = null
         trailCanvas = null
@@ -202,7 +236,10 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      * @param start 线段起点，使用视图像素坐标。
      * @param end 线段终点，使用视图像素坐标。
      */
-    private fun drawTrailSegment(start: PointF, end: PointF) {
+    private fun drawTrailSegment(
+        start: PointF,
+        end: PointF
+    ) {
         val canvas = trailCanvas ?: return
         drawLine(canvas, start, end, dp(18f), GLOW_COLOR, 0.22f, dp(12f))
         drawLine(canvas, start, end, dp(10f), GLOW_COLOR, 0.52f, dp(6f))
@@ -329,7 +366,10 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      * @param canvas 用于绘制当前视图的画布。
      * @param location 触点在视图中的位置，单位为像素。
      */
-    private fun drawHeadGlow(canvas: Canvas, location: PointF) {
+    private fun drawHeadGlow(
+        canvas: Canvas,
+        location: PointF
+    ) {
         drawRadialGlow(canvas, location.x, location.y, dp(16f), GLOW_COLOR, 0.9f)
         paint.reset()
         paint.isAntiAlias = true
@@ -385,30 +425,53 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
      * @param value 需要转换的密度无关像素数。
      * @return 转换后的像素数。
      */
-    private fun dp(value: Float): Float = value * resources.displayMetrics.density
+    private fun dp(
+        value: Float
+    ): Float = value * resources.displayMetrics.density
 
     /**
      * 保存活动轨迹的位置和动画起始时间。
-     *
-     * @param location 触点在视图中的位置，单位为像素。
-     * @param startTime 轨迹开始时的单调时钟秒数。
      */
     private data class ActiveTrajectory(
+        /**
+         * 触点在视图中的位置，单位为像素。
+         */
         var location: PointF,
+
+        /**
+         * 轨迹开始时的单调时钟秒数。
+         */
         val startTime: Double,
     )
 
     /**
-     * 提供 DefaultTrajectoryEffectRenderer 使用的构造入口、共享配置或常量。
+     * 轨迹光效的颜色、采样与残影衰减配置。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 轨迹光效的基础颜色。
          */
         const val GLOW_COLOR: Int = -16_711_836
+
+        /**
+         * 触发轨迹移动的最小距离平方，单位为平方像素。
+         */
         const val MINIMUM_MOVE_SQUARED = 0.25f
+
+        /**
+         * 停止移动后最多执行的残影衰减帧数。
+         */
         const val IDLE_FADE_FRAME_LIMIT = 64
+
+        /**
+         * 秒换算为纳秒的倍率。
+         */
         const val NANOS_PER_SECOND = 1_000_000_000.0
+
+        /**
+         * 每帧衰减轨迹残影时覆盖的半透明颜色。
+         */
         val FADE_COLOR: Int = Color.argb((0.05f * 255f).toInt(), 0, 0, 0)
 
         /**
@@ -418,7 +481,10 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
          * @param second 第二个坐标点。
          * @return 两点距离的平方，单位为平方像素。
          */
-        fun distanceSquared(first: PointF, second: PointF): Float {
+        fun distanceSquared(
+            first: PointF,
+            second: PointF
+        ): Float {
             val dx = second.x - first.x
             val dy = second.y - first.y
             return dx * dx + dy * dy
@@ -431,7 +497,10 @@ public class DefaultTrajectoryEffectRenderer(context: Context) : View(context),
          * @param alpha 不透明度，范围为 0 到 1。
          * @return 应用透明度后的 ARGB 颜色值。
          */
-        fun colorWithAlpha(color: Int, alpha: Float): Int {
+        fun colorWithAlpha(
+            color: Int,
+            alpha: Float
+        ): Int {
             return Color.argb(
                 (alpha.coerceIn(0f, 1f) * 255f).toInt(),
                 Color.red(color),

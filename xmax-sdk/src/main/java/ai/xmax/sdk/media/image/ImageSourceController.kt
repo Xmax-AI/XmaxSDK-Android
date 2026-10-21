@@ -1,10 +1,9 @@
 //
 //  ImageSourceController.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -39,26 +38,46 @@ import kotlinx.coroutines.withContext
 
 /**
  * 将本地图片处理为目标尺寸，并按固定帧率持续输出视频帧。
- *
- * @param imageManager 负责图片解码和方向处理的组件。
- * @param mediaService 解析媒体尺寸及模型输入规则的服务。
- * @param frameListener 接收本地视频帧的监听器。
- * @param errorListener 接收媒体错误的回调。
- * @param uriDataLoader 从有读取权限的 URI 加载字节的函数。
- * @param timestampUsProvider 提供单调时钟微秒时间戳的函数。
- * @param outputScope 持续输出媒体帧的协程作用域。
  */
 internal class ImageSourceController(
+    /**
+     * 负责图片解码和方向处理的组件。
+     */
     private val imageManager: ImageManaging,
+
+    /**
+     * 解析媒体尺寸及模型输入规则的服务。
+     */
     private val mediaService: MediaServicing,
+
+    /**
+     * 接收本地视频帧的监听器。
+     */
     private val frameListener: MediaVideoFrameListener,
+
+    /**
+     * 接收媒体错误的回调。
+     */
     private val errorListener: (XmaxError) -> Unit,
+
+    /**
+     * 从有读取权限的 URI 加载字节的函数。
+     */
     private val uriDataLoader: suspend (Uri) -> ByteArray,
+
+    /**
+     * 提供单调时钟微秒时间戳的函数。
+     */
     private val timestampUsProvider: () -> Long = {
         (SystemClock.elapsedRealtimeNanos() / 1_000L).coerceAtLeast(0L)
     },
+
+    /**
+     * 持续输出媒体帧的协程作用域。
+     */
     private val outputScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : ImageSourceControlling {
+
     /**
      * 图片输入状态的并发保护。
      */
@@ -68,7 +87,15 @@ internal class ImageSourceController(
      * 已准备图片及持续供帧任务。
      */
     private var preparedSource: Pair<RealtimeVideoFormat, VideoFrame>? = null
+
+    /**
+     * 定时输出图片视频帧的协程。
+     */
     private var outputJob: Job? = null
+
+    /**
+     * 图片视频帧输出是否正在运行。
+     */
     private var isRunning = false
 
     /**
@@ -254,14 +281,17 @@ internal class ImageSourceController(
      *
      * @param frame 待处理、显示或提交的视频帧。
      */
-    private fun emitFrame(frame: VideoFrame) {
+    private fun emitFrame(
+        frame: VideoFrame
+    ) {
         frameListener(frame.updating(timestampUsProvider()))
     }
 
     /**
-     * 提供 ImageSourceController 使用的构造入口、共享配置或常量。
+     * 本地图片内容的读取入口。
      */
     private companion object {
+
         /**
          * 读取应用有权限访问的 URI 内容。
          *
@@ -269,7 +299,10 @@ internal class ImageSourceController(
          * @param uri 应用有读取权限的媒体地址。
          * @return 有效数据对应的字节数组。
          */
-        suspend fun readUriBytes(context: Context, uri: Uri): ByteArray =
+        suspend fun readUriBytes(
+            context: Context,
+            uri: Uri
+        ): ByteArray =
             withContext(Dispatchers.IO) {
                 context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: throw XmaxError(

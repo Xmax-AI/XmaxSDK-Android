@@ -141,4 +141,5 @@
     <string name="realtime_prompt_reference_delete">删除自定义模式参考图</string>
     <string name="realtime_prompt_reference_add">添加自定义模式参考图</string>
     <string name="realtime_prompt_submit">提交自定义模式描述</string>
+    <string name="statistics_level_hint">手动调整后仍会根据网络状况自动调档。</string>
 </resources>

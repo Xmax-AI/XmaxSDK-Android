@@ -1,10 +1,9 @@
 //
 //  StreamControlling.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -28,54 +27,69 @@ import kotlinx.coroutines.Deferred
  * 定义传输层向 Core 暴露的统一能力。
  */
 internal interface StreamControlling {
+
     /**
      * 接收自动调档使用的网络质量样本，不占用公共监听器。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setAdaptiveQualityListener(listener: ((RealtimeNetworkQuality) -> Unit)?)
+    fun setAdaptiveQualityListener(
+        listener: ((RealtimeNetworkQuality) -> Unit)?
+    )
 
     /**
      * 设置上行视频统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setUplinkVideoStatisticsListener(listener: UplinkVideoStatisticsListener?)
+    fun setUplinkVideoStatisticsListener(
+        listener: UplinkVideoStatisticsListener?
+    )
 
     /**
      * 设置下行结果流统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setDownlinkVideoStatisticsListener(listener: DownlinkVideoStatisticsListener?)
+    fun setDownlinkVideoStatisticsListener(
+        listener: DownlinkVideoStatisticsListener?
+    )
 
     /**
      * 更新上行视频的尺寸、帧率和编码码率配置。
      *
      * @param videoFormat 视频尺寸、帧率及上行编码参数。
      */
-    fun setVideoEncoderConfig(videoFormat: RealtimeVideoFormat)
+    fun setVideoEncoderConfig(
+        videoFormat: RealtimeVideoFormat
+    )
 
     /**
      * 设置 RTC 网络质量监听器；传 null 注销。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setNetworkQualityListener(listener: RealtimeNetworkQualityListener?)
+    fun setNetworkQualityListener(
+        listener: RealtimeNetworkQualityListener?
+    )
 
     /**
      * 设置 RTC 性能告警监听器；传 null 注销。
      *
      * @param listener 接收对应事件的监听器；null 表示注销。
      */
-    fun setPerformanceAlarmListener(listener: RealtimePerformanceAlarmListener?)
+    fun setPerformanceAlarmListener(
+        listener: RealtimePerformanceAlarmListener?
+    )
 
     /**
      * 设置当前结果流的音频播放音量，范围为 0 到 1，并保留供后续订阅使用。
      *
      * @param volume 播放音量，范围为 0 到 1。
      */
-    fun setRemoteAudioVolume(volume: Float)
+    fun setRemoteAudioVolume(
+        volume: Float
+    )
 
     /**
      * 加入 RTC 房间，按输入来源发布本地媒体并启用对应上行统计。
@@ -102,14 +116,18 @@ internal interface StreamControlling {
      *
      * @param frame 待处理、显示或提交的视频帧。
      */
-    fun pushLocalVideoFrame(frame: VideoFrame)
+    fun pushLocalVideoFrame(
+        frame: VideoFrame
+    )
 
     /**
      * 在本地音频已发布时向 RTC 提交音频帧。
      *
      * @param frame 待播放或提交的 PCM 音频帧。
      */
-    fun pushLocalAudioFrame(frame: AudioFrame)
+    fun pushLocalAudioFrame(
+        frame: AudioFrame
+    )
 
     /**
      * 启动生成并等待结果流确认；回传规格缺省时沿用生成规格，上传码率字段不影响下行。
@@ -149,7 +167,9 @@ internal interface StreamControlling {
      *
      * @param onFinish 网络视频任务完成的通知；null 表示不接收完成通知。
      */
-    fun activateNetworkVideoCompletion(onFinish: (() -> Unit)?)
+    fun activateNetworkVideoCompletion(
+        onFinish: (() -> Unit)?
+    )
 
     /**
      * 订阅当前结果流的音频并应用远端播放音量。
@@ -178,7 +198,9 @@ internal interface StreamControlling {
      *
      * @param taskId 用于关联本次生成请求和结果流的任务标识。
      */
-    suspend fun stopGeneration(taskId: String)
+    suspend fun stopGeneration(
+        taskId: String
+    )
 
     /**
      * 向服务端发送当前任务的媒体归一化坐标轨迹。
@@ -186,5 +208,8 @@ internal interface StreamControlling {
      * @param taskId 用于关联本次生成请求和结果流的任务标识。
      * @param points 媒体归一化坐标中的轨迹点集合，范围为 [0, 1]。
      */
-    suspend fun sendTracks(taskId: String, points: List<RealtimePoint>)
+    suspend fun sendTracks(
+        taskId: String,
+        points: List<RealtimePoint>
+    )
 }

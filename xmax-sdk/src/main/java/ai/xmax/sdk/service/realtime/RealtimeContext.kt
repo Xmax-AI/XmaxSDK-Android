@@ -1,10 +1,9 @@
 //
 //  RealtimeContext.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -16,17 +15,25 @@ package ai.xmax.sdk
  *
  * @param prompt 描述期望生成内容的提示词。
  * @param referencePath 参考图片的可访问地址；null 表示不使用参考图片。
- * @param referenceVideo 由服务端读取的网络视频及采样配置；null 表示不使用网络视频。
  */
 public class RealtimeContext(
     prompt: String,
     referencePath: String? = null,
+
+    /**
+     * 由服务端读取的网络视频及采样配置；null 表示不使用网络视频。
+     */
     public val referenceVideo: RealtimeReferenceVideo? = null,
 ) {
+
     /**
      * 文本提示词与参考图片配置。
      */
     public val prompt: String = prompt.trim()
+
+    /**
+     * 去除首尾空白后的参考图片地址；空字符串按未设置处理。
+     */
     public val referencePath: String? = referencePath
         ?.trim()
         ?.takeIf(String::isNotEmpty)
@@ -72,7 +79,9 @@ public class RealtimeContext(
      * @param other 用于比较或组合的另一个对象。
      * @return 对象的内容相等时为 true，否则为 false。
      */
-    override fun equals(other: Any?): Boolean = other is RealtimeContext &&
+    override fun equals(
+        other: Any?
+    ): Boolean = other is RealtimeContext &&
         prompt == other.prompt &&
         referencePath == other.referencePath && referenceVideo == other.referenceVideo
 

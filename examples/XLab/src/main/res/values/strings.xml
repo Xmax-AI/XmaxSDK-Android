@@ -141,4 +141,5 @@
     <string name="realtime_prompt_reference_delete">Remove custom-mode reference image</string>
     <string name="realtime_prompt_reference_add">Add a custom-mode reference image</string>
     <string name="realtime_prompt_submit">Submit custom prompt</string>
+    <string name="statistics_level_hint">Manual changes do not disable automatic quality adjustment.</string>
 </resources>

@@ -1,10 +1,9 @@
 //
 //  TrajectoryOverlayView.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -33,26 +32,53 @@ import android.widget.FrameLayout
  *
  * @param context Android 上下文；视图应使用具备当前界面主题的 Context。
  */
-internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
+internal class TrajectoryOverlayView(
+    context: Context
+) : FrameLayout(context) {
+
     /**
      * 当前触点、轨道绑定、显示模式及固定媒体尺寸。
      */
     private val activeTouches = mutableMapOf<Int, ActiveTouch>()
+
+    /**
+     * 当前轨迹提交与坐标映射的绑定。
+     */
     private var binding: TrajectoryBinding? = null
+
+    /**
+     * 底层视频画面的缩放与裁剪方式。
+     */
     private var videoContentMode = VideoContentMode.FILL
+
+    /**
+     * 归一化轨迹坐标使用的媒体输入尺寸。
+     */
     private var resolvedMediaSize: IntSize? = null
 
     /**
      * 轨迹效果与接入方交互开关。
      */
     private var renderer: TrajectoryEffectRendering = DefaultTrajectoryEffectRenderer(context)
+
+    /**
+     * 接入方指定的轨迹交互开关。
+     */
     private var requestedInteractionEnabled = true
 
     /**
      * 触控采样节奏及屏幕刷新回调。
      */
     private var lastSampleNanos = 0L
+
+    /**
+     * 是否已安排下一次屏幕刷新回调。
+     */
     private var frameCallbackPosted = false
+
+    /**
+     * 在屏幕刷新时提交轨迹并更新轨迹效果。
+     */
     private val frameCallback = Choreographer.FrameCallback { frameTimeNanos ->
         frameCallbackPosted = false
         submitIfNeeded(frameTimeNanos)
@@ -71,7 +97,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      *
      * @param renderer 绘制触控轨迹效果的组件。
      */
-    fun setRenderer(renderer: TrajectoryEffectRendering) {
+    fun setRenderer(
+        renderer: TrajectoryEffectRendering
+    ) {
         cancelInteraction()
         this.renderer.reset()
         removeView(this.renderer.view)
@@ -84,7 +112,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      *
      * @param binding 视频轨道对应的显示或交互绑定。
      */
-    fun setBinding(binding: TrajectoryBinding?) {
+    fun setBinding(
+        binding: TrajectoryBinding?
+    ) {
         this.binding = binding
         if (binding == null) cancelInteraction()
         updateInteractionState()
@@ -95,7 +125,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      *
      * @param expected 预期仍在使用的绑定，避免解除后来替换的新绑定。
      */
-    fun clearBinding(expected: TrajectoryBinding) {
+    fun clearBinding(
+        expected: TrajectoryBinding
+    ) {
         if (binding === expected) setBinding(null)
     }
 
@@ -104,7 +136,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      *
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    fun setContentMode(contentMode: VideoContentMode) {
+    fun setContentMode(
+        contentMode: VideoContentMode
+    ) {
         if (videoContentMode == contentMode) return
         videoContentMode = contentMode
         cancelInteraction()
@@ -116,7 +150,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      *
      * @param resolvedMediaSize 处理后的本地媒体尺寸；未知时为 null。
      */
-    fun setResolvedMediaSize(resolvedMediaSize: IntSize?) {
+    fun setResolvedMediaSize(
+        resolvedMediaSize: IntSize?
+    ) {
         if (this.resolvedMediaSize == resolvedMediaSize) return
         this.resolvedMediaSize = resolvedMediaSize
         cancelInteraction()
@@ -128,7 +164,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      *
      * @param enabled 是否启用对应能力。
      */
-    fun setRequestedInteractionEnabled(enabled: Boolean) {
+    fun setRequestedInteractionEnabled(
+        enabled: Boolean
+    ) {
         if (requestedInteractionEnabled == enabled) return
         requestedInteractionEnabled = enabled
         if (!enabled) cancelInteraction()
@@ -141,7 +179,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      * @param event Android 触摸事件。
      * @return 触摸事件已由该视图处理时为 true。
      */
-    override fun onTouchEvent(event: MotionEvent): Boolean {
+    override fun onTouchEvent(
+        event: MotionEvent
+    ): Boolean {
         val interactionFrame = interactionFrame()
         if (!isEnabled || !isClickable || interactionFrame == null) return false
         if ((event.actionMasked == MotionEvent.ACTION_DOWN ||
@@ -165,9 +205,7 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
                 )
                 activeTouches[event.getPointerId(index)] = touch
                 renderer.renderBegan(listOf(touch.asTrajectoryPoint(timestamp)))
-                /**
-                 * 与 Choreographer 的帧时间使用同一时钟，不计入设备深度休眠时间。
-                 */
+                // 与 Choreographer 的帧时间使用同一时钟，不计入设备深度休眠时间。
                 submitIfNeeded(System.nanoTime(), force = true)
                 postFrameCallback()
             }
@@ -220,7 +258,12 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      * @param oldWidth 视图变化前的宽度，单位为像素。
      * @param oldHeight 视图变化前的高度，单位为像素。
      */
-    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+    override fun onSizeChanged(
+        width: Int,
+        height: Int,
+        oldWidth: Int,
+        oldHeight: Int
+    ) {
         super.onSizeChanged(width, height, oldWidth, oldHeight)
         if (width != oldWidth || height != oldHeight) {
             cancelInteraction()
@@ -233,7 +276,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      *
      * @param pointerId Android 触摸事件中的指针标识。
      */
-    private fun finishPointer(pointerId: Int) {
+    private fun finishPointer(
+        pointerId: Int
+    ) {
         val identifier = activeTouches.remove(pointerId)?.id ?: return
         renderer.renderEnded(listOf(identifier))
         if (activeTouches.isEmpty()) stopFrameCallback()
@@ -245,7 +290,10 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      * @param nowNanos 当前单调时钟时刻，单位为纳秒。
      * @param force 是否忽略采样间隔立即提交；默认值为 `false`。
      */
-    private fun submitIfNeeded(nowNanos: Long, force: Boolean = false) {
+    private fun submitIfNeeded(
+        nowNanos: Long,
+        force: Boolean = false
+    ) {
         if (activeTouches.isEmpty()) return
         if (!force && nowNanos - lastSampleNanos < SAMPLE_INTERVAL_NANOS) return
         lastSampleNanos = nowNanos
@@ -304,7 +352,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      * @param point 预览视图坐标系中的触点，单位为像素。
      * @return 处理后的视图像素坐标点。
      */
-    private fun clamped(point: PointF): PointF {
+    private fun clamped(
+        point: PointF
+    ): PointF {
         val frame = interactionFrame() ?: return point
         return PointF(
             point.x.coerceIn(frame.left, frame.right),
@@ -335,7 +385,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      *
      * @param renderer 绘制触控轨迹效果的组件。
      */
-    private fun addRendererView(renderer: TrajectoryEffectRendering) {
+    private fun addRendererView(
+        renderer: TrajectoryEffectRendering
+    ) {
         val rendererView = renderer.view
         (rendererView.parent as? android.view.ViewGroup)?.removeView(rendererView)
         rendererView.isClickable = false
@@ -347,12 +399,16 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
 
     /**
      * 保存活动触点的轨迹标识与当前位置。
-     *
-     * @param id 用于区分当前对象或操作的唯一标识。
-     * @param location 触点在视图中的位置，单位为像素。
      */
     private data class ActiveTouch(
+        /**
+         * 当前触点对应的连续拖拽轨迹标识。
+         */
         val id: TrajectoryID,
+
+        /**
+         * 触点在视图中的位置，单位为像素。
+         */
         var location: PointF,
     )
 
@@ -362,7 +418,9 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
      * @param timestamp 触点采样时刻，单位为秒。
      * @return 包含轨迹标识、位置及时间戳的触点。
      */
-    private fun ActiveTouch.asTrajectoryPoint(timestamp: Double): TrajectoryPoint {
+    private fun ActiveTouch.asTrajectoryPoint(
+        timestamp: Double
+    ): TrajectoryPoint {
         val frame = resolvedMediaSize?.let { size ->
             InteractionCoordinateMapper.displayedFrame(
                 viewportSize = SizeF(width.toFloat(), height.toFloat()),
@@ -387,13 +445,18 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
     }
 
     /**
-     * 提供 TrajectoryOverlayView 使用的构造入口、共享配置或常量。
+     * 触控轨迹的采样间隔与移动阈值。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 轨迹采样的最小时间间隔，单位为纳秒。
          */
         const val SAMPLE_INTERVAL_NANOS = 33_333_333L
+
+        /**
+         * 触发轨迹移动的最小距离平方，单位为平方像素。
+         */
         const val MINIMUM_MOVE_SQUARED = 0.25f
 
         /**
@@ -403,7 +466,10 @@ internal class TrajectoryOverlayView(context: Context) : FrameLayout(context) {
          * @param second 第二个坐标点。
          * @return 两点距离的平方，单位为平方像素。
          */
-        fun distanceSquared(first: PointF, second: PointF): Float {
+        fun distanceSquared(
+            first: PointF,
+            second: PointF
+        ): Float {
             val dx = second.x - first.x
             val dy = second.y - first.y
             return dx * dx + dy * dy

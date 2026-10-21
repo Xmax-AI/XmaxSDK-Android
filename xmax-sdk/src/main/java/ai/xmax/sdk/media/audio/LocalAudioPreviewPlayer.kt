@@ -1,10 +1,9 @@
 //
 //  LocalAudioPreviewPlayer.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -21,6 +20,7 @@ import android.media.AudioTrack
  * 播放视频文件解码出的 48 kHz 单声道 PCM 本地预览。
  */
 internal class LocalAudioPreviewPlayer {
+
     /**
      * 本地 PCM 播放资源。
      */
@@ -30,6 +30,10 @@ internal class LocalAudioPreviewPlayer {
      * 本地预览的静音与音量配置。
      */
     private var muted = false
+
+    /**
+     * 本地音频预览音量，范围为 0 到 1。
+     */
     private var volume = DEFAULT_VOLUME
 
     /**
@@ -72,7 +76,9 @@ internal class LocalAudioPreviewPlayer {
      * @param frame 待播放或提交的 PCM 音频帧。
      */
     @Synchronized
-    fun enqueue(frame: AudioFrame) {
+    fun enqueue(
+        frame: AudioFrame
+    ) {
         val data = frame.dataBytes()
         audioTrack?.write(data, 0, data.size, AudioTrack.WRITE_NON_BLOCKING)
     }
@@ -83,7 +89,9 @@ internal class LocalAudioPreviewPlayer {
      * @param muted 是否静音。
      */
     @Synchronized
-    fun setMuted(muted: Boolean) {
+    fun setMuted(
+        muted: Boolean
+    ) {
         this.muted = muted
         audioTrack?.setVolume(if (muted) 0f else volume)
     }
@@ -94,7 +102,9 @@ internal class LocalAudioPreviewPlayer {
      * @param volume 播放音量，范围为 0 到 1。
      */
     @Synchronized
-    fun setVolume(volume: Float) {
+    fun setVolume(
+        volume: Float
+    ) {
         this.volume = volume.coerceIn(0f, 1f)
         audioTrack?.setVolume(if (muted) 0f else this.volume)
     }
@@ -113,11 +123,12 @@ internal class LocalAudioPreviewPlayer {
     }
 
     /**
-     * 提供 LocalAudioPreviewPlayer 使用的构造入口、共享配置或常量。
+     * 本地音频预览的默认配置。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 本地音频预览的默认音量，范围为 0 到 1。
          */
         const val DEFAULT_VOLUME = 0.45f
     }

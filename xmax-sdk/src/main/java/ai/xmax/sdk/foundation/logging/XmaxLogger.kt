@@ -1,10 +1,9 @@
 //
 //  XmaxLogger.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -16,17 +15,23 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 控制 XmaxSDK 输出的日志类型。
- *
- * @param rawValue 用于构造值对象的底层值。
  */
-public class XmaxLoggerOption(public val rawValue: Int) {
+public class XmaxLoggerOption(
+    /**
+     * 用于构造值对象的底层值。
+     */
+    public val rawValue: Int
+) {
+
     /**
      * 合并两组日志选项。
      *
      * @param other 用于比较或组合的另一个对象。
      * @return 组合后的日志选项。
      */
-    public operator fun plus(other: XmaxLoggerOption): XmaxLoggerOption =
+    public operator fun plus(
+        other: XmaxLoggerOption
+    ): XmaxLoggerOption =
         XmaxLoggerOption(rawValue or other.rawValue)
 
     /**
@@ -35,7 +40,9 @@ public class XmaxLoggerOption(public val rawValue: Int) {
      * @param option 控制该条日志是否输出的选项。
      * @return 包含指定选项时为 true。
      */
-    public operator fun contains(option: XmaxLoggerOption): Boolean =
+    public operator fun contains(
+        option: XmaxLoggerOption
+    ): Boolean =
         option.rawValue != 0 && rawValue and option.rawValue == option.rawValue
 
     /**
@@ -50,7 +57,9 @@ public class XmaxLoggerOption(public val rawValue: Int) {
      * @param other 用于比较或组合的另一个对象。
      * @return 对象的内容相等时为 true，否则为 false。
      */
-    override fun equals(other: Any?): Boolean =
+    override fun equals(
+        other: Any?
+    ): Boolean =
         other is XmaxLoggerOption && rawValue == other.rawValue
 
     /**
@@ -68,12 +77,11 @@ public class XmaxLoggerOption(public val rawValue: Int) {
     override fun toString(): String = "XmaxLoggerOption(rawValue=$rawValue)"
 
     /**
-     * 提供 XmaxLoggerOption 使用的构造入口、共享配置或常量。
+     * 预定义的日志输出选项。
      */
     public companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
-         *
          * 不输出 XmaxSDK 日志。
          */
         @JvmField
@@ -101,10 +109,11 @@ public class XmaxLoggerOption(public val rawValue: Int) {
 
 /**
  * 统一输出带 Xmax 前缀和类别的系统日志。
- *
- * @param category 用于区分业务域的日志分类。
  */
 internal class XmaxLogger private constructor(
+    /**
+     * 用于区分业务域的日志分类。
+     */
     private val category: String,
 ) {
 
@@ -166,7 +175,9 @@ internal class XmaxLogger private constructor(
      * @param message 待发送或记录的消息文本。
      * @return 带业务分类前缀及末尾换行的日志文本。
      */
-    fun formattedMessage(message: String): String {
+    fun formattedMessage(
+        message: String
+    ): String {
         val prefix = "[Xmax][$category]"
         return message.trimEnd('\r', '\n').lines()
             .joinToString(separator = "\n", postfix = "\n\n") { "$prefix $it" }
@@ -194,49 +205,103 @@ internal class XmaxLogger private constructor(
      * @param option 控制该条日志是否输出的选项。
      * @return 指定日志选项已开启时为 true。
      */
-    private fun isEnabled(option: XmaxLoggerOption): Boolean {
+    private fun isEnabled(
+        option: XmaxLoggerOption
+    ): Boolean {
         if (option.isEmpty) return false
         return XmaxLoggerOption(configuration.get().options).contains(option)
     }
 
     /**
-     * 提供 XmaxLogger 使用的构造入口、共享配置或常量。
+     * 按业务域提供日志入口，并管理统一输出配置。
      */
     companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 记录实时媒体与生成生命周期事件。
          */
         val realtime = XmaxLogger("Realtime")
+
+        /**
+         * 记录 RTC 引擎与音视频传输事件。
+         */
         val rtc = XmaxLogger("RTC")
+
+        /**
+         * 记录媒体准备、采集与播放事件。
+         */
         val media = XmaxLogger("Media")
+
+        /**
+         * 记录 API 请求与响应。
+         */
         val api = XmaxLogger("API")
+
+        /**
+         * 记录文件上传、下载与存储事件。
+         */
         val storage = XmaxLogger("Storage")
+
+        /**
+         * 记录房间连接与信令事件。
+         */
         val room = XmaxLogger("Room")
+
+        /**
+         * 记录流发布与生成任务事件。
+         */
         val stream = XmaxLogger("Stream")
+
+        /**
+         * 记录视频渲染事件。
+         */
         val render = XmaxLogger("Render")
+
+        /**
+         * 记录触控轨迹与交互事件。
+         */
         val interaction = XmaxLogger("Interaction")
+
+        /**
+         * 记录权限检查结果。
+         */
         val permission = XmaxLogger("Permission")
+
+        /**
+         * 记录实时生成启动耗时。
+         */
         val timing = XmaxLogger("Timing")
 
+        /**
+         * Android 日志使用的 SDK 标签。
+         */
         private const val TAG = "XmaxSDK"
 
         /**
          * 保存一次日志配置的开关与语言环境快照。
-         *
-         * @param options 允许输出的日志选项。
-         * @param environment 业务服务环境，同时决定日志语言。
          */
         private data class Configuration(
+            /**
+             * 允许输出的日志选项。
+             */
             val options: Int,
+
+            /**
+             * 业务服务环境，同时决定日志语言。
+             */
             val environment: XmaxEnvironment,
         )
 
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 当前日志输出选项与服务环境。
          */
         private val configuration = AtomicReference(
             Configuration(XmaxLoggerOption.none.rawValue, XmaxEnvironment.CHINA),
         )
+
+        /**
+         * 接收格式化日志的输出目标。
+         */
         private val sink = AtomicReference<XmaxLogSink>(AndroidXmaxLogSink)
 
         /**
@@ -259,7 +324,10 @@ internal class XmaxLogger private constructor(
          * @param english 海外环境使用的英文文本。
          * @return 符合当前环境的中文或英文文本。
          */
-        fun localized(chinese: String, english: String): String =
+        fun localized(
+            chinese: String,
+            english: String
+        ): String =
             if (configuration.get().environment == XmaxEnvironment.CHINA) chinese else english
 
         /**
@@ -267,7 +335,9 @@ internal class XmaxLogger private constructor(
          *
          * @param value 替代日志输出器；null 表示恢复默认输出。
          */
-        internal fun setSinkForTesting(value: XmaxLogSink?) {
+        internal fun setSinkForTesting(
+            value: XmaxLogSink?
+        ) {
             sink.set(value ?: AndroidXmaxLogSink)
         }
     }
@@ -277,6 +347,7 @@ internal class XmaxLogger private constructor(
  * SDK 日志消息的严重程度分类。
  */
 internal enum class XmaxLogLevel {
+
     /**
      * 调试级别日志。
      */
@@ -302,6 +373,7 @@ internal enum class XmaxLogLevel {
  * 接收格式化后的 SDK 日志消息的输出接口。
  */
 internal fun interface XmaxLogSink {
+
     /**
      * 按日志级别输出带 SDK 分类前缀的消息。
      *
@@ -309,13 +381,18 @@ internal fun interface XmaxLogSink {
      * @param tag Android 日志标签。
      * @param message 待发送或记录的消息文本。
      */
-    fun write(level: XmaxLogLevel, tag: String, message: String)
+    fun write(
+        level: XmaxLogLevel,
+        tag: String,
+        message: String
+    )
 }
 
 /**
  * 将 SDK 日志写入 Android 系统日志。
  */
 private object AndroidXmaxLogSink : XmaxLogSink {
+
     /**
      * 按日志级别输出带 SDK 分类前缀的消息。
      *
@@ -323,7 +400,11 @@ private object AndroidXmaxLogSink : XmaxLogSink {
      * @param tag Android 日志标签。
      * @param message 待发送或记录的消息文本。
      */
-    override fun write(level: XmaxLogLevel, tag: String, message: String) {
+    override fun write(
+        level: XmaxLogLevel,
+        tag: String,
+        message: String
+    ) {
         when (level) {
             XmaxLogLevel.DEBUG -> Log.d(tag, message)
             XmaxLogLevel.INFO -> Log.i(tag, message)

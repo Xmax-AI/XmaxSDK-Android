@@ -1,10 +1,9 @@
 //
 //  ResourceCleanup.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -19,7 +18,9 @@ import kotlinx.coroutines.withContext
  *
  * @param actions 按顺序执行的资源清理操作。
  */
-internal suspend fun cleanupResources(vararg actions: suspend () -> Unit) {
+internal suspend fun cleanupResources(
+    vararg actions: suspend () -> Unit
+) {
     val failure = withContext(NonCancellable) {
         var failure: Throwable? = null
         for (action in actions) {
@@ -32,9 +33,7 @@ internal suspend fun cleanupResources(vararg actions: suspend () -> Unit) {
         }
         failure
     }
-    /**
-     * 保留收集到的原始异常及其附加清理错误。
-     */
+    // 保留收集到的原始异常及其附加清理错误。
     failure?.let { throw it }
 }
 
@@ -44,7 +43,10 @@ internal suspend fun cleanupResources(vararg actions: suspend () -> Unit) {
  * @param error 本次操作失败的异常或 SDK 错误。
  * @param actions 按顺序执行的资源清理操作。
  */
-internal suspend fun cleanupAfterFailure(error: Throwable, vararg actions: suspend () -> Unit) {
+internal suspend fun cleanupAfterFailure(
+    error: Throwable,
+    vararg actions: suspend () -> Unit
+) {
     try {
         cleanupResources(*actions)
     } catch (cleanupError: Throwable) {

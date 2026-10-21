@@ -1,10 +1,9 @@
 //
 //  XmaxRealtimeVideoView.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -34,12 +33,17 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr) {
+
     /**
      * 本地和远端视频的显示容器。
      */
     private val localVideoView = XmaxVideoView(context).apply {
         isInteractionEnabled = false
     }
+
+    /**
+     * 展示生成结果的下行视频视图。
+     */
     private val remoteVideoView = XmaxVideoView(context).apply {
         isInteractionEnabled = false
     }
@@ -48,6 +52,10 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
      * 当前显示来源与切换代次。
      */
     private var isRemoteDisplayed = false
+
+    /**
+     * 本地预览与生成结果切换的显示版本。
+     */
     private var presentationVersion = 0L
 
     /**
@@ -127,9 +135,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
     init {
         setBackgroundColor(Color.BLACK)
         clipChildren = true
-        /**
-         * 等待结果时保持远端渲染器挂载在本地预览下方，以持续接收视频帧。
-         */
+        // 等待结果时保持远端渲染器挂载在本地预览下方，以持续接收视频帧。
         addView(remoteVideoView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(localVideoView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         remoteVideoView.frameInvalidationHandler = { invalidatedTrack ->
@@ -184,11 +190,12 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
     }
 
     /**
-     * 提供 XmaxRealtimeVideoView 使用的构造入口、共享配置或常量。
+     * 生成结果切换到前台显示时的动画配置。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * 生成画面淡入动画的时长，单位为毫秒。
          */
         const val REMOTE_FADE_DURATION_MS = 300L
     }

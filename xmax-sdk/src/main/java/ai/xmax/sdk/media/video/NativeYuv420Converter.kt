@@ -1,10 +1,9 @@
 //
 //  NativeYuv420Converter.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -18,6 +17,7 @@ import java.nio.ByteBuffer
  * Android 平台内部的 YUV 热路径加速器；原生库不可用时由调用方回退到 Kotlin。
  */
 internal object NativeYuv420Converter {
+
     /**
      * 本地转换器可用状态。
      */

@@ -1,10 +1,9 @@
 //
 //  XmaxVideoView.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -40,11 +39,20 @@ public class XmaxVideoView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : FrameLayout(context, attrs, defStyleAttr) {
+
     /**
      * RTC、图片与轨迹显示视图。
      */
     private var renderView: FrameReportingTextureView? = null
+
+    /**
+     * 展示图片或已解码本地视频帧的视图。
+     */
     private val imageView = ImageView(context)
+
+    /**
+     * 收集触控并绘制轨迹效果的覆盖层。
+     */
     private val trajectoryOverlayView = TrajectoryOverlayView(context)
 
     /**
@@ -56,21 +64,45 @@ public class XmaxVideoView @JvmOverloads constructor(
      * 当前图片及轨道、轨迹绑定。
      */
     private var displayedBitmap: Bitmap? = null
+
+    /**
+     * 当前视频轨道的渲染绑定。
+     */
     private var attachedBinding: VideoRenderBinding? = null
+
+    /**
+     * 当前视频轨道的轨迹绑定。
+     */
     private var attachedTrajectoryBinding: TrajectoryBinding? = null
 
     /**
      * 画面显示代次与首帧通知状态。
      */
     private var renderGeneration = 0L
+
+    /**
+     * 当前绑定是否已经显示有效画面。
+     */
     private var hasDisplayedFrame = false
+
+    /**
+     * 等待确认画面已显示的主线程任务。
+     */
     private var pendingFrameDisplay: Runnable? = null
 
     /**
      * Internal presentation signal; this is separate from RTC decode readiness.
      */
     internal var frameDisplayHandler: ((RealtimeVideoTrack) -> Unit)? = null
+
+    /**
+     * 当前画面失效时通知上层切换显示状态的回调。
+     */
     internal var frameInvalidationHandler: ((RealtimeVideoTrack) -> Unit)? = null
+
+    /**
+     * 是否允许将当前轨道标记为已显示。
+     */
     internal var isFrameDisplayEnabled = false
         private set
 
@@ -154,9 +186,7 @@ public class XmaxVideoView @JvmOverloads constructor(
         invalidateVideoPresentation()
         clearImageFrame()
         removeRtcRenderView()
-        /**
-         * 每次轨道绑定使用独立显示表面，首帧通知仅对应当前轨道。
-         */
+        // 每次轨道绑定使用独立显示表面，首帧通知仅对应当前轨道。
         val generation = renderGeneration
         renderView = FrameReportingTextureView(context).also { textureView ->
             textureView.onFrameDisplayed = { source ->
@@ -192,7 +222,10 @@ public class XmaxVideoView @JvmOverloads constructor(
      * @param frame 待处理、显示或提交的视频帧。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    internal fun displayImageFrame(frame: VideoFrame, contentMode: VideoContentMode) {
+    internal fun displayImageFrame(
+        frame: VideoFrame,
+        contentMode: VideoContentMode
+    ) {
         displayBitmap(makeBitmap(frame), contentMode)
     }
 
@@ -201,7 +234,9 @@ public class XmaxVideoView @JvmOverloads constructor(
      *
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    internal fun prepareDecodedVideoPreview(contentMode: VideoContentMode) {
+    internal fun prepareDecodedVideoPreview(
+        contentMode: VideoContentMode
+    ) {
         imageView.scaleType = when (contentMode) {
             VideoContentMode.FIT -> ImageView.ScaleType.FIT_CENTER
             VideoContentMode.FILL -> ImageView.ScaleType.CENTER_CROP
@@ -215,7 +250,10 @@ public class XmaxVideoView @JvmOverloads constructor(
      * @param bitmap 待处理或显示的 Android 图片。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    internal fun displayDecodedVideoBitmap(bitmap: Bitmap, contentMode: VideoContentMode) {
+    internal fun displayDecodedVideoBitmap(
+        bitmap: Bitmap,
+        contentMode: VideoContentMode
+    ) {
         displayBitmap(bitmap, contentMode)
     }
 
@@ -225,7 +263,10 @@ public class XmaxVideoView @JvmOverloads constructor(
      * @param bitmap 待处理或显示的 Android 图片。
      * @param contentMode 视频等比适配或等比裁切的显示方式。
      */
-    private fun displayBitmap(bitmap: Bitmap, contentMode: VideoContentMode) {
+    private fun displayBitmap(
+        bitmap: Bitmap,
+        contentMode: VideoContentMode
+    ) {
         isFrameDisplayEnabled = true
         displayedBitmap?.recycle()
         displayedBitmap = bitmap
@@ -285,7 +326,9 @@ public class XmaxVideoView @JvmOverloads constructor(
      *
      * @param canvas 用于绘制当前视图的画布。
      */
-    override fun dispatchDraw(canvas: Canvas) {
+    override fun dispatchDraw(
+        canvas: Canvas
+    ) {
         super.dispatchDraw(canvas)
         if (imageView.visibility == View.VISIBLE && displayedBitmap != null) {
             scheduleFrameDisplayed()
@@ -375,7 +418,9 @@ public class XmaxVideoView @JvmOverloads constructor(
      * @param frame 待处理、显示或提交的视频帧。
      * @return 用于本地显示的图片。
      */
-    private fun makeBitmap(frame: VideoFrame): Bitmap {
+    private fun makeBitmap(
+        frame: VideoFrame
+    ): Bitmap {
         if (frame.format.pixelFormat != VideoPixelFormat.RGBA || frame.planes.size != 1) {
             throw IllegalArgumentException("Image preview requires a single RGBA video plane")
         }
@@ -399,11 +444,12 @@ public class XmaxVideoView @JvmOverloads constructor(
     }
 
     /**
-     * 提供 XmaxVideoView 使用的构造入口、共享配置或常量。
+     * 视频像素缓冲的布局常量。
      */
     private companion object {
+
         /**
-         * 共享常量、默认配置与工厂入口。
+         * RGBA 每个像素占用的字节数。
          */
         const val RGBA_BYTES_PER_PIXEL = 4
     }

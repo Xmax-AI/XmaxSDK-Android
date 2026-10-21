@@ -1,10 +1,9 @@
 //
 //  RtcQualityListener.kt
 //  XmaxSDK
-//  Repo: https://github.com/XingMai/XmaxSDK-Android
 //
 //  Author: 翁跃庭 (Yueting Weng)
-//  GitHub: https://github.com/WengYuehTing
+//  GitHub: https://github.com/Xmax-AI/XmaxSDK-Android
 //
 //  Copyright (c) 2026 XMAX.AI PTE. LTD.
 //
@@ -18,6 +17,7 @@ import ai.xmax.sdk.DownlinkVideoStatistics
  * 中性的 RTC 网络质量等级。
  */
 internal enum class RtcQualityLevel {
+
     /**
      * 尚无可用网络质量样本。
      */
@@ -58,19 +58,24 @@ internal enum class RtcQualityLevel {
  * 接收厂商中立的视频统计、网络质量和性能回退事件。
  */
 internal interface RtcQualityListener {
+
     /**
      * 接收上行统计快照；null 表示当前没有有效统计。
      *
      * @param statistics 当前统计快照；null 表示没有可用统计。
      */
-    fun onUplinkVideoStatistics(statistics: UplinkVideoStatistics?)
+    fun onUplinkVideoStatistics(
+        statistics: UplinkVideoStatistics?
+    )
 
     /**
      * 接收下行统计快照；null 表示当前没有有效统计。
      *
      * @param statistics 当前统计快照；null 表示没有可用统计。
      */
-    fun onDownlinkVideoStatistics(statistics: DownlinkVideoStatistics?)
+    fun onDownlinkVideoStatistics(
+        statistics: DownlinkVideoStatistics?
+    )
 
     /**
      * 接收上下行网络质量样本。
