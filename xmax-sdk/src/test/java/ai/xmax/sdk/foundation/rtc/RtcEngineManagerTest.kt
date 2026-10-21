@@ -210,6 +210,7 @@ private object EngineStub : RtcPlatform {
     override fun stopAudioCapture(): Int = 0
 
     override fun startVideoCapture(width: Int, height: Int, frameRate: Int): Int = 0
+    override fun updateVideoCaptureFormat(width: Int, height: Int, frameRate: Int): Int = 0
 
     override fun stopVideoCapture(): Int = 0
 

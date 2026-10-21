@@ -51,8 +51,54 @@ import org.junit.Test
 
 class CameraControllerTest {
     @Test
+    fun `format update preserves track preview binding and camera position`() = runTest {
+        val rtc = CameraRtcStub()
+        val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1))
+        val initial = RealtimeVideoFormat(1080, 1920, 24, 1500, 3000)
+        val stream = controller.createLocalCameraStream(initial, CameraPosition.BACK)
+        val track = stream.videoTrack!!
+        val binding = VideoRenderRegistry.binding(track)
+        val updated = initial.copy(width = 1408, height = 1408, fps = 30)
+
+        controller.updateVideoFormat(updated)
+
+        assertSame(track, controller.currentTrack)
+        assertSame(binding, VideoRenderRegistry.binding(track))
+        assertEquals(updated, track.videoFormat)
+        assertEquals(CameraPosition.BACK, track.position)
+        assertEquals(Triple(1408, 1408, 30), rtc.captureFormats.last())
+        assertEquals(0, rtc.stopCount)
+        assertEquals(0, rtc.unbindCount)
+        controller.updateVideoFormat(updated)
+        assertEquals(2, rtc.captureFormats.size)
+        controller.stopLocalCameraStream()
+    }
+
+    @Test
+    fun `invalid or failed format update leaves camera preview intact`() = runTest {
+        val rtc = CameraRtcStub()
+        val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1))
+        val initial = RealtimeModel.X2_1.defaultCameraVideoFormat
+        val track = controller.createLocalCameraStream(initial, CameraPosition.FRONT).videoTrack!!
+        val binding = VideoRenderRegistry.binding(track)
+
+        val invalid = runCatching { controller.updateVideoFormat(initial.copy(width = 720, height = 1280)) }.exceptionOrNull()
+        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (invalid as XmaxError).code)
+        assertEquals(1, rtc.captureFormats.size)
+
+        val failure = XmaxError(XmaxErrorCode.RTC_ERROR, "capture configuration failed")
+        rtc.startFailure = failure
+        assertSame(failure, runCatching { controller.updateVideoFormat(initial.copy(width = 1408, height = 1408)) }.exceptionOrNull())
+        assertEquals(initial, track.videoFormat)
+        assertSame(binding, VideoRenderRegistry.binding(track))
+        assertEquals(0, rtc.stopCount)
+        assertEquals(0, rtc.unbindCount)
+        controller.stopLocalCameraStream()
+    }
+
+    @Test
     fun `bucket camera preserves resolution and encoding options`() = runTest {
-        RealtimeModel.X2_1.resolutionBuckets.forEach { (width, height) ->
+        RealtimeModel.X2_1.supportedVideoFormats.map { IntSize(it.width, it.height) }.forEach { (width, height) ->
             val rtc = CameraRtcStub()
             val controller = CameraController(
                 rtcManager = rtc,
@@ -313,6 +359,10 @@ private class CameraRtcStub : RtcManaging {
     override fun startVideoCapture(width: Int, height: Int, frameRate: Int) {
         captureFormats += Triple(width, height, frameRate)
         startFailure?.let { throw it }
+    }
+    override fun updateVideoCaptureFormat(width: Int, height: Int, frameRate: Int) {
+        startFailure?.let { throw it }
+        captureFormats += Triple(width, height, frameRate)
     }
     override fun stopVideoCapture() {
         stopCount += 1

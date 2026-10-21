@@ -18,6 +18,7 @@ import ai.xmax.sdk.render.RenderControlling
 import ai.xmax.sdk.render.RenderController
 import ai.xmax.sdk.stream.room.RtcManagingStub
 import ai.xmax.sdk.service.realtime.*
+import ai.xmax.sdk.service.media.MediaService
 import ai.xmax.sdk.stream.StreamControlling
 import ai.xmax.sdk.stream.encoding.EncodingBitratePolicy
 import ai.xmax.sdk.stream.quality.QualityController
@@ -35,6 +36,61 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class XmaxRealtimeManagerTest {
+    @Test
+    fun `camera presets require ready disconnected preview and preserve encoding options`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        assertNull(f.manager.currentCameraVideoFormat)
+        assertNull(f.manager.currentCameraPreset)
+        val initial = RealtimeVideoFormat(1080, 1920, 24, 1500, 3000)
+        f.media.reportPreviewReadyOnCreate = false
+        val local = f.manager.createLocalCameraStream(initial, CameraPosition.BACK)
+        val preparingError = runCatching { f.manager.updateCameraFormat(RealtimeCameraPreset.RESOLUTION_1408X1408) }.exceptionOrNull()
+        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (preparingError as XmaxError).code)
+        f.media.registeredCameraPreviewReadyListener!!.onCameraPreviewReady()
+
+        f.manager.updateCameraFormat(RealtimeCameraPreset.RESOLUTION_1408X1408)
+        val updated = initial.copy(width = 1408, height = 1408)
+        assertEquals(updated, f.manager.currentCameraVideoFormat)
+        assertEquals(RealtimeCameraPreset.RESOLUTION_1408X1408, f.manager.currentCameraPreset)
+        assertSame(local.videoTrack, f.media.currentTrack)
+        assertEquals(CameraPosition.BACK, local.videoTrack!!.position)
+
+        val unsupported = runCatching { f.manager.updateCameraFormat(initial.copy(width = 720, height = 1280)) }.exceptionOrNull()
+        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (unsupported as XmaxError).code)
+        assertEquals(RealtimeConnectionState.READY, f.manager.currentState.connectionState)
+        assertEquals(updated, f.manager.currentCameraVideoFormat)
+
+        f.manager.connect(local)
+        val connected = runCatching { f.manager.updateCameraFormat(initial) }.exceptionOrNull()
+        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (connected as XmaxError).code)
+        assertEquals(RealtimeConnectionState.CONNECTED, f.manager.currentState.connectionState)
+        assertEquals(updated, f.manager.currentCameraVideoFormat)
+        f.manager.close()
+        assertNull(f.manager.currentCameraVideoFormat)
+        assertNull(f.manager.currentCameraPreset)
+    }
+
+    @Test
+    fun `camera preset creation uses model frame rate and format update failures preserve preview`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        val local = f.manager.createLocalCameraStream(RealtimeCameraPreset.RESOLUTION_1152X1536)
+        val expected = RealtimeVideoFormat(1152, 1536, 30)
+        assertEquals(expected, f.manager.currentCameraVideoFormat)
+        f.media.createError = XmaxError(XmaxErrorCode.RTC_ERROR, "configuration failed")
+        assertTrue(runCatching { f.manager.updateCameraFormat(RealtimeCameraPreset.RESOLUTION_1408X1408) }.isFailure)
+        assertEquals(expected, local.videoTrack!!.videoFormat)
+        assertEquals(RealtimeConnectionState.READY, f.manager.currentState.connectionState)
+        f.manager.close()
+
+        f.media.createError = null
+        f.manager.createLocalImageStream(byteArrayOf(1))
+        assertNull(f.manager.currentCameraVideoFormat)
+        assertNull(f.manager.currentCameraPreset)
+        val image = runCatching { f.manager.updateCameraFormat(expected) }.exceptionOrNull()
+        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (image as XmaxError).code)
+        f.manager.close()
+    }
+
     @Test
     fun `quality controls reject idle and connected states without terminating media`() = runTest {
         val f = Fixture(StandardTestDispatcher(testScheduler))
@@ -1601,7 +1657,7 @@ private class MediaStub : MediaControlling {
         createError?.let { throw it }
         volumeAtStart = volume
         hasAudio = useMicrophone
-        val track = RealtimeVideoTrack("local", videoFormat)
+        val track = RealtimeVideoTrack("local", videoFormat, position = position)
         currentTrack = track
         if (reportPreviewReadyOnCreate) {
             registeredCameraPreviewReadyListener?.onCameraPreviewReady()
@@ -1610,6 +1666,13 @@ private class MediaStub : MediaControlling {
     }
     override fun startMicrophoneCapture() {
         if (hasAudio) microphoneStartCount += 1
+    }
+    override suspend fun updateCameraFormat(videoFormat: RealtimeVideoFormat) {
+        MediaService(RealtimeModel.X2_1).resolveMediaSize(
+            IntSize(videoFormat.width, videoFormat.height), RealtimeMediaSource.CAMERA,
+        )
+        createError?.let { throw it }
+        currentTrack!!.updateVideoFormat(videoFormat)
     }
     override fun stopMicrophoneCapture() {
         if (hasAudio) microphoneStopCount += 1

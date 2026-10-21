@@ -49,7 +49,7 @@ public class RealtimeVideoTrack internal constructor(
     private val metadata = AtomicReference(Metadata(videoFormat, position))
 
     /**
-     * 轨道当前的视频规格，随采集或编码配置更新。
+     * 轨道当前的媒体输入规格；传输档位调整不会改变该规格。
      */
     public val videoFormat: RealtimeVideoFormat?
         get() = metadata.get().videoFormat

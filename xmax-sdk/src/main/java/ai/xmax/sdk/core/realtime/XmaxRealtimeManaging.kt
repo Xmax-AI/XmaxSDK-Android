@@ -38,6 +38,36 @@ public interface XmaxRealtimeManaging {
     public val currentState: RealtimeState
 
     /**
+     * 当前摄像头媒体输出规格；没有摄像头流时为 null，不随上行调档变化。
+     */
+    public val currentCameraVideoFormat: RealtimeVideoFormat?
+
+    /**
+     * 当前摄像头分辨率对应的预设；没有摄像头流或找不到匹配预设时为 null。
+     */
+    public val currentCameraPreset: RealtimeCameraPreset?
+
+    /**
+     * 更新未连接、已就绪的摄像头规格，保留原轨道和视图绑定。
+     *
+     * @param videoFormat 新的尺寸、采集帧率与编码配置；尺寸须匹配模型支持列表。
+     * @throws XmaxError 状态不允许、规格不支持、操作冲突或采集配置失败时抛出错误。
+     */
+    public suspend fun updateCameraFormat(
+        videoFormat: RealtimeVideoFormat,
+    )
+
+    /**
+     * 更新摄像头分辨率，保留当前帧率、码率和编码偏好。
+     *
+     * @param preset 模型支持的目标分辨率预设。
+     * @throws XmaxError 状态不允许、预设不支持、操作冲突或采集配置失败时抛出错误。
+     */
+    public suspend fun updateCameraFormat(
+        preset: RealtimeCameraPreset,
+    )
+
+    /**
      * 当前成功应用的上行档位；尚未连接、已开始断开或没有本地上行时为 null。
      */
     public val uplinkQualityLevel: RealtimeQualityLevel?
@@ -156,6 +186,26 @@ public interface XmaxRealtimeManaging {
     public suspend fun setRemoteAudioVolume(
         volume: Float
     )
+
+    /**
+     * 使用指定分辨率和当前模型的默认帧率创建摄像头流。
+     *
+     * @param preset 模型支持的摄像头分辨率。
+     * @param position 首次启用的镜头位置。
+     * @param useMicrophone 是否使用麦克风；启用前须取得录音权限，连接时开始采集。
+     * @return 包含本地摄像头轨道的媒体流。
+     * @throws XmaxError 预设不支持、权限不足、操作冲突或采集启动失败时抛出错误。
+     */
+    public suspend fun createLocalCameraStream(
+        preset: RealtimeCameraPreset,
+        position: CameraPosition = CameraPosition.FRONT,
+        useMicrophone: Boolean = false,
+    ): RealtimeMediaStream {
+        val format = options.model.supportedVideoFormats.firstOrNull {
+            it.width == preset.size.width && it.height == preset.size.height
+        } ?: throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Model does not support the requested camera preset")
+        return createLocalCameraStream(format, position, useMicrophone)
+    }
 
     /**
      * 使用当前模型的默认视频规格创建并启动相机输入。

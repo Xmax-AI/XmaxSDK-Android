@@ -10,8 +10,6 @@
 
 package ai.xmax.sdk
 
-import androidx.compose.ui.unit.IntSize
-
 /**
  * SDK 支持的实时生成模型；[id] 是创建服务端会话时使用的模型标识。
  */
@@ -38,19 +36,17 @@ public enum class RealtimeModel(
         }
 
     /**
-     * 模型生成画布与输入尺寸约束。
-     *
-     * 模型支持的生成画布分辨率桶；直接指定模型输入时宽高须精确匹配。
+     * 模型支持的视频规格；摄像头宽高须精确匹配，帧率为推荐默认值。
      * 本地图片和视频保留媒体输入比例，SDK 从桶中选择比例最接近的画布，由服务端等比适配。
      * 空列表表示不限制固定尺寸，生成画布按像素面积上下限和模型对齐规则计算。
      */
-    public val resolutionBuckets: List<IntSize>
+    public val supportedVideoFormats: List<RealtimeVideoFormat>
         get() = listOf(
-            IntSize(width = 1_920, height = 1_080),
-            IntSize(width = 1_080, height = 1_920),
-            IntSize(width = 1_408, height = 1_408),
-            IntSize(width = 1_152, height = 1_536),
-            IntSize(width = 1_536, height = 1_152),
+            RealtimeVideoFormat(width = 1_920, height = 1_080, fps = defaultFrameRate),
+            RealtimeVideoFormat(width = 1_080, height = 1_920, fps = defaultFrameRate),
+            RealtimeVideoFormat(width = 1_408, height = 1_408, fps = defaultFrameRate),
+            RealtimeVideoFormat(width = 1_152, height = 1_536, fps = defaultFrameRate),
+            RealtimeVideoFormat(width = 1_536, height = 1_152, fps = defaultFrameRate),
         )
 
     /**

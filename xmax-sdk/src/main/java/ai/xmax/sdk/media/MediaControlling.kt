@@ -111,6 +111,15 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
+     * 更新当前摄像头规格，保留原轨道和预览绑定。
+     *
+     * @param videoFormat 模型支持的尺寸、采集帧率与编码配置。
+     */
+    suspend fun updateCameraFormat(
+        videoFormat: RealtimeVideoFormat,
+    )
+
+    /**
      * 启动当前相机源的麦克风采集。
      */
     fun startMicrophoneCapture()

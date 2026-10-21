@@ -28,7 +28,7 @@ internal class EncodingController(
 ) : EncodingControlling {
 
     /**
-     * 校验并应用实时视频编码格式。
+     * 校验并应用实时视频编码格式；未指定最低码率时使用 500 kbps，且不超过最高码率。
      *
      * @param videoFormat 视频尺寸、帧率及上行编码参数。
      */
@@ -42,13 +42,13 @@ internal class EncodingController(
             minimum = videoFormat.minimumBitrate
             maximum = videoFormat.maximumBitrate
         } else {
-            val (defaultMinimum, defaultMaximum) = EncodingBitratePolicy.resolve(
+            val (_, defaultMaximum) = EncodingBitratePolicy.resolve(
                 videoFormat.width,
                 videoFormat.height,
                 videoFormat.fps,
             )
-            minimum = videoFormat.minimumBitrate ?: defaultMinimum
             maximum = videoFormat.maximumBitrate ?: defaultMaximum
+            minimum = videoFormat.minimumBitrate ?: minOf(500, maximum)
         }
 
         if (minimum > maximum) {

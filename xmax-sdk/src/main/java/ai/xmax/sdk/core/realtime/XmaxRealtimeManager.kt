@@ -165,6 +165,22 @@ internal class XmaxRealtimeManager(
     override val currentState: RealtimeState get() = coordinator.currentState
 
     /**
+     * 当前摄像头媒体输出规格，不受传输档位影响。
+     */
+    override val currentCameraVideoFormat: RealtimeVideoFormat?
+        get() = runtime?.components?.media?.currentTrack?.takeIf { it.position != null }?.videoFormat
+
+    /**
+     * 按当前摄像头输出宽高匹配的分辨率预设。
+     */
+    override val currentCameraPreset: RealtimeCameraPreset?
+        get() = currentCameraVideoFormat?.let { format ->
+            RealtimeCameraPreset.entries.firstOrNull {
+                it.size.width == format.width && it.size.height == format.height
+            }
+        }
+
+    /**
      * 当前连接成功应用的上行档位。
      */
     override val uplinkQualityLevel: RealtimeQualityLevel?
@@ -386,6 +402,50 @@ internal class XmaxRealtimeManager(
         waitForCameraPreview = true,
     ) {
         it.createLocalCameraStream(videoFormat, position, useMicrophone)
+    }
+
+    /**
+     * 更新未连接、已就绪的摄像头规格，保留原轨道和视图绑定。
+     *
+     * @param videoFormat 模型支持的尺寸、帧率和编码配置。
+     */
+    override suspend fun updateCameraFormat(
+        videoFormat: RealtimeVideoFormat,
+    ) {
+        updateCameraFormat { videoFormat }
+    }
+
+    /**
+     * 更新摄像头分辨率，保留当前帧率、码率和编码偏好。
+     *
+     * @param preset 模型支持的目标分辨率预设。
+     */
+    override suspend fun updateCameraFormat(
+        preset: RealtimeCameraPreset,
+    ) {
+        updateCameraFormat { current ->
+            current.copy(width = preset.size.width, height = preset.size.height)
+        }
+    }
+
+    /**
+     * 根据当前摄像头规格提交更新，避免并发操作覆盖配置。
+     *
+     * @param resolve 根据当前规格计算目标规格。
+     */
+    private suspend fun updateCameraFormat(
+        resolve: (RealtimeVideoFormat) -> RealtimeVideoFormat,
+    ) {
+        execute(OperationKind.MEDIA) { token, c ->
+            requireDisconnected(c)
+            val current = currentCameraVideoFormat
+            if (currentState.connectionState != RealtimeConnectionState.READY || current == null) {
+                throw invalid("Camera preview must be ready before updating its format")
+            }
+            token.ensureCurrent()
+            c.media.updateCameraFormat(resolve(current))
+            token.ensureCurrent()
+        }
     }
 
     /**

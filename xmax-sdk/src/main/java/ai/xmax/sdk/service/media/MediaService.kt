@@ -48,7 +48,7 @@ internal class MediaService(
         }
 
         val aspect = size.width.toDouble() / size.height
-        return model.resolutionBuckets.minByOrNull { bucket ->
+        return model.supportedVideoFormats.map { IntSize(it.width, it.height) }.minByOrNull { bucket ->
             abs(ln(aspect / (bucket.width.toDouble() / bucket.height)))
         } ?: resolveGenerationCanvas(size)
     }
@@ -68,7 +68,7 @@ internal class MediaService(
             throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Media dimensions must be positive")
         }
 
-        val buckets = model.resolutionBuckets
+        val buckets = model.supportedVideoFormats.map { IntSize(it.width, it.height) }
         if (source == RealtimeMediaSource.CAMERA && buckets.isNotEmpty()) {
             if (size !in buckets) {
                 val supportedSizes = buckets.joinToString { "${it.width}×${it.height}" }

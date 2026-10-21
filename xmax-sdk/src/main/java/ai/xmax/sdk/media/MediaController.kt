@@ -223,6 +223,22 @@ internal class MediaController(
     }
 
     /**
+     * 更新摄像头规格，保留媒体所有权和当前轨道。
+     *
+     * @param videoFormat 模型支持的尺寸、采集帧率与编码配置。
+     */
+    override suspend fun updateCameraFormat(
+        videoFormat: RealtimeVideoFormat,
+    ) {
+        operationMutex.withLock {
+            if (synchronized(stateLock) { activeSource } != LocalMediaKind.CAMERA) {
+                throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Camera preview is not started")
+            }
+            cameraController.updateVideoFormat(videoFormat)
+        }
+    }
+
+    /**
      * 启动当前相机源的麦克风采集。
      */
     override fun startMicrophoneCapture() {

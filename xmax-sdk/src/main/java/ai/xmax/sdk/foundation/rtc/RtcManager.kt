@@ -393,6 +393,24 @@ internal class RtcManager(
     }
 
     /**
+     * 更新摄像头采集规格，保留镜头、预览绑定及就绪状态。
+     *
+     * @param width 画面宽度，单位为像素。
+     * @param height 画面高度，单位为像素。
+     * @param frameRate 采集帧率，单位为 fps。
+     */
+    override fun updateVideoCaptureFormat(
+        width: Int,
+        height: Int,
+        frameRate: Int,
+    ) {
+        validateVideoDimensions(width, height, frameRate)
+        performEngineOperation("updateVideoCaptureFormat") {
+            it.updateVideoCaptureFormat(width, height, frameRate)
+        }
+    }
+
+    /**
      * 停止 RTC 内部摄像头采集。
      */
     override fun stopVideoCapture() {

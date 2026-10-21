@@ -35,7 +35,7 @@ public class EncodingControllerTest {
                     width = 1_024,
                     height = 768,
                     frameRate = 30,
-                    minimumBitrate = 100,
+                    minimumBitrate = 500,
                     maximumBitrate = 1_820,
                     encoderPreference = VideoEncodingConfiguration.EncoderPreference.MAINTAIN_FRAMERATE,
                 ),
@@ -77,8 +77,16 @@ public class EncodingControllerTest {
                 minimum = null,
                 maximum = 4_000,
                 preference = RealtimeVideoEncoderPreference.MAINTAIN_FRAMERATE,
-                expectedMinimum = 100,
+                expectedMinimum = 500,
                 expectedMaximum = 4_000,
+                expectedPreference = VideoEncodingConfiguration.EncoderPreference.MAINTAIN_FRAMERATE,
+            ),
+            Case(
+                minimum = null,
+                maximum = 99,
+                preference = RealtimeVideoEncoderPreference.MAINTAIN_FRAMERATE,
+                expectedMinimum = 99,
+                expectedMaximum = 99,
                 expectedPreference = VideoEncodingConfiguration.EncoderPreference.MAINTAIN_FRAMERATE,
             ),
             Case(
@@ -93,7 +101,7 @@ public class EncodingControllerTest {
                 minimum = null,
                 maximum = null,
                 preference = RealtimeVideoEncoderPreference.MAINTAIN_QUALITY,
-                expectedMinimum = 100,
+                expectedMinimum = 500,
                 expectedMaximum = 2_166,
                 expectedPreference = VideoEncodingConfiguration.EncoderPreference.MAINTAIN_QUALITY,
             ),
@@ -130,17 +138,17 @@ public class EncodingControllerTest {
         val controller = EncodingController(rtcManager)
         data class Case(val width: Int, val height: Int, val fps: Int, val minimum: Int, val maximum: Int)
         val cases = listOf(
-            Case(1_920, 1_080, 30, 100, 3_780),
-            Case(1_920, 1_080, 24, 100, 3_266),
-            Case(832, 1_472, 24, 100, 2_166),
-            Case(1_472, 832, 24, 100, 2_166),
-            Case(1_024, 1_920, 30, 100, 3_619),
-            Case(1_024, 1_920, 24, 100, 3_127),
-            Case(1_024, 768, 24, 100, 1_572),
-            Case(1_920, 1_080, 120, 100, 7_800),
-            Case(3_840, 2_160, 30, 100, 15_120),
+            Case(1_920, 1_080, 30, 500, 3_780),
+            Case(1_920, 1_080, 24, 500, 3_266),
+            Case(832, 1_472, 24, 500, 2_166),
+            Case(1_472, 832, 24, 500, 2_166),
+            Case(1_024, 1_920, 30, 500, 3_619),
+            Case(1_024, 1_920, 24, 500, 3_127),
+            Case(1_024, 768, 24, 500, 1_572),
+            Case(1_920, 1_080, 120, 500, 7_800),
+            Case(3_840, 2_160, 30, 500, 15_120),
             Case(120, 120, 30, 100, 100),
-            Case(1_920, 1_080, 1, 100, 200),
+            Case(1_920, 1_080, 1, 200, 200),
             Case(2, 2, 1, 100, 100),
         )
 
@@ -162,7 +170,6 @@ public class EncodingControllerTest {
             null to 0,
             3_000 to 1_500,
             4_000 to null,
-            null to 99,
         )
 
         cases.forEach { (minimum, maximum) ->
@@ -192,7 +199,7 @@ public class EncodingControllerTest {
             listOf(1, 9, 10, 11, 14, 15, 16, 24, 29, 30, 31, 59, 60, 61, 120).forEach { fps ->
                 controller.configure(RealtimeVideoFormat(width, height, fps))
                 val configuration = rtcManager.encodingConfigurations.last()
-                assertEquals(100, configuration.minimumBitrate)
+                assertEquals(minOf(500, configuration.maximumBitrate), configuration.minimumBitrate)
                 assertTrue(configuration.maximumBitrate >= configuration.minimumBitrate)
                 assertTrue(configuration.minimumBitrate >= previousMinimum)
                 assertTrue(configuration.maximumBitrate >= previousMaximum)

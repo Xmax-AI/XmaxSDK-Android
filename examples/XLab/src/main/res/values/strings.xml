@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
+    <string name="realtime_camera_format">Resolution</string>
+    <string name="realtime_camera_format_error">Could not change camera resolution</string>
     <string name="realtime_statistics">Stats</string>
     <string name="realtime_statistics_show">Show statistics</string>
     <string name="realtime_statistics_hide">Hide statistics</string>

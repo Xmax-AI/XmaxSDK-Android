@@ -54,6 +54,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -111,6 +112,7 @@ import ai.xmax.sdk.RealtimeContext
 import ai.xmax.sdk.RealtimeMediaStream
 import ai.xmax.sdk.RealtimeModel
 import ai.xmax.sdk.RealtimeReason
+import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.XmaxClient
 import ai.xmax.sdk.XmaxConfiguration
@@ -297,6 +299,9 @@ public fun RealtimeScreen(
         generationLoading = false
     }
     var cameraSwitchJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
+    var cameraFormatJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
+    var cameraVideoFormat by remember(realtimeManager) { mutableStateOf(realtimeManager.currentCameraVideoFormat) }
+    var isCameraFormatMenuVisible by remember { mutableStateOf(false) }
     var localAudioVolumeJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
     var remoteAudioVolumeJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
     var localAudioVolume by remember { mutableStateOf(DEFAULT_LOCAL_AUDIO_VOLUME) }
@@ -425,6 +430,7 @@ public fun RealtimeScreen(
             }
             realtimeManager.setStateListener { state ->
                 qualityConnectionState = state.connectionState
+                cameraVideoFormat = realtimeManager.currentCameraVideoFormat
                 refreshQualityLevels()
                 if (state.connectionState != RealtimeConnectionState.GENERATING) {
                     qualityAdjustmentJob?.cancel()
@@ -459,6 +465,7 @@ public fun RealtimeScreen(
                     invalidateGeneration()
                     qualityAdjustmentJob?.cancelAndJoin()
                     cameraSwitchJob?.cancelAndJoin()
+                    cameraFormatJob?.cancelAndJoin()
                     realtimeOperationMutex.withLock {
                         // Manager 的公共监听器跨 close 保留；页面销毁时由拥有者显式注销。
                         runCatching { realtimeManager.setStateListener(null) }
@@ -509,7 +516,7 @@ public fun RealtimeScreen(
         }
     }
 
-    fun canRequestGeneration(): Boolean = !isSuspendedForBackground && !cameraSwitching &&
+    fun canRequestGeneration(): Boolean = !isSuspendedForBackground && !cameraSwitching && cameraFormatJob == null &&
         preparedSource == currentSource && localMediaStream != null &&
         (currentSource !is RealtimeSource.Camera || cameraPreviewReady)
 
@@ -670,6 +677,9 @@ public fun RealtimeScreen(
         invalidateGeneration()
         cameraSwitchJob?.cancelAndJoin()
         cameraSwitchJob = null
+        cameraFormatJob?.cancelAndJoin()
+        cameraFormatJob = null
+        isCameraFormatMenuVisible = false
         realtimeOperationMutex.withLock {
             val selectedSource = currentSource
             if (isSuspendedForBackground) {
@@ -922,6 +932,7 @@ public fun RealtimeScreen(
                 sourceImageUploading = sourceImageUploadState == ReferenceUploadState.UPLOADING,
                 isSuspendedForBackground = isSuspendedForBackground,
                 cameraBlur = cameraBlur,
+                cameraVideoFormat = cameraVideoFormat,
             )
 
             if (statisticsVisible) {
@@ -1050,6 +1061,58 @@ public fun RealtimeScreen(
                             onLocalVolumeChange = null,
                             onRemoteVolumeChange = ::setRemoteAudioVolume,
                         )
+                    }
+                    Box(modifier = Modifier.size(58.dp)) {
+                        val canUpdate = qualityConnectionState == RealtimeConnectionState.READY &&
+                            !generationBusy && !cameraSwitching && cameraFormatJob == null && !isSuspendedForBackground
+                        OverlayAction(
+                            label = xLabText(R.string.realtime_camera_format),
+                            modifier = Modifier.fillMaxSize(),
+                            enabled = canUpdate,
+                            onClick = { isCameraFormatMenuVisible = true },
+                        ) {
+                            CameraFormatGlyph(Modifier.size(20.dp))
+                        }
+                        DropdownMenu(
+                            expanded = isCameraFormatMenuVisible && canUpdate,
+                            onDismissRequest = { isCameraFormatMenuVisible = false },
+                            containerColor = Color(0xFF1C1C1E),
+                        ) {
+                            realtimeManager.options.model.supportedVideoFormats.forEach { format ->
+                                val selected = cameraVideoFormat?.let {
+                                    it.width == format.width && it.height == format.height
+                                } == true
+                                DropdownMenuItem(
+                                    text = {
+                                        Text("${format.width} × ${format.height}" + if (selected) " ✓" else "", color = Color.White)
+                                    },
+                                    onClick = {
+                                        isCameraFormatMenuVisible = false
+                                        if (canUpdate && cameraFormatJob == null) {
+                                            cameraFormatJob = scope.launch(start = CoroutineStart.LAZY) {
+                                                try {
+                                                    realtimeOperationMutex.withLock {
+                                                        realtimeManager.updateCameraFormat(format)
+                                                        cameraVideoFormat = realtimeManager.currentCameraVideoFormat
+                                                    }
+                                                } catch (error: CancellationException) {
+                                                    throw error
+                                                } catch (error: Throwable) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        xLabErrorText(error.message, localizedContext.getString(R.string.realtime_camera_format_error), localizedContext),
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                } finally {
+                                                    cameraFormatJob = null
+                                                }
+                                            }
+                                            cameraFormatJob?.start()
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                     OverlayAction(
                         label = xLabText(R.string.realtime_statistics),
@@ -1216,6 +1279,7 @@ private fun MediaCanvas(
     sourceImageUploading: Boolean,
     isSuspendedForBackground: Boolean,
     cameraBlur: Float,
+    cameraVideoFormat: RealtimeVideoFormat?,
 ) {
     val isPreviewReady = when (source) {
         RealtimeSource.Camera -> remoteStream != null || cameraPreviewReady
@@ -1224,7 +1288,10 @@ private fun MediaCanvas(
         -> remoteStream != null || localStream != null
     }
     val contentMode = when (source) {
-        RealtimeSource.Camera -> VideoContentMode.FILL
+        RealtimeSource.Camera -> when (cameraVideoFormat?.let { it.width to it.height }) {
+            1920 to 1080, 1080 to 1920 -> VideoContentMode.FILL
+            else -> VideoContentMode.FIT
+        }
         is RealtimeSource.Image,
         is RealtimeSource.Video,
         -> VideoContentMode.FIT
@@ -1500,6 +1567,18 @@ private fun AudioVolumeSliderRow(
                 activeTrackColor = Color(0xFFFF2E88),
                 inactiveTrackColor = Color.White.copy(alpha = 0.22f),
             ),
+        )
+    }
+}
+
+@Composable
+private fun CameraFormatGlyph(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        drawRect(
+            color = Color.White,
+            topLeft = Offset(size.width * 0.1f, size.height * 0.2f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.8f, size.height * 0.6f),
+            style = Stroke(width = 1.5.dp.toPx()),
         )
     }
 }

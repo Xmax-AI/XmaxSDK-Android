@@ -113,8 +113,9 @@ internal object QualityVideoFormat {
     fun supportsEncoding(
         format: RealtimeVideoFormat
     ): Boolean {
-        val (defaultMinimum, defaultMaximum) = EncodingBitratePolicy.resolve(format.width, format.height, format.fps)
-        return (format.minimumBitrate ?: defaultMinimum) <= (format.maximumBitrate ?: defaultMaximum)
+        val (_, defaultMaximum) = EncodingBitratePolicy.resolve(format.width, format.height, format.fps)
+        val maximum = format.maximumBitrate ?: defaultMaximum
+        return (format.minimumBitrate ?: min(500, maximum)) <= maximum
     }
 
     /**

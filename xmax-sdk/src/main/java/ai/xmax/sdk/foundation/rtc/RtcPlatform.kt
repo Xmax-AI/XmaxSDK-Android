@@ -101,6 +101,20 @@ internal interface RtcPlatform {
     ): Int
 
     /**
+     * 更新摄像头采集规格，保留镜头和本地预览绑定。
+     *
+     * @param width 画面宽度，单位为像素。
+     * @param height 画面高度，单位为像素。
+     * @param frameRate 采集帧率，单位为 fps。
+     * @return RTC 操作返回码；非负表示已接受，负值表示失败。
+     */
+    fun updateVideoCaptureFormat(
+        width: Int,
+        height: Int,
+        frameRate: Int,
+    ): Int
+
+    /**
      * 停止 RTC 内部摄像头采集。
      *
      * @return RTC 操作返回码；非负表示已接受，负值表示失败。

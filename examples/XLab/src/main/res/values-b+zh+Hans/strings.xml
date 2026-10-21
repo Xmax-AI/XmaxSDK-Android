@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="realtime_camera_format">分辨率</string>
+    <string name="realtime_camera_format_error">摄像头分辨率切换失败</string>
     <string name="realtime_statistics">统计</string>
     <string name="realtime_statistics_show">显示统计信息</string>
     <string name="realtime_statistics_hide">隐藏统计信息</string>

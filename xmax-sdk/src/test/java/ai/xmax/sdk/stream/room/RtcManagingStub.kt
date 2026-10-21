@@ -130,6 +130,7 @@ internal class RtcManagingStub(
     override fun stopAudioCapture() = Unit
 
     override fun startVideoCapture(width: Int, height: Int, frameRate: Int) = Unit
+    override fun updateVideoCaptureFormat(width: Int, height: Int, frameRate: Int) = Unit
 
     override fun stopVideoCapture() = Unit
 

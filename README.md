@@ -420,6 +420,33 @@ Both environments use `RealtimeModel.X2_1`; there is no separate regional model.
 
 X2.1 supports generation canvases of `1920×1080`, `1080×1920`, `1408×1408`,
 `1152×1536`, and `1536×1152`. The default camera format is `1080×1920` at 30 fps.
+The model's `supportedVideoFormats` lists these sizes with their recommended frame rates.
+
+Use a preset when creating a camera stream:
+
+```kotlin
+import ai.xmax.sdk.RealtimeCameraPreset
+
+val localStream = realtime.createLocalCameraStream(
+    preset = RealtimeCameraPreset.RESOLUTION_1080X1920,
+)
+```
+
+Once the camera preview is `READY` and realtime is disconnected, change its
+resolution without replacing the track or rebinding the view:
+
+```kotlin
+realtime.updateCameraFormat(RealtimeCameraPreset.RESOLUTION_1408X1408)
+val currentFormat = realtime.currentCameraVideoFormat
+val currentPreset = realtime.currentCameraPreset
+```
+
+A preset preserves the current frame rate, bitrate settings, and encoder
+preference. Pass a full `RealtimeVideoFormat` to `updateCameraFormat` to update
+those settings as well. Unsupported formats or failed changes preserve the
+previous track configuration. These media settings are independent of L1–L5
+transmission quality levels. When no minimum uplink bitrate is specified, the
+SDK uses 500 kbps, capped at the maximum bitrate; explicit values take priority.
 
 Still images and local videos can also be used as input:
 

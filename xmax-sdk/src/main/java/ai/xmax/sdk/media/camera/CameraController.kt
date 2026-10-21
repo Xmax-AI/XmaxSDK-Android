@@ -183,6 +183,25 @@ internal class CameraController(
     }
 
     /**
+     * 更新摄像头输出规格，保留镜头、轨道与预览绑定；配置失败时保留原规格。
+     *
+     * @param videoFormat 模型支持的尺寸、采集帧率与编码配置。
+     * @throws XmaxError 摄像头未启动、规格不支持或采集配置失败时抛出错误。
+     */
+    fun updateVideoFormat(
+        videoFormat: RealtimeVideoFormat,
+    ) {
+        synchronized(stateLock) {
+            val track = activeTrack
+                ?: throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Camera preview is not started")
+            val resolved = resolveVideoFormat(videoFormat)
+            if (resolved == track.videoFormat) return
+            rtcManager.updateVideoCaptureFormat(resolved.width, resolved.height, resolved.fps)
+            track.updateVideoFormat(resolved)
+        }
+    }
+
+    /**
      * 启动当前相机源的麦克风采集。
      */
     fun startMicrophoneCapture() {

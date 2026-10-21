@@ -32,8 +32,8 @@ class MediaServiceTest {
             assertEquals(IntSize(1536, 1152), service.resolveGenerationSize(IntSize(640, 480)))
             assertEquals(IntSize(1152, 1536), service.resolveGenerationSize(IntSize(480, 640)))
             assertEquals(IntSize(1408, 1408), service.resolveGenerationSize(IntSize(640, 640)))
-            model.resolutionBuckets.forEach { assertEquals(it, service.resolveGenerationSize(it)) }
-            assertTrue(service.resolveGenerationSize(IntSize(640, 640)) in model.resolutionBuckets)
+            model.supportedVideoFormats.map { IntSize(it.width, it.height) }.forEach { assertEquals(it, service.resolveGenerationSize(it)) }
+            assertTrue(service.resolveGenerationSize(IntSize(640, 640)) in model.supportedVideoFormats.map { IntSize(it.width, it.height) })
             assertThrows(XmaxError::class.java) { service.resolveGenerationSize(IntSize(0, 1080)) }
         }
     }
@@ -41,7 +41,7 @@ class MediaServiceTest {
     @Test fun `camera preserves only the declared buckets`() {
         RealtimeModel.entries.forEach { model ->
             val service = MediaService(model)
-            model.resolutionBuckets.forEach { assertEquals(it, service.resolveMediaSize(it, RealtimeMediaSource.CAMERA)) }
+            model.supportedVideoFormats.map { IntSize(it.width, it.height) }.forEach { assertEquals(it, service.resolveMediaSize(it, RealtimeMediaSource.CAMERA)) }
             val format = model.defaultCameraVideoFormat
             assertEquals(IntSize(format.width, format.height), service.resolveMediaSize(IntSize(format.width, format.height), RealtimeMediaSource.CAMERA))
             listOf(IntSize(832, 1472), IntSize(1920, 1024), IntSize(512, 960),

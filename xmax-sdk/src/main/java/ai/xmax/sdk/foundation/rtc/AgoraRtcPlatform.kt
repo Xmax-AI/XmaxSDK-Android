@@ -431,16 +431,49 @@ private class AgoraRtcPlatform(
         val source = engine.setExternalVideoSource(false, false, Constants.ExternalVideoSourceType.VIDEO_FRAME)
         if (source < 0) return source
         externalVideo = false
-        val encoding = updateVideoEncoding()
-        if (encoding < 0) return encoding
-        captureFormat = CameraCapturerConfiguration.CaptureFormat(width, height, frameRate)
-        val config = engine.setCameraCapturerConfiguration(cameraConfiguration())
+        val config = updateVideoCaptureFormat(width, height, frameRate)
         if (config < 0) return config
         val enable = engine.enableLocalVideo(true)
         if (enable < 0) return enable
         awaitingCameraFrame.set(true)
         val result = engine.startPreview()
         if (result >= 0) cameraStarted = true
+        return result
+    }
+
+    /**
+     * 更新摄像头采集尺寸和预览裁切比例，保留镜头及渲染绑定。
+     * 配置失败时恢复原采集与编码规格。
+     *
+     * @param width 画面宽度，单位为像素。
+     * @param height 画面高度，单位为像素。
+     * @param frameRate 采集帧率，单位为 fps。
+     * @return RTC 操作返回码；非负表示已接受，负值表示失败。
+     */
+    override fun updateVideoCaptureFormat(
+        width: Int,
+        height: Int,
+        frameRate: Int,
+    ): Int {
+        val previousCapture = captureFormat
+        val previousEncoding = videoEncodingConfiguration
+        val restoredEncoding = previousEncoding ?: VideoEncodingConfiguration(
+            width = previousCapture.width,
+            height = previousCapture.height,
+            frameRate = previousCapture.fps,
+        )
+        val nextEncoding = restoredEncoding.copy(width = width, height = height, frameRate = frameRate)
+        val encoding = configureVideoEncoding(nextEncoding)
+        if (encoding < 0) return encoding
+
+        captureFormat = CameraCapturerConfiguration.CaptureFormat(width, height, frameRate)
+        val result = engine.setCameraCapturerConfiguration(cameraConfiguration())
+        if (result < 0) {
+            captureFormat = previousCapture
+            engine.setCameraCapturerConfiguration(cameraConfiguration())
+            configureVideoEncoding(restoredEncoding)
+            videoEncodingConfiguration = previousEncoding
+        }
         return result
     }
 

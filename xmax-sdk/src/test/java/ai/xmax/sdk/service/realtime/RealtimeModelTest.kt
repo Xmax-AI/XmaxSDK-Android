@@ -30,7 +30,9 @@ public class RealtimeModelTest {
         assertEquals("https://api.xmax.cloud/open/api/v1", XmaxEnvironment.GLOBAL.apiBaseUrl)
         RealtimeModel.entries.forEach { model ->
             assertEquals(listOf(IntSize(1920, 1080), IntSize(1080, 1920), IntSize(1408, 1408),
-                IntSize(1152, 1536), IntSize(1536, 1152)), model.resolutionBuckets)
+                IntSize(1152, 1536), IntSize(1536, 1152)), model.supportedVideoFormats.map { IntSize(it.width, it.height) })
+            assertTrue(model.supportedVideoFormats.all { it.fps == model.defaultFrameRate })
+            assertEquals(model.supportedVideoFormats.map { IntSize(it.width, it.height) }, RealtimeCameraPreset.entries.map { it.size })
             assertEquals(RealtimeVideoFormat(1080, 1920, 30), model.defaultCameraVideoFormat)
             assertEquals(600_000, model.minimumInputPixels)
             assertEquals(2_100_000, model.maximumInputPixels)
