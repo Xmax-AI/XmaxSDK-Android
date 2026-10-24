@@ -17,59 +17,61 @@ import java.util.Base64
 import java.util.UUID
 
 /**
- * 协调单次生成的业务标识、条件缓存和交互绑定；操作互斥由上层 RealtimeCoordinator 保证。
- * Core 创建 taskId，并将同一个标识交给 Stream 和 Interaction，以关联信令、帧和轨迹。
- * 此处只等待 Stream 的远端确认，远端视频帧就绪条件由 XmaxRealtimeManager 继续等待。
+ * Owns generation identifiers, cached conditions, and interaction bindings; RealtimeCoordinator serializes
+ * operations.
+ * Core shares one taskId with Stream and Interaction to associate signaling, frames, and trajectories.
+ * This manager waits for Stream confirmation; XmaxRealtimeManager also waits for a renderable remote frame.
  */
 internal class XmaxRealtimeGenerationManager(
     /**
-     * 提交触控轨迹的控制器。
+     * The controller submitting interaction trajectories.
      */
     private val interactionController: InteractionControlling,
 
     /**
-     * 控制 RTC 发布、订阅及生成信令的组件。
+     * The component managing RTC publication, subscriptions, and generation signaling.
      */
     private val streamController: StreamControlling,
 
     /**
-     * 为每次新生成请求分配任务标识。
+     * The function allocating a generation task identifier.
      */
     private val taskIdGenerator: () -> String = ::createTaskId,
 ) {
 
     /**
-     * 生成条件缓存的并发保护。
+     * The lock protecting cached generation conditions.
      */
     private val stateLock = Any()
 
     /**
-     * 最近一次有效的生成条件及只读快照。
+     * The last committed generation conditions.
      */
     private var currentContext: RealtimeContext? = null
 
     /**
-     * 当前生成是否启用人脸修复。
+     * Whether the current generation uses face restoration.
      */
     private var currentFaceRestoration = false
 
     /**
-     * 在途切流可持有同一个条件对象，保证重连回滚后仍能完成最新替换意图。
+     * Pending replacements retain their context across reconnection rollback.
      */
     val cachedContext: RealtimeContext? get() = synchronized(stateLock) { currentContext }
 
     /**
-     * 自动重启生成时保留上次成功请求的人脸还原设置。
+     * Retains the last successful face restoration setting for generation restarts.
      */
     val cachedFaceRestoration: Boolean get() = synchronized(stateLock) { currentFaceRestoration }
 
     /**
-     * 首次生成必须提供条件；已缓存条件可供后续重启复用。
+     * Requires initial generation conditions and permits later reuse of cached conditions.
      *
-     * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
+     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
+     * for the first request.
      */
     fun validateContext(
-        context: RealtimeContext?
+        context: RealtimeContext?,
     ) {
         if (context == null && synchronized(stateLock) { currentContext } == null) {
             throw XmaxError(
@@ -80,17 +82,19 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * 解析本次条件、创建任务并等待远端确认，之后才绑定交互和更新条件缓存。
-     * 等待期间失败或取消时停止该 taskId；只有通过 ensureCurrent 校验的结果才能返回上层。
+     * Starts a generation task and commits its context and interaction binding after remote confirmation.
+     * Failure or cancellation stops that taskId; only results passing ensureCurrent can return.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`；默认值为 `false`。
-     * @param targetVideoFormat 下行输出的视频规格。
-     * @param generationVideoFormat 模型生成画布的视频规格，独立于媒体输入规格；默认值为 `videoFormat`。
-     * @param paddingContain 是否让服务端等比适配输入并在输出时移除补边；默认值为 `false`。
-     * @param ensureCurrent 检查当前操作是否有效的函数，失效时应抛出取消异常。
-     * @return 新任务的唯一生成标识。
+     * @param videoFormat The resolved local media baseline used for interaction coordinates.
+     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
+     * for the first request.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
+     * @param targetVideoFormat The downlink output format.
+     * @param generationVideoFormat The model canvas format, independent of media input; defaults to
+     * `videoFormat`.
+     * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @param ensureCurrent Checks operation ownership and throws cancellation if it is no longer current.
+     * @return The unique identifier for the new generation task.
      */
     suspend fun start(
         videoFormat: RealtimeVideoFormat,
@@ -118,29 +122,40 @@ internal class XmaxRealtimeGenerationManager(
         try {
             confirmation.await()
             ensureCurrent()
-            interactionController.startInteraction(taskId, videoFormat)
+            interactionController.startInteraction(
+                taskId,
+                videoFormat,
+            )
             synchronized(stateLock) {
                 currentContext = resolvedContext
                 currentFaceRestoration = faceRestoration
             }
             return taskId
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             confirmation.cancel()
-            cleanupAfterFailure(error, { stop(taskId) })
+            cleanupAfterFailure(
+                error,
+                { stop(taskId) },
+            )
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * 更新现有任务，复用 taskId；条件为空时复用缓存，仍发送本次人脸还原设置。
+     * Updates an existing task using its taskId; null conditions reuse the cache, while face restoration uses
+     * this call's setting.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`；默认值为 `false`。
-     * @param generationVideoFormat 模型生成画布的视频规格，独立于媒体输入规格；默认值为 `videoFormat`。
-     * @param paddingContain 是否让服务端等比适配输入并在输出时移除补边；默认值为 `false`。
-     * @param ensureCurrent 检查当前操作是否有效的函数，失效时应抛出取消异常。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat The resolved local media baseline used for interaction coordinates.
+     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
+     * for the first request.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
+     * @param generationVideoFormat The model canvas format, independent of media input; defaults to
+     * `videoFormat`.
+     * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @param ensureCurrent Checks operation ownership and throws cancellation if it is no longer current.
      */
     suspend fun update(
         taskId: String,
@@ -156,9 +171,18 @@ internal class XmaxRealtimeGenerationManager(
                 XmaxErrorCode.INVALID_CONFIGURATION,
                 "A realtime context is required for the first generation",
             )
-        streamController.updateGeneration(taskId, generationVideoFormat, resolvedContext, faceRestoration, paddingContain)
+        streamController.updateGeneration(
+            taskId,
+            generationVideoFormat,
+            resolvedContext,
+            faceRestoration,
+            paddingContain,
+        )
         ensureCurrent()
-        interactionController.startInteraction(taskId, videoFormat)
+        interactionController.startInteraction(
+            taskId,
+            videoFormat,
+        )
         synchronized(stateLock) {
             currentContext = resolvedContext
             currentFaceRestoration = faceRestoration
@@ -166,12 +190,13 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * 停止交互和指定任务，保留上次成功条件以便重新生成；独立释放步骤均会尝试。
+     * Stops interaction and the task while retaining successful conditions for another generation; attempts
+     * every independent cleanup step.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
+     * @param taskId The identifier associating the generation request with its result stream.
      */
     suspend fun stop(
-        taskId: String
+        taskId: String,
     ) {
         cleanupResources(
             { interactionController.stopInteraction() },
@@ -180,12 +205,13 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * 连接重置时清空条件缓存并停止任务；空 taskId 由 Stream 解释为停止当前任务。
+     * Clears cached conditions and stops generation when the connection resets; an empty taskId stops the
+     * current task in Stream.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
+     * @param taskId The identifier associating the generation request with its result stream.
      */
     suspend fun reset(
-        taskId: String = ""
+        taskId: String = "",
     ) {
         synchronized(stateLock) {
             currentContext = null
@@ -195,14 +221,15 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * 生成任务标识的编码规则。
+     * The encoding rules for generation task identifiers.
      */
     internal companion object {
 
         /**
-         * UUID 原始 16 字节使用无填充的 Base64URL 编码，并通过查询参数标记平台。
+         * Encodes the UUID's 16 bytes as unpadded Base64URL and identifies the platform with a query
+         * parameter.
          *
-         * @return 用于关联生成信令的唯一任务标识。
+         * @return A unique identifier for generation signaling.
          */
         fun createTaskId(): String {
             val uuid = UUID.randomUUID()

@@ -20,134 +20,168 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 绑定外部供帧，不接管采集器或播放器；沿用 SDK 的轨道所有权、模型规格和媒体错误清理。
+ * Binds app-owned frame input while retaining SDK track ownership, model validation, and media failure
+ * cleanup.
  */
 internal class ExternalVideoController(
     /**
-     * 提供 RTC 操作的管理器。
+     * The RTC operations manager.
      */
     private val rtc: RtcManaging,
 
     /**
-     * 解析媒体尺寸及模型输入规则的服务。
+     * The service resolving media dimensions and model constraints.
      */
     private val mediaService: MediaServicing,
 
     /**
-     * 查询当前生成是否需要外部输入帧的函数。
+     * The function checking whether generation currently requests external frames.
      */
     private val requestingFrames: () -> Boolean,
 
     /**
-     * 接收本地视频帧的回调。
+     * The local video frame callback.
      */
     private val videoListener: (VideoFrame) -> Unit,
 
     /**
-     * 接收本地音频帧的回调。
+     * The local audio frame callback.
      */
     private val audioListener: (AudioFrame) -> Unit,
 
     /**
-     * 接收媒体错误的回调。
+     * The media failure callback.
      */
     private val errorListener: (XmaxError) -> Unit,
 ) {
 
     /**
-     * 外部输入状态的并发保护。
+     * The lock protecting external input state.
      */
     private val lock = Any()
 
     /**
-     * 当前外部源、帧接收器和媒体轨道。
+     * The active external source.
      */
     private var source: RealtimeExternalVideoSource? = null
 
     /**
-     * 接收当前外部源音视频帧的入口。
+     * The frame receiver for the active external source.
      */
     private var sink: Sink? = null
 
     /**
-     * 当前外部源对应的本地视频轨道。
+     * The local video track of the external source.
      */
     @Volatile var currentTrack: RealtimeVideoTrack? = null
         private set
 
     /**
-     * 当前外部源是否提供音频帧。
+     * Whether the current external source supplies audio frames.
      */
     @Volatile var hasAudio = false
         private set
 
     /**
-     * 外部源的本地音频预览配置。
+     * The external source's local preview volume.
      */
     private var volume = 0.45f
 
     /**
-     * 外部源的本地音频预览是否静音。
+     * Whether the external source's local audio preview is muted.
      */
     private var muted = false
 
     /**
-     * 绑定外部输入源并创建对应的本地媒体流。
+     * Binds an external source and creates its local media stream.
      *
-     * @param source 接入方负责启停及释放的外部音视频源。
-     * @param videoFormat 媒体输入的尺寸、帧率及可选上行编码配置；null 表示使用媒体解析结果或来源默认值。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param source The external media source whose lifecycle your app owns.
+     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
+     * source or parsed media defaults.
      */
     suspend fun create(
         source: RealtimeExternalVideoSource,
         videoFormat: RealtimeVideoFormat? = null,
     ): RealtimeMediaStream = withContext(Dispatchers.Main.immediate) {
         check(this@ExternalVideoController.source == null)
-        val requested = videoFormat ?: source.videoFormat.copy(fps = mediaService.model.defaultFrameRate)
-        if (requested.fps <= 0) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Video stream frame rate must be greater than zero")
-        }
-        val size = mediaService.resolveMediaSize(IntSize(requested.width, requested.height), RealtimeMediaSource.CAMERA)
-        val format = requested.copy(width = size.width, height = size.height).also(RealtimeVideoFormat::validate)
-        val track = RealtimeVideoTrack("external0", format)
-        val input = Sink(format, source.hasAudio)
+        val requested = videoFormat ?: source.videoFormat
+        requested.validate()
+        val size = mediaService.resolveMediaSize(
+            IntSize(
+                requested.width,
+                requested.height,
+            ),
+            RealtimeMediaSource.EXTERNAL,
+        )
+        val format = requested.copy(
+            width = size.width,
+            height = size.height,
+        ).also(RealtimeVideoFormat::validate)
+        val track = RealtimeVideoTrack(
+            "external0",
+            format,
+        )
+        val input = Sink(
+            format,
+            source.hasAudio,
+        )
         this@ExternalVideoController.source = source
         synchronized(lock) { sink = input }
         try {
             rtc.useExternalVideoSource()
             hasAudio = source.hasAudio
             if (hasAudio) rtc.startExternalAudioSource()
-            VideoRenderRegistry.register(track, VideoRenderBinding(
-                attachHandler = { view, mode -> source.attachPreview(view, mode) },
-                detachHandler = { view -> source.detachPreview(view) },
-            ))
+            VideoRenderRegistry.register(
+                track,
+                VideoRenderBinding(
+                    attachHandler = { view, mode -> source.attachPreview(
+                        view,
+                        mode,
+                    ) },
+                    detachHandler = { view -> source.detachPreview(view) },
+                ),
+            )
             currentTrack = track
-            source.setPreviewAudio(volume, muted)
+            source.setPreviewAudio(
+                volume,
+                muted,
+            )
             source.start(input)
-            RealtimeMediaStream(StreamID.LOCAL.value, track)
-        } catch (error: Throwable) {
-            cleanupAfterFailure(error, { stop() })
+            RealtimeMediaStream(
+                StreamID.LOCAL.value,
+                track,
+            )
+        } catch (
+            error: Throwable,
+        ) {
+            cleanupAfterFailure(
+                error,
+                { stop() },
+            )
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * 更新外部媒体源的预览音量或静音设置。
+     * Updates the external source's preview volume or mute state.
      *
-     * @param volume 播放音量，范围为 0 到 1。
-     * @param muted 是否静音。
+     * @param volume The playback volume, from 0 to 1.
+     * @param muted Whether audio is muted.
      */
     suspend fun setAudio(
         volume: Float? = null,
-        muted: Boolean? = null
+        muted: Boolean? = null,
     ): Unit = withContext(Dispatchers.Main.immediate) {
         volume?.let { this@ExternalVideoController.volume = it }
         muted?.let { this@ExternalVideoController.muted = it }
-        source?.setPreviewAudio(this@ExternalVideoController.volume, this@ExternalVideoController.muted)
+        source?.setPreviewAudio(
+            this@ExternalVideoController.volume,
+            this@ExternalVideoController.muted,
+        )
     }
 
     /**
-     * 停止向 SDK 供帧并清除 sink，必须幂等；不代表关闭接入方的摄像头或播放器。
+     * Stops frame delivery and clears the sink idempotently without closing your app's camera or player.
      */
     suspend fun stop(): Unit = withContext(Dispatchers.Main.immediate) {
         synchronized(lock) { sink = null }
@@ -159,7 +193,10 @@ internal class ExternalVideoController(
         hasAudio = false
         muted = false
         cleanupResources(
-            { previousSource?.setPreviewAudio(volume, false) },
+            { previousSource?.setPreviewAudio(
+                volume,
+                false,
+            ) },
             { previousSource?.stop() },
             { previousTrack?.let { VideoRenderRegistry.binding(it)?.detach() } },
             { previousTrack?.let(VideoRenderRegistry::unregister) },
@@ -168,99 +205,123 @@ internal class ExternalVideoController(
     }
 
     /**
-     * 向当前外部媒体输入提交音视频帧和错误的接收器。
+     * A receiver for frames and failures from the current external input.
      */
     private inner class Sink(
         /**
-         * 视频尺寸、帧率及上行编码参数。
+         * The video dimensions, frame rate, and uplink encoding settings.
          */
         override val videoFormat: RealtimeVideoFormat,
 
         /**
-         * 是否向 RTC 提供外部音频。
+         * Whether external audio is supplied to RTC.
          */
         private val audioEnabled: Boolean,
     ) : RealtimeExternalFrameSink {
 
         /**
-         * 音视频提交时间及当前供帧需求。
+         * The last accepted video timestamp, in microseconds.
          */
         private var lastVideoUs = -1L
 
         /**
-         * 最后接收的音频帧时间戳，单位为微秒。
+         * The last accepted audio timestamp, in microseconds.
          */
         private var lastAudioUs = -1L
 
         /**
-         * 当前生成任务是否需要该外部源供帧。
+         * Whether the current task requests frames from this source.
          */
         override val isRequestingFrames: Boolean
             get() = synchronized(lock) { sink === this && requestingFrames() }
 
         /**
-         * 向 SDK 提交一帧外部采集的 RGBA 视频数据。
+         * Submits an externally captured RGBA video frame.
          *
-         * @param rgba 按当前输入尺寸排列的紧密 RGBA 像素数据。
-         * @param timestampUs 帧的单调时间戳，单位为微秒。
+         * @param rgba Tightly packed RGBA pixels matching the current input dimensions.
+         * @param timestampUs The monotonic frame timestamp, in microseconds.
          */
         override fun pushVideo(
             rgba: ByteArray,
-            timestampUs: Long
+            timestampUs: Long,
         ) = submit {
             if (timestampUs <= lastVideoUs) return@submit
             require(rgba.size.toLong() == videoFormat.width.toLong() * videoFormat.height * 4)
             lastVideoUs = timestampUs
-            videoListener(VideoFrame(
-                VideoFormat(videoFormat.width, videoFormat.height, VideoPixelFormat.RGBA),
-                timestampUs,
-                listOf(VideoFramePlane(rgba, videoFormat.width * 4)),
-            ))
+            videoListener(
+                VideoFrame(
+                    VideoFormat(
+                        videoFormat.width,
+                        videoFormat.height,
+                        VideoPixelFormat.RGBA,
+                    ),
+                    timestampUs,
+                    listOf(
+                        VideoFramePlane(
+                            rgba,
+                            videoFormat.width * 4,
+                        ),
+                    ),
+                ),
+            )
         }
 
         /**
-         * 向 SDK 提交外部采集的 PCM 音频数据。
+         * Submits externally captured PCM audio.
          *
-         * @param pcm 48 kHz、单声道、PCM16 小端音频字节。
-         * @param timestampUs 帧的单调时间戳，单位为微秒。
+         * @param pcm 48 kHz mono PCM16 little-endian audio bytes.
+         * @param timestampUs The monotonic frame timestamp, in microseconds.
          */
         override fun pushAudio(
             pcm: ByteArray,
-            timestampUs: Long
+            timestampUs: Long,
         ) = submit {
             if (!audioEnabled || timestampUs <= lastAudioUs) return@submit
             require(pcm.size == 960)
             lastAudioUs = timestampUs
-            audioListener(AudioFrame(pcm, timestampUs))
+            audioListener(
+                AudioFrame(
+                    pcm,
+                    timestampUs,
+                ),
+            )
         }
 
         /**
-         * 报告当前媒体输入或生成任务的失败。
+         * Reports a failure in the current media input or generation task.
          *
-         * @param error 本次操作失败的异常或 SDK 错误。
+         * @param error The operation failure or SDK error.
          */
         override fun reportError(
-            error: Throwable
+            error: Throwable,
         ) {
             if (synchronized(lock) { sink === this }) {
-                errorListener(XmaxError(XmaxErrorCode.MEDIA_ERROR, "External media source failed", cause = error))
+                errorListener(
+                    XmaxError(
+                        XmaxErrorCode.MEDIA_ERROR,
+                        "External media source failed",
+                        cause = error,
+                    ),
+                )
             }
         }
 
         /**
-         * 在外部源仍有效时提交媒体事件，失败时通知错误回调。
+         * Submits events only while the external source is active, forwarding failures to the error callback.
          *
-         * @param action 需要执行的操作。
+         * @param action The operation to perform.
          */
         private fun submit(
-            action: () -> Unit
+            action: () -> Unit,
         ) {
             try {
                 synchronized(lock) {
                     if (sink !== this || !requestingFrames()) return
                     action()
                 }
-            } catch (error: Exception) { reportError(error) }
+            } catch (
+                error: Exception,
+            ) { reportError(error) }
         }
     }
 }

@@ -11,27 +11,39 @@
 package ai.xmax.sdk.stream.quality
 
 /**
- * 上下行共用的尺寸比例与上行帧率上限，档位编号从 1 开始。
+ * Shared dimension scales and uplink frame-rate limits for one-based quality levels.
  */
 internal object QualityTiers {
 
     /**
-     * 默认档位与最低输出尺寸约束。
+     * The default transmission level.
      */
-    const val INITIAL_LEVEL = 2
+    const val INITIAL_LEVEL = 1
 
     /**
-     * 自动调档允许的最小短边，单位为像素。
+     * The minimum short side allowed by adaptation, in pixels.
      */
     const val MINIMUM_SHORT_SIDE = 240
 
     /**
-     * 各档位的分辨率比例和帧率上限。
+     * The dimension percentage for each quality level.
      */
-    val percentages = listOf(100, 80, 65, 50, 50)
+    val percentages = listOf(
+        100,
+        90,
+        75,
+        60,
+        50,
+    )
 
     /**
-     * L1 至 L5 各档位的目标帧率，单位为 fps。
+     * The frame-rate limit for L1 through L5, in fps.
      */
-    val frameRates = listOf(30, 24, 24, 20, 16)
+    val frameRates = listOf(
+        30,
+        24,
+        24,
+        20,
+        16,
+    )
 }

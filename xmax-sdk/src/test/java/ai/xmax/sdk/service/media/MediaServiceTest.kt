@@ -53,7 +53,7 @@ class MediaServiceTest {
     }
 
     @Test
-    fun `media respects model area without applying minimum area or bucket constraints`() {
+    fun `non camera media respects area bounds without requiring a model bucket`() {
         val cases = listOf(
             IntSize(3840, 2160) to IntSize(1920, 1080),
             IntSize(2160, 3840) to IntSize(1080, 1920),
@@ -61,18 +61,19 @@ class MediaServiceTest {
             IntSize(6000, 8000) to IntSize(1248, 1664),
             IntSize(1280, 1707) to IntSize(1252, 1672),
             IntSize(1707, 1280) to IntSize(1672, 1252),
-            IntSize(320, 180) to IntSize(320, 180),
-            IntSize(804, 600) to IntSize(804, 600),
+            IntSize(1000, 500) to IntSize(1000, 500),
+            IntSize(1004, 600) to IntSize(1004, 600),
             IntSize(1001, 1000) to IntSize(1000, 1000),
-            IntSize(802, 600) to IntSize(800, 600),
+            IntSize(1001, 600) to IntSize(1000, 600),
         )
         for (model in RealtimeModel.entries) {
             val service = MediaService(model)
-            for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO)) {
+            for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
                 for ((input, expected) in cases) {
                     val actual = service.resolveMediaSize(input, source)
                     assertEquals(expected, actual)
                     assertTrue(actual.width.toLong() * actual.height <= model.maximumInputPixels)
+                    assertTrue(actual.width.toLong() * actual.height >= model.minimumInputPixels)
                     assertEquals(0, actual.width % 4)
                     assertEquals(0, actual.height % 4)
                     assertTrue(actual.width <= input.width && actual.height <= input.height)
@@ -80,6 +81,21 @@ class MediaServiceTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `minimum media area applies after alignment and never enlarges small inputs`() {
+        val service = MediaService()
+        for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
+            for (size in listOf(IntSize(640, 480), IntSize(640, 640), IntSize(1000, 499), IntSize(999, 501))) {
+                val error = assertThrows(XmaxError::class.java) { service.resolveMediaSize(size, source) }
+                assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, error.code)
+            }
+            assertEquals(IntSize(1000, 500), service.resolveMediaSize(IntSize(1000, 500), source))
+            assertEquals(IntSize(1000, 500), service.resolveMediaSize(IntSize(1001, 500), source))
+            assertEquals(IntSize(1024, 1920), service.resolveMediaSize(IntSize(1024, 1920), source))
+        }
+        assertEquals(IntSize(400, 200), service.resolveTargetSize(IntSize(1000, 500), Size(400f, 200f)))
     }
 
     @Test

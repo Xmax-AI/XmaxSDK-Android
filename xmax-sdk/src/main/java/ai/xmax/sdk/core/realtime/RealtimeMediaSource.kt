@@ -11,27 +11,32 @@
 package ai.xmax.sdk
 
 /**
- * 实时生成模型支持的本地媒体来源。
+ * Local media sources supported by realtime generation.
  */
 public enum class RealtimeMediaSource(
     /**
-     * 媒体输入类型的协议标识。
+     * The protocol identifier for the media source.
      */
-    public val id: String
+    public val id: String,
 ) {
 
     /**
-     * 摄像头输入。
+     * Camera input.
      */
     CAMERA("camera"),
 
     /**
-     * 视频输入。
+     * Video input.
      */
     VIDEO("video"),
 
     /**
-     * 图片输入。
+     * Image input.
      */
     IMAGE("image"),
+
+    /**
+     * App-owned external frame input.
+     */
+    EXTERNAL("external"),
 }

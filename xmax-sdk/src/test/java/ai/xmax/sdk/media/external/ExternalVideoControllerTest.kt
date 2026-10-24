@@ -132,13 +132,15 @@ class ExternalVideoControllerTest {
         } finally { Dispatchers.resetMain() }
     }
 
-    @Test fun `default output preserves supported bucket sizes`() = runTest {
+    @Test fun `default output preserves source frame rate and non bucket dimensions`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val controller = ExternalVideoController(RtcManagingStub(), MediaService(), { true }, {}, {}, {})
         try {
             for ((input, expected) in listOf(
-                RealtimeVideoFormat(1080, 1920, 24) to RealtimeVideoFormat(1080, 1920, 30),
-                RealtimeVideoFormat(1920, 1080, 60) to RealtimeVideoFormat(1920, 1080, 30),
+                RealtimeVideoFormat(1080, 1920, 24) to RealtimeVideoFormat(1080, 1920, 24),
+                RealtimeVideoFormat(1920, 1080, 60) to RealtimeVideoFormat(1920, 1080, 60),
+                RealtimeVideoFormat(1280, 720, 24) to RealtimeVideoFormat(1280, 720, 24),
+                RealtimeVideoFormat(3840, 2160, 60) to RealtimeVideoFormat(1920, 1080, 60),
             )) {
                 val source = Source(videoFormat = input)
                 val stream = controller.create(source)
@@ -162,15 +164,46 @@ class ExternalVideoControllerTest {
         } finally { controller.stop(); Dispatchers.resetMain() }
     }
 
-    @Test fun `x21 accepts explicit resolution bucket and rejects unsupported source size before binding`() = runTest {
+    @Test
+    fun `external frame delivery uses the resolved media format instead of the model canvas`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val frames = mutableListOf<VideoFrame>()
+        val errors = mutableListOf<XmaxError>()
+        val controller = ExternalVideoController(RtcManagingStub(), MediaService(), { true }, frames::add, {}, errors::add)
+        try {
+            for ((input, expected) in listOf(
+                RealtimeVideoFormat(1280, 720, 24) to RealtimeVideoFormat(1280, 720, 24),
+                RealtimeVideoFormat(3840, 2160, 24) to RealtimeVideoFormat(1920, 1080, 24),
+            )) {
+                val source = Source(videoFormat = input)
+                val local = controller.create(source)
+                val sink = checkNotNull(source.sink)
+                sink.pushVideo(ByteArray(expected.width * expected.height * 4), 1)
+                val frame = frames.last()
+                assertEquals(expected, local.videoTrack!!.videoFormat)
+                assertEquals(expected, sink.videoFormat)
+                assertEquals(expected.width, frame.format.width)
+                assertEquals(expected.height, frame.format.height)
+                assertEquals(1L, frame.timestampUs)
+                assertTrue(errors.isEmpty())
+                controller.stop()
+            }
+            assertEquals(2, frames.size)
+        } finally { controller.stop(); Dispatchers.resetMain() }
+    }
+
+    @Test fun `external media does not require a camera bucket but rejects undersized frames before binding`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val rtc = RtcManagingStub()
         val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1), { true }, {}, {}, {})
         try {
-            val source = Source(videoFormat = RealtimeVideoFormat(1024, 1920, 30))
-            try { controller.create(source); fail("Expected unsupported resolution") } catch (_: XmaxError) { }
-            assertNull(source.sink)
+            val small = Source(videoFormat = RealtimeVideoFormat(640, 480, 30))
+            try { controller.create(small); fail("Expected undersized input") } catch (_: XmaxError) { }
+            assertNull(small.sink)
             assertTrue(rtc.calls.isEmpty())
+            val source = Source(videoFormat = RealtimeVideoFormat(1024, 1920, 30))
+            assertEquals(source.videoFormat, controller.create(source).videoTrack!!.videoFormat)
+            controller.stop()
             val requested = RealtimeVideoFormat(1080, 1920, 30)
             assertEquals(requested, controller.create(source, requested).videoTrack!!.videoFormat)
             assertEquals(requested, source.sink!!.videoFormat)

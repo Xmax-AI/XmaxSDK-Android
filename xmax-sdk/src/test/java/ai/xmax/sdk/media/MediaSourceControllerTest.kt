@@ -36,7 +36,7 @@ class MediaSourceControllerTest {
 
     @Test
     fun `video derives dimensions from media and respects the model area limit`() {
-        for ((width, height) in listOf(1920 to 1080, 1080 to 1920, 1280 to 720, 640 to 480, 640 to 640)) {
+        for ((width, height) in listOf(1920 to 1080, 1080 to 1920, 1280 to 720, 1000 to 500, 800 to 800)) {
             val result = controller.resolveVideoFormat(metadata(width, height))
             assertEquals(RealtimeVideoFormat(width, height, service.model.defaultFrameRate), result)
         }
@@ -56,7 +56,7 @@ class MediaSourceControllerTest {
 
     @Test
     fun `video rejects invalid or sub-alignment media dimensions before playback`() {
-        for ((width, height) in listOf(0 to 1080, -1 to 1080, 1 to 1, 2 to 2, 3 to 3)) {
+        for ((width, height) in listOf(0 to 1080, -1 to 1080, 1 to 1, 2 to 2, 3 to 3, 640 to 480, 999 to 501)) {
             assertThrows(XmaxError::class.java) { controller.resolveVideoFormat(metadata(width, height)) }
         }
     }

@@ -14,187 +14,199 @@ import android.graphics.Bitmap
 import android.net.Uri
 
 /**
- * 本地媒体、连接与生成的公共入口；同一管理器同时拥有一个本地媒体源。
+ * The public API for local media, connections, and generation; each manager owns one local media source at a
+ * time.
  *
- * 创建或停止本地媒体前须先断开连接；外部视频热切换使用 [replaceExternalVideoStream]。
- * 同一管理器的生成请求以最新一次为准，SDK 负责取消旧请求并等待回滚，接入方无需串行排队。
- * [disconnect] 和 [close] 可取消受其影响的进行中操作，并等待清理。
- * 挂起调用通过异常返回失败，协程取消保持 CancellationException 语义。
- * 上下行传输质量随网络状况独立调档；无历史记录时从 L2（80% 宽高）开始。
- * 调档不改变原始媒体规格、模型生成尺寸或交互坐标，也不依赖公开统计监听器。
+ * Disconnect before creating or stopping local media. Use [replaceExternalVideoStream] for external source
+ * replacement.
+ * Generation requests prefer the latest call; XmaxSDK cancels old requests and waits for rollback without
+ * requiring app-side serialization.
+ * [disconnect] and [close] cancel affected pending operations and wait for cleanup.
+ * Suspending calls report failures through exceptions and preserve CancellationException semantics.
+ * Uplink and downlink adapt independently to network quality, starting at L1 (100% dimensions) when no history
+ * exists.
+ * Adaptation leaves original media dimensions, the model canvas, and interaction coordinates unchanged and
+ * does not depend on public statistics listeners.
  */
 public interface XmaxRealtimeManaging {
 
     /**
-     * 管理器配置与当前生命周期状态。
-     *
-     * 创建管理器时指定的业务配置。
+     * The realtime configuration supplied at creation.
      */
     public val options: RealtimeConfiguration
 
     /**
-     * 当前状态快照；异步故障由 [RealtimeState.reason] 表达。
+     * The current state snapshot; [RealtimeState.reason] reports asynchronous failures.
      */
     public val currentState: RealtimeState
 
     /**
-     * 当前摄像头媒体输出规格；没有摄像头流时为 null，不随上行调档变化。
+     * The current camera media format, or null without a camera source; transmission quality changes do not
+     * alter it.
      */
     public val currentCameraVideoFormat: RealtimeVideoFormat?
 
     /**
-     * 当前摄像头分辨率对应的预设；没有摄像头流或找不到匹配预设时为 null。
+     * The preset matching the current camera dimensions, or null without a camera or matching preset.
      */
     public val currentCameraPreset: RealtimeCameraPreset?
 
     /**
-     * 更新未连接、已就绪的摄像头规格，保留原轨道和视图绑定。
+     * Updates a ready, disconnected camera preview while retaining its track and view binding.
      *
-     * @param videoFormat 新的尺寸、采集帧率与编码配置；尺寸须匹配模型支持列表。
-     * @throws XmaxError 状态不允许、规格不支持、操作冲突或采集配置失败时抛出错误。
+     * @param videoFormat New dimensions, capture frame rate, and encoding settings; dimensions must match a
+     * supported model format.
+     * @throws XmaxError If state, format, operation conflicts, or capture configuration prevent the update.
      */
     public suspend fun updateCameraFormat(
         videoFormat: RealtimeVideoFormat,
     )
 
     /**
-     * 更新摄像头分辨率，保留当前帧率、码率和编码偏好。
+     * Changes camera resolution while preserving the current frame rate, bitrate, and encoding preference.
      *
-     * @param preset 模型支持的目标分辨率预设。
-     * @throws XmaxError 状态不允许、预设不支持、操作冲突或采集配置失败时抛出错误。
+     * @param preset The target resolution preset supported by the model.
+     * @throws XmaxError If state, preset, operation conflicts, or capture configuration prevent the update.
      */
     public suspend fun updateCameraFormat(
         preset: RealtimeCameraPreset,
     )
 
     /**
-     * 当前成功应用的上行档位；尚未连接、已开始断开或没有本地上行时为 null。
+     * The committed uplink level, or null before connection, during disconnection, or without local
+     * publication.
      */
     public val uplinkQualityLevel: RealtimeQualityLevel?
 
     /**
-     * 当前成功提交的下行档位；尚未建立下行配置或已开始断开时为 null。
-     * 服务端返回新尺寸可能稍晚于本属性更新。
+     * The submitted downlink level, or null before downlink configuration exists or during disconnection.
+     * The received resolution may change after this property updates.
      */
     public val downlinkQualityLevel: RealtimeQualityLevel?
 
     /**
-     * 在生成中调整上行编码档位，不改变媒体采集规格或模型生成尺寸。
-     * 后续网络采样仍可自动调整档位，不会锁定为手动选择值。
+     * Adjusts uplink encoding quality during generation without changing capture dimensions or the model
+     * canvas.
+     * Later network samples may still change the level; a manual choice does not lock adaptation.
      *
-     * @param level 目标上行档位。
-     * @throws XmaxError 未在生成、没有本地上行、操作冲突或编码配置失败时抛出错误。
+     * @param level The target uplink level.
+     * @throws XmaxError If generation, local publication, operation admission, or encoding configuration does
+     * not permit the update.
      */
     public suspend fun setUplinkQualityLevel(
         level: RealtimeQualityLevel,
     )
 
     /**
-     * 在生成中调整下行回传档位；后续网络采样仍可自动调整档位。
+     * Adjusts downlink quality during generation while keeping automatic adaptation enabled.
      *
-     * @param level 目标下行档位。
-     * @throws XmaxError 未在生成、操作冲突或信令发送失败时抛出错误。
+     * @param level The target downlink level.
+     * @throws XmaxError If generation, operation admission, or signaling fails to permit the update.
      */
     public suspend fun setDownlinkQualityLevel(
         level: RealtimeQualityLevel,
     )
 
     /**
-     * 本地预览与远端结果的播放音量。
-     *
-     * 当前本地媒体预览音量，取值范围为 `0..1`；未设置时为 0.45。
+     * The local preview volume from 0 to 1; defaults to 0.45 when unset.
      */
     public val localAudioVolume: Float
 
     /**
-     * 当前远端生成音频音量，取值范围为 `0..1`；新建媒体流时按来源重置。
+     * The remote volume from 0 to 1, reset according to source type when creating new media.
      */
     public val remoteAudioVolume: Float
 
     /**
-     * 替换状态监听器，并异步派发当前快照；通知在主线程执行，传 null 注销。
+     * Replaces the state listener and asynchronously delivers the current snapshot on the main thread; null
+     * unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     public suspend fun setStateListener(
-        listener: RealtimeStateListener?
+        listener: RealtimeStateListener?,
     )
 
     /**
-     * 接收显示前的最终远端视频帧。
-     * 在 SDK 后台串行队列调用；慢消费者会跳过积压帧，只保留最新待回调帧。
-     * 帧像素可持有供异步编码；传 null 清除。停止生成、断连或换任务会丢弃旧的待回调帧，
-     * 已开始执行的回调允许返回；无需绑定视频视图也能接收帧。
+     * Receives final remote video frames before display.
+     * Callbacks run serially on an SDK background dispatcher; slow consumers receive only the latest pending
+     * frame.
+     * Frame pixels may be retained for asynchronous encoding. Null unregisters the listener. Stopping,
+     * disconnecting, or changing tasks discards pending old frames;
+     * callbacks already executing may finish. A video view binding is not required.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     public suspend fun setRemoteVideoFrameListener(
-        listener: RealtimeVideoFrameListener?
+        listener: RealtimeVideoFrameListener?,
     )
 
     /**
-     * 设置 RTC 网络质量监听器；传 null 注销。
+     * Sets the RTC network quality listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     public suspend fun setNetworkQualityListener(
-        listener: RealtimeNetworkQualityListener?
+        listener: RealtimeNetworkQualityListener?,
     )
 
     /**
-     * 设置上行视频统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
+     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
+     * disconnection.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     public suspend fun setUplinkVideoStatisticsListener(
-        listener: UplinkVideoStatisticsListener?
+        listener: UplinkVideoStatisticsListener?,
     )
 
     /**
-     * 设置下行结果流统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
+     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
+     * disconnection.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     public suspend fun setDownlinkVideoStatisticsListener(
-        listener: DownlinkVideoStatisticsListener?
+        listener: DownlinkVideoStatisticsListener?,
     )
 
     /**
-     * 设置 RTC 性能告警监听器；传 null 注销。
+     * Sets the RTC performance alarm listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     public suspend fun setPerformanceAlarmListener(
-        listener: RealtimePerformanceAlarmListener?
+        listener: RealtimePerformanceAlarmListener?,
     )
 
     /**
-     * 设置本地视频预览音量，取值范围为 `0..1`；成功设置后跨 close 和媒体重建保留。
+     * Sets local preview volume from 0 to 1; a successful setting survives close and media recreation.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     public suspend fun setLocalAudioVolume(
-        volume: Float
+        volume: Float,
     )
 
     /**
-     * 设置远端生成音频的播放音量，取值范围为 `0..1`；成功设置后跨 close 保留。
-     * 创建新的摄像头或图片流时重置为 0，创建视频流时重置为 1。
+     * Sets remote playback volume from 0 to 1; a successful setting survives close.
+     * Creating a camera or image source resets it to 0; creating a video source resets it to 1.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     public suspend fun setRemoteAudioVolume(
-        volume: Float
+        volume: Float,
     )
 
     /**
-     * 使用指定分辨率和当前模型的默认帧率创建摄像头流。
+     * Creates a camera stream with a resolution preset and the model's default frame rate.
      *
-     * @param preset 模型支持的摄像头分辨率。
-     * @param position 首次启用的镜头位置。
-     * @param useMicrophone 是否使用麦克风；启用前须取得录音权限，连接时开始采集。
-     * @return 包含本地摄像头轨道的媒体流。
-     * @throws XmaxError 预设不支持、权限不足、操作冲突或采集启动失败时抛出错误。
+     * @param preset The model-supported camera resolution.
+     * @param position The initial camera position.
+     * @param useMicrophone Whether to use the microphone; recording permission is required, and capture
+     * starts on connection.
+     * @return A media stream containing the local camera track.
+     * @throws XmaxError If the preset, permissions, operation conflicts, or capture startup prevent creation.
      */
     public suspend fun createLocalCameraStream(
         preset: RealtimeCameraPreset,
@@ -203,17 +215,24 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream {
         val format = options.model.supportedVideoFormats.firstOrNull {
             it.width == preset.size.width && it.height == preset.size.height
-        } ?: throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Model does not support the requested camera preset")
-        return createLocalCameraStream(format, position, useMicrophone)
+        } ?: throw XmaxError(
+            XmaxErrorCode.INVALID_CONFIGURATION,
+            "Model does not support the requested camera preset",
+        )
+        return createLocalCameraStream(
+            format,
+            position,
+            useMicrophone,
+        )
     }
 
     /**
-     * 使用当前模型的默认视频规格创建并启动相机输入。
-     * 麦克风默认关闭；接入方须先取得所需权限。
+     * Creates camera input with the current model's default video format.
+     * The microphone is disabled by default; your app must obtain required permissions first.
      *
-     * @param position 需要使用的前置或后置摄像头；默认值为 `CameraPosition.FRONT`。
-     * @param useMicrophone 是否启用麦克风；启用前须由应用取得录音权限；默认值为 `false`。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param position The camera position; defaults to `CameraPosition.FRONT`.
+     * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
+     * false.
      */
     public suspend fun createLocalCameraStream(
         position: CameraPosition = CameraPosition.FRONT,
@@ -225,13 +244,15 @@ public interface XmaxRealtimeManaging {
     )
 
     /**
-     * 创建并启动相机输入；接入方须先取得所需权限，输入尺寸会按模型规则调整。
-     * 麦克风默认关闭；启用后在连接时开始采集、断开时停止，不进行本地回放。
+     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
+     * follow the model's constraints.
+     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
+     * disconnection without local playback.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param position 需要使用的前置或后置摄像头。
-     * @param useMicrophone 是否启用麦克风；启用前须由应用取得录音权限；默认值为 `false`。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param position The front or rear camera to use.
+     * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
+     * false.
      */
     public suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
@@ -240,73 +261,76 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
-     * 停止当前相机输入并释放其资源；当前源不是相机时不执行释放。
+     * Stops and releases the current camera source; does nothing for other source types.
      */
     public suspend fun stopLocalCameraStream()
 
     /**
-     * 解码图片字节并创建保持媒体比例、持续输出图片帧的本地流。
-     * 使用方向校正后的图片尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率。
-     * 模型生成画布独立选择，服务端等比适配并裁去补边后输出。
+     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
+     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The model canvas is selected separately; the server fits the image and removes padding from output.
      *
-     * @param imageData 可解码的图片文件字节，不是裸像素数据。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param imageData Encoded image file bytes, not raw pixels.
      */
     public suspend fun createLocalImageStream(
         imageData: ByteArray,
     ): RealtimeMediaStream
 
     /**
-     * 从 Bitmap 创建保持媒体比例的本地图片流。
-     * 使用 Bitmap 尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率，模型生成画布独立选择。
+     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
+     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
+     * rate and a separately selected model canvas.
      *
-     * @param bitmap 待处理或显示的 Android 图片。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param bitmap The Android image to process or display.
      */
     public suspend fun createLocalImageStream(
         bitmap: Bitmap,
     ): RealtimeMediaStream
 
     /**
-     * 从可读取的 URI 创建本地图片流；读取权限由接入方保证。
-     * 使用方向校正后的图片尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率。
-     * 模型生成画布独立选择，服务端等比适配并裁去补边后输出。
+     * Creates a local image stream from a readable URI; your app owns read permissions.
+     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The model canvas is selected separately; the server fits the image and removes padding from output.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
      */
     public suspend fun createLocalImageStream(
         uri: Uri,
     ): RealtimeMediaStream
 
     /**
-     * 停止当前图片流并释放其资源；当前源不是图片时不执行释放。
+     * Stops and releases the current image source; does nothing for other source types.
      */
     public suspend fun stopLocalImageStream()
 
     /**
-     * 从 URI 创建本地视频流；存在音轨时同时提供视频文件的音频输入。
-     * 使用方向校正后的素材尺寸（受模型面积上限约束并按 4 对齐）和模型默认帧率。
-     * SDK 单独选择生成画布，服务端等比适配并裁边输出。
+     * Creates a local video stream from a URI, including its audio track when present.
+     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
+     * output.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
      */
     public suspend fun createLocalVideoStream(
         uri: Uri,
     ): RealtimeMediaStream
 
     /**
-     * 创建由服务端直接读取 URL 的网络视频源；仅支持 HTTP/HTTPS。
-     * 本地预览静音播放一次，不发布本地音视频；生成首帧就绪后订阅远端音频。
-     * [onFinish] 在当前任务收到服务端完成事件且首帧就绪后于主线程调用一次，
-     * 不代表远端尾帧已经显示完毕。创建源不会开始生成；资源由 [close] 统一释放。
+     * Creates a video source read directly by the server from an HTTP or HTTPS URL.
+     * The local preview plays once without sound or local publication; remote audio begins after the first
+     * generated frame is ready.
+     * [onFinish] runs once on the main thread after the current task's server completion event and
+     * first-frame readiness;
+     * it does not confirm that the last remote frame has been displayed. Creation does not start generation;
+     * [close] releases the source.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param sampleMethod 服务端读取网络视频时采用的采样方式；默认值为 `RealtimeVideoSampleMethod.TIME`。
-     * @param onFinish 网络视频任务完成的通知；null 表示不接收完成通知。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param sampleMethod The server video sampling method; defaults to `RealtimeVideoSampleMethod.TIME`.
+     * @param onFinish The completion callback for the network video task, or null to omit it.
      */
     public suspend fun createNetworkVideoStream(
         uri: Uri,
@@ -316,14 +340,17 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
-     * 绑定接入方自行采集、解码或处理的视频源；SDK 不负责摄像头或播放器的启停和释放。
-     * 默认仅视频，音频和 SDK 容器内的本地预览由 source 按需提供。
-     * 未指定 videoFormat 时使用源视频尺寸和模型默认帧率；最终尺寸按模型规则校验、对齐。
-     * 外部源须按 sink.videoFormat 输出帧。
+     * Binds video collected, decoded, or processed by your app; your app owns camera or player startup,
+     * shutdown, and release.
+     * Video is provided by default; the source may optionally supply audio and a preview inside the SDK
+     * container.
+     * When videoFormat is absent, uses source dimensions and the model's default frame rate, subject to model
+     * validation and alignment.
+     * The external source must deliver frames matching sink.videoFormat.
      *
-     * @param source 接入方负责启停及释放的外部音视频源。
-     * @param videoFormat 媒体输入的尺寸、帧率及可选上行编码配置；null 表示使用媒体解析结果或来源默认值。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param source The external media source whose lifecycle your app owns.
+     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
+     * source or parsed media defaults.
      */
     public suspend fun createExternalVideoStream(
         source: RealtimeExternalVideoSource,
@@ -331,20 +358,26 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
-     * 解绑外部输入，停止前须断开生成连接；不关闭接入方的摄像头或播放器。
+     * Unbinds external input after disconnection without closing your app's camera or player.
      */
     public suspend fun stopExternalVideoStream()
 
     /**
-     * 替换外部视频输入；先停止旧任务及供帧，再调用 [targetSource] 准备并返回目标视频源。
-     * 回调在调用方的调度器上执行，取消由 SDK 操作管理；采集器或播放器仍由调用方拥有。
-     * 已在生成或正在启动生成时，使用 SDK 已有条件自动创建新任务；仅预览时不生成。
-     * 音视频规格相同则保留房间；规格变化时内部重连，始终复用 Manager 和 RTC 引擎。
-     * 连续替换以最新请求为准，旧请求以 CancellationException 结束；失败时不恢复旧任务。
+     * Replaces external video input, stopping the old task and frame delivery before [targetSource] prepares
+     * the new source.
+     * The callback runs on the caller's dispatcher with cancellation owned by the SDK operation; your app
+     * still owns the capture device or player.
+     * An active or pending generation restarts with retained conditions; preview-only replacement does not
+     * start generation.
+     * Compatible audio/video formats retain the room; changed formats reconnect while reusing the manager and
+     * RTC engine.
+     * The latest replacement wins; old requests end with CancellationException. Failure does not restore the
+     * old task.
      *
-     * @param videoFormat 媒体输入的尺寸、帧率及可选上行编码配置；null 表示使用媒体解析结果或来源默认值。
-     * @param targetSource 创建替换用外部视频源的挂起函数。
-     * @return 替换后的本地媒体流及可用的远端结果流。
+     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
+     * source or parsed media defaults.
+     * @param targetSource The suspending callback preparing and returning the replacement source.
+     * @return The replacement local stream and any available remote result stream.
      */
     public suspend fun replaceExternalVideoStream(
         videoFormat: RealtimeVideoFormat? = null,
@@ -352,62 +385,71 @@ public interface XmaxRealtimeManaging {
     ): RealtimeStreamReplacement
 
     /**
-     * 停止当前视频流并释放解码与预览资源；当前源不是视频时不执行释放。
+     * Stops the current video source and releases decoding and preview resources; does nothing for other
+     * source types.
      */
     public suspend fun stopLocalVideoStream()
 
     /**
-     * 切换前后摄像头；生成中会先结束当前任务，切换后使用已缓存的条件重新生成。
-     *
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * Switches cameras; during generation, stops the task and restarts with cached conditions after
+     * switching.
      */
     public suspend fun switchCamera(): RealtimeMediaStream
 
     /**
-     * 使用本管理器创建且仍活动的本地流建立连接，返回供渲染绑定的远端流。
+     * Connects an active local stream created by this manager and returns the remote stream for rendering.
      *
-     * @param localStream 本地输入媒体流。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param localStream The local input stream.
      */
     public suspend fun connect(
-        localStream: RealtimeMediaStream
+        localStream: RealtimeMediaStream,
     ): RealtimeMediaStream
 
     /**
-     * 结束生成并关闭会话和 RTC 连接，保留本地媒体源；最终进入 READY 或 IDLE。
+     * Ends generation and closes the session and RTC connection, retaining local media; the final state is
+     * READY or IDLE.
      */
     public suspend fun disconnect()
 
     /**
-     * 按指定业务原因断开连接；例如显示方向变化时使用 [RealtimeReason.OrientationChanged]。
+     * Disconnects with a specific reason, such as [RealtimeReason.OrientationChanged] after a display
+     * orientation change.
      *
-     * @param reason 引起状态变化或失败的原因。
+     * @param reason The reason for the state transition or failure.
      */
     public suspend fun disconnect(
-        reason: RealtimeReason
+        reason: RealtimeReason,
     )
 
     /**
-     * 在已建立的连接上生成；首次生成须提供条件，后续传 null 可复用已缓存条件。
-     * 已在生成时更新现有任务；新任务等待远端确认和首帧就绪后才进入 GENERATING。
-     * 两个重载共用替换顺序；新调用替换未完成的旧调用，旧调用以 CancellationException 结束，
-     * 不作为业务失败通知。disconnect/close 会取消当时所有待执行生成，不会在清理后自动恢复。
+     * Starts generation on an existing connection; the first call requires conditions, and later null values
+     * reuse the cache.
+     * An active task updates its conditions; a new task enters GENERATING only after remote confirmation and
+     * first-frame readiness.
+     * Both overloads share replacement ordering: a new call cancels the pending old call with
+     * CancellationException,
+     * without reporting a business failure. Disconnect and close cancel all pending generation without
+     * automatically resuming it after cleanup.
      *
-     * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
-     * @param faceRestoration 是否回贴原始人脸；默认 false，每次调用均发送本次设置。
+     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
+     * for the first request.
+     * @param faceRestoration Whether to restore the original face; defaults to false and is sent on every
+     * call.
      */
     public suspend fun startGeneration(
         context: RealtimeContext?,
-        faceRestoration: Boolean = false
+        faceRestoration: Boolean = false,
     )
 
     /**
-     * 必要时先建立连接，再开始或更新生成；返回该连接的远端流。并发替换语义与另一重载一致。
+     * Connects when necessary, then starts or updates generation and returns the remote stream; uses the
+     * other overload's replacement semantics.
      *
-     * @param localStream 本地输入媒体流。
-     * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
-     * @param faceRestoration 是否回贴原始人脸；默认 false，每次调用均发送本次设置。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param localStream The local input stream.
+     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
+     * for the first request.
+     * @param faceRestoration Whether to restore the original face; defaults to false and is sent on every
+     * call.
      */
     public suspend fun startGeneration(
         localStream: RealtimeMediaStream,
@@ -416,7 +458,8 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
-     * 取消进行中的操作并等待全部实时资源清理；保留监听器，之后可重新创建本地流复用管理器。
+     * Cancels pending operations and waits for all realtime resources to be released; listeners remain
+     * registered and the manager can be reused.
      */
     public suspend fun close()
 }

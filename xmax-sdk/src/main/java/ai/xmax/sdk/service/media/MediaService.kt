@@ -25,50 +25,65 @@ import kotlin.math.abs
 import kotlin.math.ln
 
 /**
- * 统一解析本地媒体、模型生成画布和回传尺寸。
+ * Resolves local media, model canvases, and downlink dimensions.
  */
 internal class MediaService(
     /**
-     * 用于确定服务端能力、地址及输入规格的模型；默认值为 `RealtimeModel.X2_1`。
+     * The model defining input constraints; defaults to `RealtimeModel.X2_1`.
      */
     override val model: RealtimeModel = RealtimeModel.X2_1,
 ) : MediaServicing {
 
     /**
-     * 为保留媒体比例的实时流选择比例最接近的模型生成画布。
+     * Selects the closest model canvas aspect ratio for an aspect-preserving media stream.
      *
-     * @param size 媒体输入的显示尺寸，单位为像素。
-     * @return 比例最接近的模型画布尺寸。
+     * @param size The media display dimensions, in pixels.
+     * @return The model canvas with the closest aspect ratio.
      */
     override fun resolveGenerationSize(
-        size: IntSize
+        size: IntSize,
     ): IntSize {
         if (size.width <= 0 || size.height <= 0) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Media input dimensions must be positive")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "Media input dimensions must be positive",
+            )
         }
 
         val aspect = size.width.toDouble() / size.height
-        return model.supportedVideoFormats.map { IntSize(it.width, it.height) }.minByOrNull { bucket ->
+        return model.supportedVideoFormats.map { IntSize(
+            it.width,
+            it.height,
+        ) }.minByOrNull { bucket ->
             abs(ln(aspect / (bucket.width.toDouble() / bucket.height)))
         } ?: resolveGenerationCanvas(size)
     }
 
     /**
-     * 校验摄像头分辨率桶并计算不放大、受模型面积上限约束的 4 对齐媒体尺寸。
+     * Validates camera resolution buckets and resolves area-limited, four-pixel-aligned media without
+     * enlargement.
      *
-     * @param size 媒体画面尺寸，单位为像素。
-     * @param source 媒体来源；只有摄像头需要精确匹配分辨率桶。
-     * @return 优先保持精确比例的媒体宽高。
+     * @param size The media frame dimensions, in pixels.
+     * @param source The source kind; only cameras must exactly match a fixed bucket.
+     * @return Media dimensions preserving the exact aspect ratio where possible.
+     * @throws XmaxError If dimensions are invalid, a camera misses its buckets, or aligned output is below
+     * the model's minimum input area.
      */
     override fun resolveMediaSize(
         size: IntSize,
-        source: RealtimeMediaSource
+        source: RealtimeMediaSource,
     ): IntSize {
         if (size.width <= 0 || size.height <= 0) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Media dimensions must be positive")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "Media dimensions must be positive",
+            )
         }
 
-        val buckets = model.supportedVideoFormats.map { IntSize(it.width, it.height) }
+        val buckets = model.supportedVideoFormats.map { IntSize(
+            it.width,
+            it.height,
+        ) }
         if (source == RealtimeMediaSource.CAMERA && buckets.isNotEmpty()) {
             if (size !in buckets) {
                 val supportedSizes = buckets.joinToString { "${it.width}×${it.height}" }
@@ -81,39 +96,64 @@ internal class MediaService(
         }
 
         val pixels = size.width.toDouble() * size.height
-        val scale = minOf(1.0, sqrt(model.maximumInputPixels / pixels))
-        return alignedSize(size, scale)
+        val scale = minOf(
+            1.0,
+            sqrt(model.maximumInputPixels / pixels),
+        )
+        val resolvedSize = alignedSize(
+            size,
+            scale,
+        )
+        if (resolvedSize.width.toLong() * resolvedSize.height < model.minimumInputPixels) {
+            throw XmaxError(
+                code = XmaxErrorCode.INVALID_CONFIGURATION,
+                message = "Media resolution must contain at least ${model.minimumInputPixels} pixels",
+            )
+        }
+
+        return resolvedSize
     }
 
     /**
-     * 按下行宽高上限计算不放大、4 对齐的最终回传尺寸。
+     * Resolves four-pixel-aligned downlink dimensions within the bounds without enlargement.
      *
-     * @param sourceSize 固定媒体基准尺寸，单位为像素。
-     * @param maximumSize 下行宽高上限，可包含小数像素。
-     * @return 优先保持精确比例且不超过上限的回传尺寸。
+     * @param sourceSize The fixed media baseline dimensions, in pixels.
+     * @param maximumSize The downlink dimension bounds, which may include fractional pixels.
+     * @return Downlink dimensions within the bounds, preserving exact aspect ratio where possible.
      */
     override fun resolveTargetSize(
         sourceSize: IntSize,
-        maximumSize: Size
+        maximumSize: Size,
     ): IntSize {
         if (sourceSize.width <= 0 || sourceSize.height <= 0 || !maximumSize.width.isFinite() || !maximumSize.height.isFinite() || maximumSize.width <= 0f || maximumSize.height <= 0f) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Source dimensions and target bounds must be positive and finite")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "Source dimensions and target bounds must be positive and finite",
+            )
         }
 
-        val scale = minOf(1.0, maximumSize.width.toDouble() / sourceSize.width, maximumSize.height.toDouble() / sourceSize.height)
-        return alignedSize(sourceSize, scale)
+        val scale = minOf(
+            1.0,
+            maximumSize.width.toDouble() / sourceSize.width,
+            maximumSize.height.toDouble() / sourceSize.height,
+        )
+        return alignedSize(
+            sourceSize,
+            scale,
+        )
     }
 
     /**
-     * 以最简宽高比的整数倍计算 4 对齐尺寸；无法精确等比时分别向下对齐。
+     * Use integer multiples of the reduced aspect ratio for four-pixel alignment, falling back to independent
+     * downward alignment when needed.
      *
-     * @param size 原始媒体整数像素尺寸。
-     * @param scale 不超过 1 的等比缩放比例。
-     * @return 不超过缩放边界的 4 对齐尺寸。
+     * @param size The original integer media dimensions.
+     * @param scale The aspect-preserving scale, no greater than 1.
+     * @return Four-pixel-aligned dimensions within the scaled bounds.
      */
     private fun alignedSize(
         size: IntSize,
-        scale: Double
+        scale: Double,
     ): IntSize {
         var divisor = size.width
         var remainder = size.height
@@ -124,26 +164,35 @@ internal class MediaService(
         }
         val alignedScale = floor(divisor * scale / 4).toInt() * 4
         if (alignedScale >= 4) {
-            return IntSize(size.width / divisor * alignedScale, size.height / divisor * alignedScale)
+            return IntSize(
+                size.width / divisor * alignedScale,
+                size.height / divisor * alignedScale,
+            )
         }
 
         val width = floor(size.width * scale / 4).toInt() * 4
         val height = floor(size.height * scale / 4).toInt() * 4
         if (width < 4 || height < 4) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "No aligned video size is available within the size limits")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "No aligned video size is available within the size limits",
+            )
         }
 
-        return IntSize(width, height)
+        return IntSize(
+            width,
+            height,
+        )
     }
 
     /**
-     * 在模型没有固定分辨率桶时计算满足面积范围和对齐要求的生成画布。
+     * Resolves a canvas within model area and alignment constraints when no fixed buckets exist.
      *
-     * @param size 媒体输入尺寸，单位为像素。
-     * @return 满足模型面积上下限的生成画布尺寸。
+     * @param size The media input dimensions, in pixels.
+     * @return Canvas dimensions within the model's pixel-area bounds.
      */
     private fun resolveGenerationCanvas(
-        size: IntSize
+        size: IntSize,
     ): IntSize {
         val width = size.width
         val height = size.height
@@ -172,14 +221,25 @@ internal class MediaService(
             }
         }
 
-        val alignedWidth = alignedDimension(width, scale, rounding)
-        val alignedHeight = alignedDimension(height, scale, rounding)
+        val alignedWidth = alignedDimension(
+            width,
+            scale,
+            rounding,
+        )
+        val alignedHeight = alignedDimension(
+            height,
+            scale,
+            rounding,
+        )
         val alignedPixels = alignedWidth.toLong() * alignedHeight.toLong()
         if (alignedPixels in model.minimumInputPixels.toLong()..model.maximumInputPixels.toLong()) {
-            return IntSize(alignedWidth, alignedHeight)
+            return IntSize(
+                alignedWidth,
+                alignedHeight,
+            )
         }
 
-        // 分别对齐可能使边界附近的面积越界；选择满足限制且最接近目标的尺寸。
+        // Independent alignment can exceed area bounds near an edge; choose the valid dimensions closest to the target.
         return boundedAlignedSize(
             width = size.width * scale,
             height = size.height * scale,
@@ -187,15 +247,15 @@ internal class MediaService(
     }
 
     /**
-     * 计算满足像素面积范围及模型对齐要求的尺寸。
+     * Calculates dimensions within pixel-area and model alignment constraints.
      *
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
-     * @return 满足当前计算约束的视频宽度和高度。
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
+     * @return The width and height satisfying the sizing constraints.
      */
     private fun boundedAlignedSize(
         width: Double,
-        height: Double
+        height: Double,
     ): IntSize {
         val alignment = model.inputSizeAlignment
         val unitPixels = alignment.toLong() * alignment
@@ -209,7 +269,10 @@ internal class MediaService(
             val maximumHeight = maximumUnits / widthUnits
             if (minimumHeight > maximumHeight) continue
             val preferredHeight = round(height / alignment).toLong()
-            val heightUnits = preferredHeight.coerceIn(minimumHeight, maximumHeight)
+            val heightUnits = preferredHeight.coerceIn(
+                minimumHeight,
+                maximumHeight,
+            )
             val candidateWidth = widthUnits * alignment
             val candidateHeight = heightUnits * alignment
             val widthDistance = (candidateWidth - width) / width
@@ -217,19 +280,22 @@ internal class MediaService(
             val distance = widthDistance * widthDistance + heightDistance * heightDistance
             if (distance < bestDistance) {
                 bestDistance = distance
-                bestSize = IntSize(candidateWidth.toInt(), candidateHeight.toInt())
+                bestSize = IntSize(
+                    candidateWidth.toInt(),
+                    candidateHeight.toInt(),
+                )
             }
         }
         return bestSize
     }
 
     /**
-     * 按比例和取整规则计算符合模型对齐要求的单边尺寸。
+     * Scales and rounds one dimension to model alignment.
      *
-     * @param dimension 需要缩放的单边像素尺寸。
-     * @param scale 相对于基准尺寸的缩放比例。
-     * @param rounding 对缩放结果取整的函数。
-     * @return 符合模型对齐倍数的像素尺寸。
+     * @param dimension The pixel dimension to scale.
+     * @param scale The scale relative to the baseline.
+     * @param rounding The rounding function for the scaled value.
+     * @return The aligned pixel dimension.
      */
     private fun alignedDimension(
         dimension: Int,

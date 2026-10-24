@@ -36,7 +36,7 @@ import org.junit.Test
 class ImageSourceControllerTest {
     @Test
     fun `image input preserves portrait landscape square and odd dimensions outside model buckets`() = runTest {
-        val cases = listOf(IntSize(1920, 1080), IntSize(1080, 1920), IntSize(640, 480), IntSize(1024, 1024), IntSize(1025, 823))
+        val cases = listOf(IntSize(1920, 1080), IntSize(1080, 1920), IntSize(1000, 500), IntSize(1024, 1024), IntSize(1025, 823))
         for (size in cases) {
             val decoded = DecodedImageStub(size)
             val controller = ImageSourceController(
@@ -71,7 +71,7 @@ class ImageSourceControllerTest {
         assertEquals(expected, decoded.requestedFormat)
         controller.stop()
 
-        for (size in listOf(IntSize(0, 1080), IntSize(1, 1), IntSize(2, 2), IntSize(3, 3))) {
+        for (size in listOf(IntSize(0, 1080), IntSize(1, 1), IntSize(2, 2), IntSize(3, 3), IntSize(640, 480), IntSize(999, 501))) {
             val error = runCatching { controller.prepare(DecodedImageStub(size)) }.exceptionOrNull()
             assertTrue(error is XmaxError)
             assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (error as XmaxError).code)

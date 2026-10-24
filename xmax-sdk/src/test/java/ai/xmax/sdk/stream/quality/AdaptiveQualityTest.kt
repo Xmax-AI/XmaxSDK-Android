@@ -12,6 +12,7 @@
 package ai.xmax.sdk.stream.quality
 
 import ai.xmax.sdk.RealtimeNetworkQualityLevel
+import ai.xmax.sdk.RealtimeModel
 import ai.xmax.sdk.RealtimeVideoEncoderPreference
 import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.stream.encoding.EncodingBitratePolicy
@@ -38,7 +39,7 @@ class AdaptiveQualityTest {
     fun `tiers derive independently from original size and preserve bitrate overrides`() {
         val input = baseline.copy(minimumBitrate = 200, maximumBitrate = 3000,
             encoderPreference = RealtimeVideoEncoderPreference.MAINTAIN_FRAMERATE)
-        val sizes = listOf(1024 to 1920, 818 to 1536, 664 to 1248, 512 to 960, 512 to 960)
+        val sizes = listOf(1024 to 1920, 912 to 1710, 768 to 1440, 608 to 1140, 512 to 960)
         for (level in 1..5) {
             val format = QualityVideoFormat.resolve(input, level, downlink = false)
             assertEquals(sizes[level - 1], format.width to format.height)
@@ -65,7 +66,7 @@ class AdaptiveQualityTest {
         assertEquals(240 to 320, capped.width to capped.height)
         assertEquals(16, capped.fps)
         val down = QualityController.Direction(RealtimeVideoFormat(480, 640, 30), 5, true)
-        assertEquals(4, down.level)
+        assertEquals(5, down.level)
         repeat(10) { assertNull(down.observe(bad, it * 1000L, it * 1000L)) }
     }
 
@@ -141,7 +142,7 @@ class AdaptiveQualityTest {
         assertNull(up.observe(bad, 10000, 10000))
         assertNull(up.observe(bad, 11000, 11000))
         assertEquals(2, up.observe(bad, 12000, 12000)?.to)
-        assertEquals(4, down.level)
+        assertEquals(5, down.level)
     }
 
     @Test
@@ -149,14 +150,14 @@ class AdaptiveQualityTest {
         val timestamp = System.currentTimeMillis()
         val stored = mutableMapOf("uplink" to QualityHistory.Entry(99, timestamp), "downlink" to QualityHistory.Entry(4, timestamp))
         val history = QualityHistory(stored::get, { key, entry -> stored[key] = entry })
-        assertEquals(2, history.read(false))
+        assertEquals(1, history.read(false))
         assertEquals(4, history.read(true))
         history.write(false, 3)
         history.write(true, 0)
         assertEquals(3, QualityHistory(stored::get).read(false))
         assertEquals(4, history.read(true))
         val unavailable = QualityHistory({ error("unavailable") }, { _, _ -> error("unavailable") })
-        assertEquals(2, unavailable.read(false))
+        assertEquals(1, unavailable.read(false))
         unavailable.write(false, 5)
         assertEquals(5, unavailable.read(false))
     }
@@ -172,8 +173,8 @@ class AdaptiveQualityTest {
         assertEquals(4, QualityHistory(stored::get, now = { time }).read(false))
 
         time++
-        assertEquals(2, history.read(false))
-        assertEquals(2, QualityHistory(stored::get, now = { time }).read(false))
+        assertEquals(1, history.read(false))
+        assertEquals(1, QualityHistory(stored::get, now = { time }).read(false))
     }
 
     @Test
@@ -186,22 +187,81 @@ class AdaptiveQualityTest {
         history.write(false, 4)
         time += 1_800_000L
         assertEquals(4, history.read(false))
-        assertEquals(2, history.read(true))
+        assertEquals(1, history.read(true))
 
         time += 1_800_000L
-        assertEquals(2, history.read(false))
+        assertEquals(1, history.read(false))
     }
 
     @Test
     fun `legacy records without timestamps and future timestamps fall back to default`() {
         for (timestamp in listOf(0L, -1L, 1001L)) {
             val history = QualityHistory(readValue = { QualityHistory.Entry(5, timestamp) }, now = { 1000L })
-            assertEquals(2, history.read(false))
+            assertEquals(1, history.read(false))
         }
         var time = 1000L
         val history = QualityHistory(now = { time })
         history.write(false, 4)
         time = 999L
-        assertEquals(2, history.read(false))
+        assertEquals(1, history.read(false))
+    }
+
+    @Test
+    fun `uplink levels preserve media aspect and minimum area without changing the baseline`() {
+        val model = RealtimeModel.X2_1
+        for (input in model.supportedVideoFormats + listOf(
+            RealtimeVideoFormat(1200, 800, 24),
+            RealtimeVideoFormat(1004, 600, 30),
+        )) {
+            for (level in 1..5) {
+                val format = QualityVideoFormat.resolve(input, level, false, model.minimumInputPixels)
+                assertTrue(format.width.toLong() * format.height >= model.minimumInputPixels)
+                assertTrue(format.width <= input.width && format.height <= input.height)
+                if (input.width == 1004) {
+                    assertEquals(input.width.toDouble() / input.height, format.width.toDouble() / format.height, 0.01)
+                } else {
+                    assertEquals(input.width.toLong() * format.height, input.height.toLong() * format.width)
+                }
+                assertEquals(0, format.width % 2)
+                assertEquals(0, format.height % 2)
+                assertTrue(format.fps <= input.fps)
+            }
+        }
+        val up = QualityController.Direction(baseline, 5, false, minimumInputPixels = model.minimumInputPixels)
+        assertEquals(RealtimeVideoFormat(528, 990, 16), up.format)
+        assertEquals(baseline, up.baseline)
+    }
+
+    @Test
+    fun `minimum uplink area never enlarges an undersized baseline`() {
+        val input = RealtimeVideoFormat(480, 640, 30)
+        for (level in 1..5) {
+            val format = QualityVideoFormat.resolve(input, level, false, minimumInputPixels = 500_000)
+            assertEquals(input.width, format.width)
+            assertEquals(input.height, format.height)
+        }
+    }
+
+    @Test
+    fun `downlink ignores uplink minimum area and bitrate overrides`() {
+        val input = baseline.copy(minimumBitrate = 800, maximumBitrate = 3000)
+        val format = QualityVideoFormat.resolve(input, 5, true, minimumInputPixels = 500_000)
+        assertEquals(RealtimeVideoFormat(512, 960, 24), format)
+        assertTrue(format.width.toLong() * format.height < 500_000)
+        assertEquals(800, input.minimumBitrate)
+        assertEquals(3000, input.maximumBitrate)
+    }
+
+    @Test
+    fun `L5 uses half the media dimensions and keeps the uplink frame rate at sixteen`() {
+        val input = RealtimeVideoFormat(1024, 2048, 30)
+        assertEquals(
+            RealtimeVideoFormat(512, 1024, 16),
+            QualityVideoFormat.resolve(input, 5, false, minimumInputPixels = 500_000),
+        )
+        assertEquals(
+            RealtimeVideoFormat(512, 1024, 24),
+            QualityVideoFormat.resolve(input, 5, true),
+        )
     }
 }

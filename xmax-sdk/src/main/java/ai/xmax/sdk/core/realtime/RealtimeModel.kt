@@ -11,24 +11,24 @@
 package ai.xmax.sdk
 
 /**
- * SDK 支持的实时生成模型；[id] 是创建服务端会话时使用的模型标识。
+ * A realtime generation model; [id] identifies the model in server session requests.
  */
 public enum class RealtimeModel(
     /**
-     * 请求服务端时使用的模型标识。
+     * The model identifier sent to the server.
      */
-    public val id: String
+    public val id: String,
 ) {
 
     /**
-     * X2.1 实时生成模型。
+     * The X2.1 realtime generation model.
      */
     X2_1("x2.1"),
 
     ;
 
     /**
-     * 界面展示名称，与创建会话时使用的 [id] 分开维护。
+     * The display name, maintained separately from the session identifier [id].
      */
     public val displayName: String
         get() = when (this) {
@@ -36,47 +36,67 @@ public enum class RealtimeModel(
         }
 
     /**
-     * 模型支持的视频规格；摄像头宽高须精确匹配，帧率为推荐默认值。
-     * 本地图片和视频保留媒体输入比例，SDK 从桶中选择比例最接近的画布，由服务端等比适配。
-     * 空列表表示不限制固定尺寸，生成画布按像素面积上下限和模型对齐规则计算。
+     * Supported video formats; camera dimensions must match exactly, while frame rates are recommended
+     * defaults.
+     * Local images and videos retain their input aspect ratio; the server fits them into the closest model
+     * canvas.
+     * An empty list selects canvases using pixel-area bounds and model alignment instead of fixed sizes.
      */
     public val supportedVideoFormats: List<RealtimeVideoFormat>
         get() = listOf(
-            RealtimeVideoFormat(width = 1_920, height = 1_080, fps = defaultFrameRate),
-            RealtimeVideoFormat(width = 1_080, height = 1_920, fps = defaultFrameRate),
-            RealtimeVideoFormat(width = 1_408, height = 1_408, fps = defaultFrameRate),
-            RealtimeVideoFormat(width = 1_152, height = 1_536, fps = defaultFrameRate),
-            RealtimeVideoFormat(width = 1_536, height = 1_152, fps = defaultFrameRate),
+            RealtimeVideoFormat(
+                width = 1_920,
+                height = 1_080,
+                fps = defaultFrameRate,
+            ),
+            RealtimeVideoFormat(
+                width = 1_080,
+                height = 1_920,
+                fps = defaultFrameRate,
+            ),
+            RealtimeVideoFormat(
+                width = 1_408,
+                height = 1_408,
+                fps = defaultFrameRate,
+            ),
+            RealtimeVideoFormat(
+                width = 1_152,
+                height = 1_536,
+                fps = defaultFrameRate,
+            ),
+            RealtimeVideoFormat(
+                width = 1_536,
+                height = 1_152,
+                fps = defaultFrameRate,
+            ),
         )
 
     /**
-     * 生成画布的最小总像素面积；仅在分辨率桶为空时参与计算，不放大小尺寸媒体帧。
+     * The minimum local media and uplink pixel area; also limits variable generation canvases.
      */
     public val minimumInputPixels: Int
-        get() = 600_000
+        get() = 500_000
 
     /**
-     * 本地媒体帧的最大总像素面积；分辨率桶为空时也用于限制生成画布。
+     * The maximum local frame pixel area; also limits generation canvases when fixed buckets are absent.
      */
     public val maximumInputPixels: Int
         get() = 2_100_000
 
     /**
-     * 输入宽度和高度分别需要对齐的像素倍数；仅在分辨率桶为空时参与尺寸计算。
+     * The alignment required for each input dimension when fixed resolution buckets are absent.
      */
     public val inputSizeAlignment: Int
         get() = 32
 
     /**
-     * 默认媒体输入规格。
-     *
-     * 未指定视频规格时使用的默认帧率。
+     * The default frame rate for media input.
      */
     public val defaultFrameRate: Int
         get() = 30
 
     /**
-     * 摄像头采集使用的默认视频规格。
+     * The default camera capture format.
      */
     public val defaultCameraVideoFormat: RealtimeVideoFormat
         get() = RealtimeVideoFormat(
@@ -87,11 +107,11 @@ public enum class RealtimeModel(
 }
 
 /**
- * 创建实时 Manager 所需的业务配置。
+ * Configuration for a realtime manager.
  */
 public data class RealtimeConfiguration(
     /**
-     * 新建实时会话使用的模型；服务区域由客户端环境决定。
+     * The model for new sessions; the client environment selects the service region.
      */
     public val model: RealtimeModel = RealtimeModel.X2_1,
 )

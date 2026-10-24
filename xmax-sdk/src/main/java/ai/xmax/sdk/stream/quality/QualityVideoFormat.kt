@@ -13,127 +13,237 @@ package ai.xmax.sdk.stream.quality
 import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.stream.encoding.EncodingBitratePolicy
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
- * 从原始基准计算档位规格，保留方向、显式上传码率和编码偏好。
+ * Resolves quality formats from the original baseline, preserving orientation, explicit uplink bitrates, and
+ * encoder preference.
  */
 internal object QualityVideoFormat {
 
     /**
-     * 计算下行档位的尺寸上限，保留小数精度并且不放大基准。
+     * Resolves downlink dimension bounds without enlargement, retaining fractional pixels.
      *
-     * @param baseline 固定媒体基准规格。
-     * @param level 下行目标档位，范围为 1 到 5。
-     * @return 尚未按像素对齐的下行宽高上限。
+     * @param baseline The fixed media baseline format.
+     * @param level The target downlink level, from 1 to 5.
+     * @return The downlink dimension bounds before pixel alignment.
      */
     fun resolveDownlinkMaximumSize(
         baseline: RealtimeVideoFormat,
-        level: Int
-    ): Size {
-        val scale = sizeScale(baseline, level)
-        return Size((baseline.width * scale).toFloat(), (baseline.height * scale).toFloat())
-    }
-
-    /**
-     * 计算等比缩放、偶数对齐和最低短边约束后的传输规格。
-     * 下行的 24 fps 仅作为码率估算依据，不设置服务端帧率。
-     *
-     * @param baseline 用于计算各质量档位的原始输入规格。
-     * @param level 需要应用或保存的质量档位，1 为最高档。
-     * @param downlink true 操作下行档位，false 操作上行档位。
-     * @return 解析或计算后的视频尺寸、帧率和编码配置。
-     */
-    fun resolve(
-        baseline: RealtimeVideoFormat,
         level: Int,
-        downlink: Boolean
-    ): RealtimeVideoFormat {
-        val scale = sizeScale(baseline, level)
-
-        /**
-         * 将像素尺寸向下对齐为偶数。
-         *
-         * @param value 需要向下对齐为偶数的像素尺寸。
-         * @return 向下取整的偶数像素尺寸。
-         */
-        fun even(
-            value: Int
-        ): Int = max(2, (floor(value * scale / 2 + 1e-9) * 2).toInt())
-        return baseline.copy(
-            width = even(baseline.width),
-            height = even(baseline.height),
-            fps = if (downlink) 24 else min(baseline.fps, QualityTiers.frameRates[level - 1]),
+    ): Size {
+        val scale = sizeScale(
+            baseline,
+            level,
+        )
+        return Size(
+            (baseline.width * scale).toFloat(),
+            (baseline.height * scale).toFloat(),
         )
     }
 
     /**
-     * 计算档位对应的缩放比例，保留最低短边且不放大原始媒体。
+     * Resolves transmission dimensions with even alignment, preferring the exact media aspect ratio.
+     * The downlink's 24 fps is used only for bitrate estimation, not to set server frame rate.
      *
-     * @param baseline 固定媒体基准规格。
-     * @param level 目标档位，范围为 1 到 5。
-     * @return 不超过 1 的等比缩放比例。
+     * @param baseline The original input format used to calculate quality tiers.
+     * @param level The quality level to apply or retain; 1 is highest.
+     * @param downlink True for downlink, false for uplink.
+     * @param minimumInputPixels The minimum uplink pixel area; ignored for downlink and never enlarges media.
+     * @return The resolved video dimensions, frame rate, and encoding settings.
      */
-    private fun sizeScale(
+    fun resolve(
         baseline: RealtimeVideoFormat,
-        level: Int
-    ): Double {
-        require(level in 1..QualityTiers.percentages.size)
-        baseline.validate()
-        val shortSide = min(baseline.width, baseline.height)
-        val minimum = min(shortSide, QualityTiers.MINIMUM_SHORT_SIDE)
-        return max(QualityTiers.percentages[level - 1] / 100.0, minimum.toDouble() / shortSide)
+        level: Int,
+        downlink: Boolean,
+        minimumInputPixels: Int = 0,
+    ): RealtimeVideoFormat {
+        val scale = sizeScale(
+            baseline,
+            level,
+        )
+
+        val size = scaledSize(
+            IntSize(
+                baseline.width,
+                baseline.height,
+            ),
+            scale,
+            minimumPixels = if (downlink) 0 else minimumInputPixels,
+        )
+        return baseline.copy(
+            width = size.width,
+            height = size.height,
+            fps = if (downlink) 24 else min(
+                baseline.fps,
+                QualityTiers.frameRates[level - 1],
+            ),
+            minimumBitrate = if (downlink) null else baseline.minimumBitrate,
+            maximumBitrate = if (downlink) null else baseline.maximumBitrate,
+        )
     }
 
     /**
-     * 合并尺寸和帧率完全相同的档位，保留最靠近 L1 的编号。
+     * Downscales media with even alignment and a minimum pixel area, preferring the exact aspect ratio.
      *
-     * @param baseline 用于计算各质量档位的原始输入规格。
-     * @param level 需要应用或保存的质量档位，1 为最高档。
-     * @param downlink true 操作下行档位，false 操作上行档位。
-     * @return 生成相同规格的最高清晰度档位编号。
+     * @param size The original integer pixel dimensions.
+     * @param scale The requested dimension scale, no greater than one.
+     * @param minimumPixels The minimum output area, capped at the source area to prevent enlargement.
+     * @return Even dimensions satisfying the minimum area without enlarging the source.
+     */
+    fun scaledSize(
+        size: IntSize,
+        scale: Double,
+        minimumPixels: Int = 0,
+    ): IntSize {
+        var divisor = size.width
+        var remainder = size.height
+        while (remainder != 0) {
+            val next = divisor % remainder
+            divisor = remainder
+            remainder = next
+        }
+        val pixels = size.width.toDouble() * size.height
+        val minimumScale = sqrt(min(minimumPixels.coerceAtLeast(0).toDouble(), pixels) / pixels)
+        val minimumUnits = ceil(divisor * minimumScale / 2).toInt() * 2
+        val units = floor(divisor * scale + 0.0000001).toInt() / 2 * 2
+        if (units >= 2) {
+            val resolvedUnits = max(
+                units,
+                minimumUnits,
+            )
+            return IntSize(
+                size.width / divisor * resolvedUnits,
+                size.height / divisor * resolvedUnits,
+            )
+        }
+
+        return IntSize(
+            maxOf(
+                2,
+                floor(size.width * scale / 2).toInt() * 2,
+                ceil(size.width * minimumScale / 2).toInt() * 2,
+            ),
+            maxOf(
+                2,
+                floor(size.height * scale / 2).toInt() * 2,
+                ceil(size.height * minimumScale / 2).toInt() * 2,
+            ),
+        )
+    }
+
+    /**
+     * Resolves a quality scale without enlarging media or falling below its minimum short side.
+     *
+     * @param baseline The fixed media baseline format.
+     * @param level The target level, from 1 to 5.
+     * @return An aspect-preserving scale no greater than 1.
+     */
+    private fun sizeScale(
+        baseline: RealtimeVideoFormat,
+        level: Int,
+    ): Double {
+        require(level in 1..QualityTiers.percentages.size)
+        baseline.validate()
+        val shortSide = min(
+            baseline.width,
+            baseline.height,
+        )
+        val minimum = min(
+            shortSide,
+            QualityTiers.MINIMUM_SHORT_SIDE,
+        )
+        return max(
+            QualityTiers.percentages[level - 1] / 100.0,
+            minimum.toDouble() / shortSide,
+        )
+    }
+
+    /**
+     * Merges levels with identical dimensions and frame rate, preferring the level closest to L1.
+     *
+     * @param baseline The original input format used to calculate quality tiers.
+     * @param level The quality level to apply or retain; 1 is highest.
+     * @param downlink True for downlink, false for uplink.
+     * @param minimumInputPixels The minimum uplink pixel area; ignored for downlink.
+     * @return The highest-quality level producing the same format.
      */
     fun canonicalLevel(
         baseline: RealtimeVideoFormat,
         level: Int,
-        downlink: Boolean
+        downlink: Boolean,
+        minimumInputPixels: Int = 0,
     ): Int {
-        val format = resolve(baseline, level, downlink)
-        return (1..level).first { resolve(baseline, it, downlink) == format }
+        val format = resolve(
+            baseline,
+            level,
+            downlink,
+            minimumInputPixels,
+        )
+        return (1..level).first { resolve(
+            baseline,
+            it,
+            downlink,
+            minimumInputPixels,
+        ) == format }
     }
 
     /**
-     * 检查候选上行规格的默认码率与显式码率约束是否兼容。
+     * Checks whether default and explicit uplink bitrate bounds are compatible.
      *
-     * @param format 视频尺寸、帧率及上行编码参数。
-     * @return 档位满足编码约束时为 true。
+     * @param format Video dimensions, frame rate, and uplink encoding options.
+     * @return True if the format satisfies encoder constraints.
      */
     fun supportsEncoding(
-        format: RealtimeVideoFormat
+        format: RealtimeVideoFormat,
     ): Boolean {
-        val (_, defaultMaximum) = EncodingBitratePolicy.resolve(format.width, format.height, format.fps)
+        val (_, defaultMaximum) = EncodingBitratePolicy.resolve(
+            format.width,
+            format.height,
+            format.fps,
+        )
         val maximum = format.maximumBitrate ?: defaultMaximum
-        return (format.minimumBitrate ?: min(500, maximum)) <= maximum
+        return (format.minimumBitrate ?: min(
+            500,
+            maximum,
+        )) <= maximum
     }
 
     /**
-     * 选择不低于历史档位且满足显式码率约束的初始档位。
+     * Chooses an initial level at least as high as history while satisfying explicit bitrate constraints.
      *
-     * @param baseline 用于计算各质量档位的原始输入规格。
-     * @param requested 期望使用的质量档位。
-     * @param downlink true 操作下行档位，false 操作上行档位。
-     * @return 满足码率约束的初始质量档位。
+     * @param baseline The original input format used to calculate quality tiers.
+     * @param requested The requested quality level.
+     * @param downlink True for downlink, false for uplink.
+     * @param minimumInputPixels The minimum uplink pixel area; ignored for downlink.
+     * @return An initial level satisfying encoder constraints.
      */
     fun initialLevel(
         baseline: RealtimeVideoFormat,
         requested: Int,
-        downlink: Boolean
+        downlink: Boolean,
+        minimumInputPixels: Int = 0,
     ): Int {
         val level = if (downlink) requested else {
-            (requested downTo 1).firstOrNull { supportsEncoding(resolve(baseline, it, false)) } ?: 1
+            (requested downTo 1).firstOrNull { supportsEncoding(
+                resolve(
+                    baseline,
+                    it,
+                    false,
+                    minimumInputPixels,
+                ),
+            ) } ?: 1
         }
-        return canonicalLevel(baseline, level, downlink)
+        return canonicalLevel(
+            baseline,
+            level,
+            downlink,
+            minimumInputPixels,
+        )
     }
 }

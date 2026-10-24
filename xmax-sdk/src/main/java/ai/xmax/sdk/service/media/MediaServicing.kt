@@ -14,49 +14,52 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.geometry.Size
 
 /**
- * 定义本地媒体、模型生成画布和回传尺寸的业务规则。
+ * The sizing rules for local media, model canvases, and downlink output.
  */
 public interface MediaServicing {
 
     /**
-     * 当前媒体规则使用的实时生成模型。
+     * The realtime model defining these media constraints.
      */
     public val model: RealtimeModel
 
     /**
-     * 计算不放大、不超过模型最大像素面积的本地媒体尺寸，宽高按 4 对齐并优先保持精确比例。
+     * Resolves media within the maximum pixel area without enlargement, using four-pixel alignment and
+     * preserving exact aspect ratio where possible.
      *
-     * @param size 指定的视频格式尺寸；未指定格式时为原始媒体的显示尺寸。
-     * @param source 媒体来源；摄像头请求尺寸须精确匹配模型已配置的分辨率桶。
-     * @return 满足面积上限、比例和 4 对齐约束的媒体尺寸。
-     * @throws XmaxError 尺寸无效、摄像头未匹配分辨率桶或无法形成至少 4 × 4 的输出。
+     * @param size The requested camera dimensions or the source's orientation-corrected pixel dimensions.
+     * @param source The source kind; cameras must match configured resolution buckets.
+     * @return Media dimensions satisfying area, aspect-ratio, and four-pixel alignment constraints.
+     * @throws XmaxError If dimensions are invalid, a camera misses its buckets, or aligned output is below
+     * the model's minimum input area.
      */
     public fun resolveMediaSize(
         size: IntSize,
-        source: RealtimeMediaSource
+        source: RealtimeMediaSource,
     ): IntSize
 
     /**
-     * 为媒体选择比例最接近的模型生成画布，不改变本地媒体规格。
+     * Selects the closest model canvas aspect ratio without changing local media format.
      *
-     * @param size 媒体输入的显示尺寸，单位为像素。
-     * @return 匹配的模型分辨率桶；无分辨率桶时返回满足模型面积范围和对齐要求的画布。
-     * @throws XmaxError 媒体宽高不是正数。
+     * @param size The media display dimensions, in pixels.
+     * @return The matching model bucket, or an area-limited, aligned canvas when buckets are absent.
+     * @throws XmaxError If the media width or height is not positive.
      */
     public fun resolveGenerationSize(
-        size: IntSize
+        size: IntSize,
     ): IntSize
 
     /**
-     * 按下行宽高上限计算最终回传尺寸，不放大媒体并优先保持精确比例。
+     * Resolves downlink dimensions within the bounds without enlarging media, preserving exact aspect ratio
+     * where possible.
      *
-     * @param sourceSize 固定媒体基准尺寸，单位为像素。
-     * @param maximumSize 下行允许的宽高上限，可包含小数像素。
-     * @return 不超过上限且宽高均为 4 的倍数的回传尺寸。
-     * @throws XmaxError 尺寸无效或上限内无法容纳至少 4 × 4 像素。
+     * @param sourceSize The fixed media baseline dimensions, in pixels.
+     * @param maximumSize The downlink bounds, which may include fractional pixels.
+     * @return Dimensions within the bounds with both sides divisible by four.
+     * @throws XmaxError If dimensions are invalid or the bounds cannot fit 4 by 4 pixels.
      */
     public fun resolveTargetSize(
         sourceSize: IntSize,
-        maximumSize: Size
+        maximumSize: Size,
     ): IntSize
 }

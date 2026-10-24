@@ -310,12 +310,17 @@ lifecycleScope.launch {
 frame arrives, then transitions to the remote video. Touch interaction is enabled by
 default after the generated video becomes visible.
 
-Local camera, image, and video dimensions are capped by the model's maximum pixel
-count without upscaling, and aligned to multiples of four, preserving the exact
-aspect ratio where possible. Camera requests must still match a supported model
-resolution bucket. For images and local videos, the SDK selects the generation
-canvas separately; downlink quality tiers use the processed media dimensions as
-their fixed baseline and produce four-pixel-aligned return sizes.
+Local camera, image, video, and external input dimensions are capped at the model's
+maximum pixel count without upscaling, and aligned to multiples of four, preserving
+the exact aspect ratio where possible. X2.1 accepts processed media between 500,000
+and 2,100,000 pixels; smaller inputs are rejected rather than enlarged. Only camera
+requests must match a supported model resolution bucket.
+
+The SDK selects the generation canvas (`size`) separately by the closest model
+aspect ratio. Live frame input uses `padding: "contain"` only when its aspect ratio
+differs from the canvas. Uplink and downlink quality use the processed media
+dimensions as their fixed baseline, not the model canvas. Downlink `target_size`
+is aligned to multiples of four and retains the media aspect ratio where possible.
 
 Touch trajectories are sent in `tracks` as normalized `[0, 1]` coordinates based
 on the fixed, processed local media dimensions, accounting for FIT letterboxing
@@ -572,9 +577,12 @@ realtime.setUplinkQualityLevel(RealtimeQualityLevel.L3)
 realtime.setDownlinkQualityLevel(RealtimeQualityLevel.L2)
 ```
 
-L1–L5 target 100%, 80%, 65%, 50%, and 50% of the media baseline's width and
-height. L5 lowers the uplink frame-rate limit further than L4. Pixel alignment
-and minimum dimensions still apply. Manual choices do not disable automatic
+L1–L5 target 100%, 90%, 75%, 60%, and 50% of the media baseline's width and
+height, with uplink frame-rate limits of 30, 24, 24, 20, and 16 fps. Without valid
+history, both directions start at L1. Pixel alignment and minimum dimensions still
+apply; uplink also retains at least 500,000 pixels, so a lower tier may exceed its
+nominal dimension percentage. Downlink does not use that minimum area.
+Manual choices do not disable automatic
 quality adjustment, change the media baseline, or change the model canvas.
 Only successful adjustments update the current level and its one-hour history.
 Calls outside generation, or calls that cannot apply the requested configuration,
