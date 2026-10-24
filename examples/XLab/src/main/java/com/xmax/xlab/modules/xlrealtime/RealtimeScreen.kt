@@ -93,6 +93,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -183,6 +184,7 @@ private enum class ReferenceUploadState {
 
 private const val DEFAULT_LOCAL_AUDIO_VOLUME = 0.45f
 private const val DEFAULT_REMOTE_AUDIO_VOLUME = 1f
+private const val SHOW_CAMERA_FORMAT_CONTROL = false
 
 private data class LocalReference(
     val id: String,
@@ -1096,55 +1098,57 @@ public fun RealtimeScreen(
                             onRemoteVolumeChange = ::setRemoteAudioVolume,
                         )
                     }
-                    Box(modifier = Modifier.size(58.dp)) {
-                        val canUpdate = qualityConnectionState == RealtimeConnectionState.READY &&
-                            !generationBusy && !cameraSwitching && cameraFormatJob == null && !isSuspendedForBackground
-                        OverlayAction(
-                            label = xLabText(R.string.realtime_camera_format),
-                            modifier = Modifier.fillMaxSize(),
-                            enabled = canUpdate,
-                            onClick = { isCameraFormatMenuVisible = true },
-                        ) {
-                            CameraFormatGlyph(Modifier.size(20.dp))
-                        }
-                        DropdownMenu(
-                            expanded = isCameraFormatMenuVisible && canUpdate,
-                            onDismissRequest = { isCameraFormatMenuVisible = false },
-                            containerColor = Color(0xFF1C1C1E),
-                        ) {
-                            realtimeManager.options.model.supportedVideoFormats.forEach { format ->
-                                val selected = cameraVideoFormat?.let {
-                                    it.width == format.width && it.height == format.height
-                                } == true
-                                DropdownMenuItem(
-                                    text = {
-                                        Text("${format.width} × ${format.height}" + if (selected) " ✓" else "", color = Color.White)
-                                    },
-                                    onClick = {
-                                        isCameraFormatMenuVisible = false
-                                        if (canUpdate && cameraFormatJob == null) {
-                                            cameraFormatJob = scope.launch(start = CoroutineStart.LAZY) {
-                                                try {
-                                                    realtimeOperationMutex.withLock {
-                                                        realtimeManager.updateCameraFormat(format)
-                                                        cameraVideoFormat = realtimeManager.currentCameraVideoFormat
+                    if (SHOW_CAMERA_FORMAT_CONTROL) {
+                        Box(modifier = Modifier.size(58.dp)) {
+                            val canUpdate = qualityConnectionState == RealtimeConnectionState.READY &&
+                                !generationBusy && !cameraSwitching && cameraFormatJob == null && !isSuspendedForBackground
+                            OverlayAction(
+                                label = xLabText(R.string.realtime_camera_format),
+                                modifier = Modifier.fillMaxSize(),
+                                enabled = canUpdate,
+                                onClick = { isCameraFormatMenuVisible = true },
+                            ) {
+                                CameraFormatGlyph(Modifier.size(20.dp))
+                            }
+                            DropdownMenu(
+                                expanded = isCameraFormatMenuVisible && canUpdate,
+                                onDismissRequest = { isCameraFormatMenuVisible = false },
+                                containerColor = Color(0xFF1C1C1E),
+                            ) {
+                                realtimeManager.options.model.supportedVideoFormats.forEach { format ->
+                                    val selected = cameraVideoFormat?.let {
+                                        it.width == format.width && it.height == format.height
+                                    } == true
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text("${format.width} × ${format.height}" + if (selected) " ✓" else "", color = Color.White)
+                                        },
+                                        onClick = {
+                                            isCameraFormatMenuVisible = false
+                                            if (canUpdate && cameraFormatJob == null) {
+                                                cameraFormatJob = scope.launch(start = CoroutineStart.LAZY) {
+                                                    try {
+                                                        realtimeOperationMutex.withLock {
+                                                            realtimeManager.updateCameraFormat(format)
+                                                            cameraVideoFormat = realtimeManager.currentCameraVideoFormat
+                                                        }
+                                                    } catch (error: CancellationException) {
+                                                        throw error
+                                                    } catch (error: Throwable) {
+                                                        Toast.makeText(
+                                                            context,
+                                                            xLabErrorText(error.message, localizedContext.getString(R.string.realtime_camera_format_error), localizedContext),
+                                                            Toast.LENGTH_SHORT,
+                                                        ).show()
+                                                    } finally {
+                                                        cameraFormatJob = null
                                                     }
-                                                } catch (error: CancellationException) {
-                                                    throw error
-                                                } catch (error: Throwable) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        xLabErrorText(error.message, localizedContext.getString(R.string.realtime_camera_format_error), localizedContext),
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
-                                                } finally {
-                                                    cameraFormatJob = null
                                                 }
+                                                cameraFormatJob?.start()
                                             }
-                                            cameraFormatJob?.start()
-                                        }
-                                    },
-                                )
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -1715,16 +1719,27 @@ private fun OverlayAction(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        icon()
+        Box(
+            modifier = Modifier.size(if (showLabel) 28.dp else containerSize),
+            contentAlignment = Alignment.Center,
+        ) {
+            icon()
+        }
         if (showLabel) {
-            Text(
-                text = label,
-                modifier = Modifier.offset(y = (-1).dp),
-                color = Color.White,
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            Box(
+                modifier = Modifier.height(14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    style = TextStyle(platformStyle = PlatformTextStyle(includeFontPadding = false)),
+                )
+            }
         }
     }
 }
