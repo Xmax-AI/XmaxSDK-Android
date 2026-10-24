@@ -82,6 +82,7 @@ internal class RealtimeSessionService(
                 model.id,
             ),
         )
+
         try {
             return makeSession(
                 payload,
@@ -138,6 +139,7 @@ internal class RealtimeSessionService(
             heartbeatVersion.incrementAndGet()
             heartbeatJob.also { heartbeatJob = null }
         }
+
         job?.cancelAndJoin()
     }
 
@@ -168,6 +170,7 @@ internal class RealtimeSessionService(
 
                 val session = heartbeatSession(context.sessionId)
                 if (!isCurrent(context.version)) return
+
                 ensureSessionActive(session)
             } catch (
                 error: CancellationException,
@@ -177,10 +180,12 @@ internal class RealtimeSessionService(
                 error: Throwable,
             ) {
                 if (!invalidate(context.version)) return
+
                 context.onFailure(
                     context.sessionId,
                     XmaxError.from(error),
                 )
+
                 return
             }
         }
@@ -212,6 +217,7 @@ internal class RealtimeSessionService(
     ) {
         val status = session.status ?: return
         if (status == ACTIVE_STATUS) return
+
         throw XmaxError(
             code = XmaxErrorCode.SESSION_ERROR,
             message = session.closeReason ?: "Session is no longer active: $status",
@@ -277,6 +283,7 @@ internal class RealtimeSessionService(
         val userId = payload.nonEmptyString("rtc_user_id") ?: return null
         val appId = payload.nonEmptyString("rtc_app_id") ?: return null
         if (appId != RtcEngineManager.DEFAULT_APP_ID) return null
+
         return RealtimeSessionConnection(
             roomId = roomId,
             userId = userId,

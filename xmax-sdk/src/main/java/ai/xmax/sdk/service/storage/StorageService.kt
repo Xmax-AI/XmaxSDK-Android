@@ -353,12 +353,14 @@ internal class StorageService(
                 "Invalid download URL",
             )
         }
+
         if (destination.path.isBlank()) {
             throw XmaxError(
                 XmaxErrorCode.INVALID_CONFIGURATION,
                 "Download destination path cannot be empty",
             )
         }
+
         return storageManager.download(
             remoteUrl,
             destination,
@@ -417,12 +419,14 @@ internal class StorageService(
                 "Invalid image safety check payload",
             )
         }
+
         if (!safe) {
             throw XmaxError(
                 XmaxErrorCode.UNSAFE_IMAGE,
                 "The image did not pass the safety check",
             )
         }
+
         return value.optString("url").takeIf(::isHttpUrl)
             ?: throw XmaxError(
                 XmaxErrorCode.API_ERROR,
@@ -459,12 +463,14 @@ internal class StorageService(
                 )
             }
         }
+
         if (!contentType.trim().lowercase().startsWith("${mediaType.value}/")) {
             throw XmaxError(
                 XmaxErrorCode.INVALID_CONFIGURATION,
                 "${mediaType.label} content type must begin with ${mediaType.value}/",
             )
         }
+
         val safeName = sanitizeFileName(fileName)
         if (safeName.isEmpty()) {
             throw XmaxError(
@@ -472,6 +478,7 @@ internal class StorageService(
                 "${mediaType.label} file name cannot be empty",
             )
         }
+
         return safeName
     }
 
@@ -603,6 +610,7 @@ internal class StorageService(
     ): String {
         val value = opt(key)
         if (value !is String) throw invalidCredentialPayload()
+
         return value.trim()
     }
 
@@ -668,6 +676,7 @@ internal class StorageService(
                 options,
             )
         }
+
         return formatResolution(
             options.outWidth,
             options.outHeight,

@@ -48,6 +48,7 @@ internal object NativeYuv420Converter {
         v: ByteArray,
     ): Boolean {
         if (!isAvailable || source.planes.any { !it.buffer.isDirect }) return false
+
         val yPlane = source.planes[0]
         val uPlane = source.planes[1]
         val vPlane = source.planes[2]

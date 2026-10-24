@@ -51,6 +51,7 @@ internal class AgoraRemoteVideoFrame(
      */
     override fun copy(): RealtimeVideoFrame {
         val i420 = frame.buffer.toI420()
+
         try {
             return RealtimeVideoFrame(
                 width = width,

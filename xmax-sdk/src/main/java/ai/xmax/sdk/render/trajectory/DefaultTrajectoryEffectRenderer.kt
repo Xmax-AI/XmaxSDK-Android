@@ -124,6 +124,7 @@ public class DefaultTrajectoryEffectRenderer(
                 )
                 return@forEach
             }
+
             if (distanceSquared(
                 trajectory.location,
                 point.location,
@@ -367,6 +368,7 @@ public class DefaultTrajectoryEffectRenderer(
      */
     private fun fadeTrailBitmap() {
         if (!hasTrailPixels) return
+
         trailCanvas?.drawColor(
             FADE_COLOR,
             PorterDuff.Mode.DST_OUT,

@@ -33,8 +33,10 @@ internal suspend fun cleanupResources(
                 if (first == null) failure = error else if (first !== error) first.addSuppressed(error)
             }
         }
+
         failure
     }
+
     // Preserve the original exception and any suppressed cleanup failures.
     failure?.let { throw it }
 }

@@ -113,6 +113,22 @@ internal class XmaxLogger private constructor(
 ) {
 
     /**
+     * The language used for log details, independent of service routing.
+     */
+    enum class Language {
+
+        /**
+         * Chinese log details.
+         */
+        CHINESE,
+
+        /**
+         * English log details.
+         */
+        ENGLISH,
+    }
+
+    /**
      * Writes a debug message when the requested category is enabled.
      *
      * @param message Builds the log text only when logging is enabled.
@@ -213,6 +229,7 @@ internal class XmaxLogger private constructor(
         option: XmaxLoggerOption,
     ) {
         if (!isEnabled(option)) return
+
         sink.get().write(
             level,
             TAG,
@@ -299,7 +316,7 @@ internal class XmaxLogger private constructor(
         private const val TAG = "XmaxSDK"
 
         /**
-         * An immutable snapshot of enabled log categories and language environment.
+         * An immutable snapshot of enabled log categories and detail language.
          */
         private data class Configuration(
             /**
@@ -308,18 +325,18 @@ internal class XmaxLogger private constructor(
             val options: Int,
 
             /**
-             * The service environment, which also selects the log language.
+             * The language used for log details.
              */
-            val environment: XmaxEnvironment,
+            val language: Language,
         )
 
         /**
-         * The current log categories and service environment.
+         * The current log categories and detail language.
          */
         private val configuration = AtomicReference(
             Configuration(
                 XmaxLoggerOption.none.rawValue,
-                XmaxEnvironment.CHINA,
+                Language.CHINESE,
             ),
         )
 
@@ -332,32 +349,32 @@ internal class XmaxLogger private constructor(
          * Sets the shared logging options and output language.
          *
          * @param options The enabled logging categories.
-         * @param environment The service environment and log language; defaults to `XmaxEnvironment.CHINA`.
+         * @param language The language used for log details; defaults to Chinese.
          */
         fun configure(
             options: XmaxLoggerOption,
-            environment: XmaxEnvironment = XmaxEnvironment.CHINA,
+            language: Language = Language.CHINESE,
         ) {
             configuration.set(
                 Configuration(
                     options.rawValue,
-                    environment,
+                    language,
                 ),
             )
         }
 
         /**
-         * Selects log text using the client's service environment.
+         * Selects detail text using the configured log language.
          *
-         * @param chinese The text used in the China environment.
-         * @param english The text used in the global environment.
-         * @return The Chinese or English text for the current environment.
+         * @param chinese The Chinese text.
+         * @param english The English text.
+         * @return The text for the configured log language.
          */
         fun localized(
             chinese: String,
             english: String,
         ): String =
-            if (configuration.get().environment == XmaxEnvironment.CHINA) chinese else english
+            if (configuration.get().language == Language.CHINESE) chinese else english
 
         /**
          * Replaces the logging target; null restores Android system logging.

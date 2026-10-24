@@ -105,13 +105,3 @@ public enum class RealtimeModel(
             fps = defaultFrameRate,
         )
 }
-
-/**
- * Configuration for a realtime manager.
- */
-public data class RealtimeConfiguration(
-    /**
-     * The model for new sessions; the client environment selects the service region.
-     */
-    public val model: RealtimeModel = RealtimeModel.X2_1,
-)

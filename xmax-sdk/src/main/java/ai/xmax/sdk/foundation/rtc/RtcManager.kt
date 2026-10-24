@@ -177,6 +177,7 @@ internal class RtcManager(
             ) {
                 throw XmaxError.from(error)
             }
+
             try {
                 nativeGate.write {
                     synchronized(stateLock) { engineLease = lease }
@@ -414,6 +415,7 @@ internal class RtcManager(
         synchronized(stateLock) {
             resetCameraPreviewReadinessLocked(cameraSourceActive = true)
         }
+
         try {
             performEngineOperation("startVideoCapture") {
                 it.startVideoCapture(
@@ -702,6 +704,7 @@ internal class RtcManager(
                     message = "RTC audio volume must be between 0 and 100",
                 )
             }
+
             val resources = synchronized(stateLock) {
                 val engine = engineLease?.engine ?: throw rtcError("RTC Engine is not initialized")
                 val streamId = activeRoom?.room?.resolveRemoteStreamId(normalizedUserId)
@@ -721,6 +724,7 @@ internal class RtcManager(
                     error,
                 )
             }
+
             checkResult(
                 "setRemoteAudioPlaybackVolume",
                 result,
@@ -746,6 +750,7 @@ internal class RtcManager(
                     message = "RTC room message cannot be empty",
                 )
             }
+
             val room = synchronized(stateLock) {
                 activeRoom?.room
             } ?: throw rtcError("RTC room is not joined")
@@ -781,6 +786,7 @@ internal class RtcManager(
     ) {
         nativeGate.read {
             val room = synchronized(stateLock) { activeRoom?.room }
+
             room?.discardPendingMessages(key)
         }
     }
@@ -790,6 +796,7 @@ internal class RtcManager(
      */
     override suspend fun awaitPendingMessages() {
         val room = synchronized(stateLock) { activeRoom?.room } ?: throw rtcError("RTC room is not joined")
+
         room.awaitPendingMessages()
     }
 
@@ -819,6 +826,7 @@ internal class RtcManager(
             cameraPreviewReadyListener = listener
             markCameraPreviewReadyReportedIfNeededLocked()
         }
+
         notifyCameraPreviewReady(shouldNotify)
     }
 
@@ -838,8 +846,10 @@ internal class RtcManager(
                 if (synchronized(stateLock) { remoteFrameRegistration?.stream == stream }) {
                     clearRemoteFrameRegistrationLocked()
                 }
+
                 return
             }
+
             val registration = synchronized(stateLock) {
                 val lease = engineLease ?: throw rtcError("RTC Engine is not initialized")
                 val room = activeRoom?.takeIf { it.roomId == stream.roomId }
@@ -852,8 +862,10 @@ internal class RtcManager(
                     listener,
                 )
             }
+
             clearRemoteFrameRegistrationLocked()
             synchronized(stateLock) { remoteFrameRegistration = registration }
+
             try {
                 val result = registration.lease.engine.setRemoteVideoFrameListener(
                     registration.streamId,
@@ -914,6 +926,7 @@ internal class RtcManager(
                 runCatching { clearRemoteFrameRegistrationLocked() }
                     .onFailure { if (it !== error) error.addSuppressed(it) }
                 if (error is CancellationException || error is XmaxError) throw error
+
                 throw rtcOperationError(
                     "setRemoteVideoSink",
                     error,
@@ -937,6 +950,7 @@ internal class RtcManager(
             "setRemoteVideoSink",
             result,
         )
+
         synchronized(stateLock) { remoteFrameRegistration = null }
     }
 
@@ -970,6 +984,7 @@ internal class RtcManager(
             val room = synchronized(stateLock) {
                 activeRoom?.room
             } ?: throw rtcError("RTC room is not joined")
+
             performRoomOperation(
                 room,
                 operation,
@@ -1006,6 +1021,7 @@ internal class RtcManager(
                     error,
                 )
             }
+
             checkResult(
                 operation,
                 result,
@@ -1027,6 +1043,7 @@ internal class RtcManager(
             val room = synchronized(stateLock) {
                 activeRoom?.room
             } ?: return
+
             performRoomOperation(
                 room,
                 operation,
@@ -1059,6 +1076,7 @@ internal class RtcManager(
                     error,
                 )
             }
+
             checkResult(
                 operation,
                 result,
@@ -1089,6 +1107,7 @@ internal class RtcManager(
                     error,
                 )
             }
+
             checkResult(
                 operation,
                 result,
@@ -1126,6 +1145,7 @@ internal class RtcManager(
             val engine = synchronized(stateLock) {
                 engineLease?.engine
             } ?: throw rtcError("RTC Engine is not initialized")
+
             try {
                 action(engine)
             } catch (
@@ -1161,12 +1181,15 @@ internal class RtcManager(
                 pending.remoteVideoPublications[stream] = published
                 return
             }
+
             activeRoom?.takeIf { it.roomId == stream.roomId } ?: return
         }
+
         eventCallbackScope.launch {
             val listener = synchronized(stateLock) {
                 eventListener?.get().takeIf { activeRoom === room }
             }
+
             listener?.onRemoteVideoPublished(
                 stream,
                 published,
@@ -1185,10 +1208,12 @@ internal class RtcManager(
         message: String,
     ) {
         val room = synchronized(stateLock) { activeRoom?.takeIf { it.roomId == stream.roomId } } ?: return
+
         eventCallbackScope.launch {
             val listener = synchronized(stateLock) {
                 eventListener?.get().takeIf { activeRoom === room }
             }
+
             listener?.onUserMessageReceived(
                 stream,
                 message,
@@ -1207,10 +1232,12 @@ internal class RtcManager(
         message: String,
     ) {
         val room = synchronized(stateLock) { activeRoom?.takeIf { it.roomId == stream.roomId } } ?: return
+
         eventCallbackScope.launch {
             val listener = synchronized(stateLock) {
                 eventListener?.get().takeIf { activeRoom === room }
             }
+
             listener?.onSeiMessageReceived(
                 stream,
                 message,
@@ -1231,10 +1258,12 @@ internal class RtcManager(
         height: Int,
     ) {
         if (width <= 0 || height <= 0) return
+
         synchronized(stateLock) {
             if (!registration.isActive || remoteFrameRegistration !== registration || activeRoom !== registration.room ||
                 engineLease !== registration.lease || registration.framePending
             ) return
+
             registration.framePending = true
         }
         eventCallbackScope.launch {
@@ -1244,6 +1273,7 @@ internal class RtcManager(
                         engineLease === registration.lease
                 }
             }
+
             listener?.onFirstFrame(
                 width,
                 height,
@@ -1311,6 +1341,7 @@ internal class RtcManager(
             hasCapturedFirstLocalVideoFrame = true
             markCameraPreviewReadyReportedIfNeededLocked()
         }
+
         notifyCameraPreviewReady(shouldNotify)
     }
 
@@ -1322,6 +1353,7 @@ internal class RtcManager(
             hasBoundLocalVideoCanvas = true
             markCameraPreviewReadyReportedIfNeededLocked()
         }
+
         notifyCameraPreviewReady(shouldNotify)
     }
 
@@ -1353,6 +1385,7 @@ internal class RtcManager(
         ) {
             return false
         }
+
         hasReportedCameraPreviewReady = true
         return true
     }
@@ -1366,6 +1399,7 @@ internal class RtcManager(
         shouldNotify: Boolean,
     ) {
         if (!shouldNotify) return
+
         val registration = synchronized(stateLock) {
             Triple(
                 cameraListenerVersion,
@@ -1373,6 +1407,7 @@ internal class RtcManager(
                 cameraPreviewReadyListener,
             )
         }
+
         eventCallbackScope.launch {
             val current = synchronized(stateLock) {
                 cameraListenerVersion == registration.first && cameraSourceVersion == registration.second
@@ -1467,6 +1502,7 @@ internal class RtcManager(
                 )
                 throw error
             }
+
             return pending
         }
     }
@@ -1500,8 +1536,10 @@ internal class RtcManager(
                     rtcError("RTC room terminated: $reason"),
                 )
             }
+
             return
         }
+
         if (!joined && isRetryableRoomFailure(reason)) return
 
         if (joined) {
@@ -1521,6 +1559,7 @@ internal class RtcManager(
                         val listener = synchronized(stateLock) {
                             eventListener?.get().takeIf { activeRoom === pending.context }
                         }
+
                         listener?.onRemoteVideoPublished(
                             stream,
                             published,
@@ -1530,6 +1569,7 @@ internal class RtcManager(
                     pending.result.complete(Unit)
                 }
             }
+
             return
         }
 
@@ -1565,6 +1605,7 @@ internal class RtcManager(
                 if (joined != null) activeRoom = null
                 pending to joined
             }
+
             try {
                 resources.first?.context?.let { tearDownRoom(
                     it,
@@ -1594,6 +1635,7 @@ internal class RtcManager(
                     pendingJoin = null
                 }
             }
+
             resources.pending?.result?.completeExceptionally(
                 cancelledError("RTC join room"),
             )

@@ -68,6 +68,7 @@ internal class VideoRenderBinding(
             detachHandler(previousView)
             attachedView = null
         }
+
         attachHandler(
             view,
             contentMode,

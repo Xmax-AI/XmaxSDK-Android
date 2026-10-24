@@ -39,6 +39,7 @@ internal object InteractionCoordinateMapper {
         if (!viewportSize.width.isFinite() || !viewportSize.height.isFinite() || !resolvedMediaSize.width.isFinite() || !resolvedMediaSize.height.isFinite()) return null
 
         if (viewportSize.width <= 0f || viewportSize.height <= 0f || resolvedMediaSize.width < 1f || resolvedMediaSize.height < 1f) return null
+
         val widthScale = viewportSize.width / resolvedMediaSize.width
         val heightScale = viewportSize.height / resolvedMediaSize.height
         val scale = if (contentMode == VideoContentMode.FILL) {
@@ -94,6 +95,7 @@ internal object InteractionCoordinateMapper {
         )) {
             return null
         }
+
         val normalizedX = (point.x.toDouble() - displayedFrame.left) / displayedFrame.width()
         val normalizedY = (point.y.toDouble() - displayedFrame.top) / displayedFrame.height()
         return RealtimePoint(

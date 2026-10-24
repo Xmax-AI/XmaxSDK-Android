@@ -188,9 +188,11 @@ internal class ImageSourceController(
                     "Local image source is already active",
                 )
             }
+
             isRunning = true
             source
         }
+
         try {
             emitFrame(source.second)
         } catch (
@@ -206,8 +208,10 @@ internal class ImageSourceController(
                 delay(intervalMillis)
                 val frame = synchronized(stateLock) {
                     if (!isRunning) return@launch
+
                     preparedSource?.second
                 } ?: return@launch
+
                 try { emitFrame(frame) }
                 catch (
                     error: Throwable,
@@ -218,6 +222,7 @@ internal class ImageSourceController(
                 }
             }
         }
+
         synchronized(stateLock) {
             if (isRunning) outputJob = job else job.cancel()
         }
@@ -232,6 +237,7 @@ internal class ImageSourceController(
             preparedSource = null
             outputJob.also { outputJob = null }
         }
+
         job?.cancelAndJoin()
     }
 
@@ -261,8 +267,10 @@ internal class ImageSourceController(
                     "Another image source was prepared concurrently",
                 )
             }
+
             preparedSource = source
         }
+
         return source
     }
 
@@ -286,6 +294,7 @@ internal class ImageSourceController(
             sourceSize,
             RealtimeMediaSource.IMAGE,
         )
+
         return RealtimeVideoFormat(
             resolvedMediaSize.width,
             resolvedMediaSize.height,

@@ -13,13 +13,14 @@ package ai.xmax.sdk.media.video
 import ai.xmax.sdk.cleanupAfterFailure
 import ai.xmax.sdk.cleanupResources
 import ai.xmax.sdk.AudioFrame
+import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.VideoFrame
-import ai.xmax.sdk.VideoRotation
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
 import ai.xmax.sdk.XmaxLogger
 import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.foundation.media.MediaFileMetadata
 import ai.xmax.sdk.media.MediaAudioFrameListener
 import ai.xmax.sdk.media.MediaVideoFrameListener
 import ai.xmax.sdk.media.audio.LocalAudioPreviewPlayer
@@ -123,46 +124,36 @@ internal class VideoPlayerController(
     private var playbackJob: Job? = null
 
     /**
-     * Sets the decoder source, output dimensions, rotation, frame rate, and duration.
+     * Configures local playback using source metadata and the resolved video output format.
      *
      * @param uri A media URI your app can read.
-     * @param outputWidth The output width, in pixels.
-     * @param outputHeight The output height, in pixels.
-     * @param rotation The rotation applied to the source image.
-     * @param frameRate The video frame rate, in fps.
-     * @param hasAudio Whether the input provides audio.
-     * @param durationUs The media duration, in microseconds.
+     * @param metadata The source dimensions, orientation, duration, and audio information.
+     * @param videoFormat The resolved output dimensions and frame rate.
      */
     override suspend fun configure(
         uri: Uri,
-        outputWidth: Int,
-        outputHeight: Int,
-        rotation: VideoRotation,
-        frameRate: Int,
-        hasAudio: Boolean,
-        durationUs: Long,
+        metadata: MediaFileMetadata,
+        videoFormat: RealtimeVideoFormat,
     ) = operationMutex.withLock {
-        if (outputWidth <= 0 || outputHeight <= 0 ||
-            outputWidth % 2 != 0 || outputHeight % 2 != 0 ||
-            frameRate <= 0 || durationUs <= 0L ||
+        if (videoFormat.width <= 0 || videoFormat.height <= 0 ||
+            videoFormat.width % 2 != 0 || videoFormat.height % 2 != 0 ||
+            videoFormat.fps <= 0 || metadata.durationUs <= 0L ||
             synchronized(stateLock) { configuration != null || playbackJob != null }
         ) {
             throw mediaError("Video player configuration is invalid")
         }
+
         applicationContext.contentResolver.openAssetFileDescriptor(
             uri,
             "r",
         )?.use { Unit }
             ?: throw mediaError("The media file cannot be opened")
+
         synchronized(stateLock) {
             configuration = PlaybackConfiguration(
                 uri = uri,
-                outputWidth = outputWidth,
-                outputHeight = outputHeight,
-                rotation = rotation,
-                frameRate = frameRate,
-                hasAudio = hasAudio,
-                durationUs = durationUs,
+                metadata = metadata,
+                videoFormat = videoFormat,
             )
         }
     }
@@ -174,8 +165,10 @@ internal class VideoPlayerController(
         val resolvedConfiguration = synchronized(stateLock) {
             configuration?.takeIf { playbackJob == null }
         } ?: throw mediaError("Configure the video player before starting it")
-        if (resolvedConfiguration.hasAudio) audioPreviewPlayer.start()
-        val timeline = MediaPlaybackTimeline(resolvedConfiguration.durationUs)
+
+        if (resolvedConfiguration.metadata.hasAudio) audioPreviewPlayer.start()
+        val timeline = MediaPlaybackTimeline(resolvedConfiguration.metadata.durationUs)
+
         val job = playbackScope.launch {
             try {
                 coroutineScope {
@@ -187,7 +180,7 @@ internal class VideoPlayerController(
                             )
                         },
                     )
-                    if (resolvedConfiguration.hasAudio) {
+                    if (resolvedConfiguration.metadata.hasAudio) {
                         jobs += launch {
                             produceAudioFrames(
                                 resolvedConfiguration,
@@ -195,6 +188,7 @@ internal class VideoPlayerController(
                             )
                         }
                     }
+
                     jobs.joinAll()
                 }
             } catch (
@@ -221,6 +215,7 @@ internal class VideoPlayerController(
                 )
             }
         }
+
         synchronized(stateLock) { playbackJob = job }
     }
 
@@ -280,6 +275,7 @@ internal class VideoPlayerController(
         val job = synchronized(stateLock) {
             playbackJob.also { playbackJob = null }
         }
+
         cleanupResources(
             { job?.cancel(); job?.join() },
             { audioPreviewPlayer.stop() },
@@ -308,6 +304,7 @@ internal class VideoPlayerController(
             )) {
                 throw mediaError("The media file produced no video frames")
             }
+
             loopIndex += 1
             sleepUntil(
                 timeline.target(
@@ -335,6 +332,7 @@ internal class VideoPlayerController(
         var codec: MediaCodec? = null
         var decodingFailure: Throwable? = null
         var yieldedFrame = false
+
         try {
             extractor.setDataSource(
                 applicationContext,
@@ -346,14 +344,17 @@ internal class VideoPlayerController(
                     .getString(MediaFormat.KEY_MIME)
                     ?.startsWith("video/") == true
             } ?: throw mediaError("The media file does not contain a video track")
+
             extractor.selectTrack(trackIndex)
             val sourceFormat = extractor.getTrackFormat(trackIndex)
             val mime = sourceFormat.getString(MediaFormat.KEY_MIME)
                 ?: throw mediaError("The media video track has no MIME type")
+
             sourceFormat.setInteger(
                 MediaFormat.KEY_COLOR_FORMAT,
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible,
             )
+
             codec = MediaCodec.createDecoderByType(mime)
             codec.configure(
                 sourceFormat,
@@ -362,8 +363,9 @@ internal class VideoPlayerController(
                 0,
             )
             codec.start()
+
             val firstPresentationTimeUs = extractor.sampleTime.coerceAtLeast(0L)
-            val frameIntervalUs = MICROSECONDS_PER_SECOND / configuration.frameRate
+            val frameIntervalUs = MICROSECONDS_PER_SECOND / configuration.videoFormat.fps
             val frameIntervalNanoseconds = frameIntervalUs * NANOSECONDS_PER_MICROSECOND
             val bufferInfo = MediaCodec.BufferInfo()
             val pendingFrames = ArrayDeque<ScheduledVideoFrame>(VIDEO_DECODE_BUFFER_SIZE)
@@ -430,9 +432,9 @@ internal class VideoPlayerController(
                             frame = try {
                                 Yuv420VideoFrameConverter.convert(
                                     image = image,
-                                    outputWidth = configuration.outputWidth,
-                                    outputHeight = configuration.outputHeight,
-                                    rotation = configuration.rotation,
+                                    outputWidth = configuration.videoFormat.width,
+                                    outputHeight = configuration.videoFormat.height,
+                                    rotation = configuration.metadata.rotation,
                                     timestampUs = target / NANOSECONDS_PER_MICROSECOND,
                                 )
                             } finally {
@@ -441,6 +443,7 @@ internal class VideoPlayerController(
                             lastYieldedTimeUs = relativeTimeUs
                             yieldedFrame = true
                         }
+
                         outputEnded = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                         codec.releaseOutputBuffer(
                             outputIndex,
@@ -460,9 +463,11 @@ internal class VideoPlayerController(
                     }
                 }
             }
+
             while (pendingFrames.isNotEmpty()) {
                 emitVideoFrame(pendingFrames.removeFirst())
             }
+
             return yieldedFrame
         } catch (
             error: Throwable,
@@ -538,6 +543,7 @@ internal class VideoPlayerController(
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         var decodingFailure: Throwable? = null
+
         try {
             extractor.setDataSource(
                 applicationContext,
@@ -653,6 +659,7 @@ internal class VideoPlayerController(
                                 loopIndex,
                             )
                         }
+
                         outputEnded = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                         codec.releaseOutputBuffer(
                             outputIndex,
@@ -661,6 +668,7 @@ internal class VideoPlayerController(
                     }
                 }
             }
+
             packetizer.finishWithSilence()
             emitAvailableAudioFrames(
                 packetizer,
@@ -715,6 +723,7 @@ internal class VideoPlayerController(
             } else if (now - target > MAXIMUM_AUDIO_LATENESS_NANOSECONDS) {
                 continue
             }
+
             val frame = AudioFrame(
                 data = packet.data,
                 timestampUs = target / NANOSECONDS_PER_MICROSECOND,
@@ -742,6 +751,7 @@ internal class VideoPlayerController(
         if (channelCount <= 0 || sampleRate <= 0) {
             throw mediaError("The decoded audio format is invalid")
         }
+
         val interleaved = when (encoding) {
             AudioFormat.ENCODING_PCM_16BIT -> {
                 val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -760,6 +770,7 @@ internal class VideoPlayerController(
         }
         val sourceFrameCount = interleaved.size / channelCount
         if (sourceFrameCount == 0) return ShortArray(0)
+
         val mono = ShortArray(sourceFrameCount) { frameIndex ->
             var sum = 0L
             repeat(channelCount) { channelIndex ->
@@ -768,8 +779,10 @@ internal class VideoPlayerController(
             (sum / channelCount).toShort()
         }
         if (sampleRate == AudioFrame.sampleRate) return mono
+
         val outputCount = (sourceFrameCount.toLong() * AudioFrame.sampleRate / sampleRate)
             .toInt().coerceAtLeast(1)
+
         return ShortArray(outputCount) { outputIndex ->
             val sourcePosition = outputIndex.toDouble() * sampleRate / AudioFrame.sampleRate
             val leftIndex = sourcePosition.toInt().coerceAtMost(mono.lastIndex)
@@ -796,6 +809,7 @@ internal class VideoPlayerController(
         while (true) {
             val remaining = targetNanoseconds - SystemClock.elapsedRealtimeNanos()
             if (remaining <= 0L) return
+
             delay((remaining / NANOSECONDS_PER_MILLISECOND).coerceAtLeast(1L))
         }
     }
@@ -862,34 +876,14 @@ internal class VideoPlayerController(
         val uri: Uri,
 
         /**
-         * The output width, in pixels.
+         * The source dimensions, orientation, duration, and audio information.
          */
-        val outputWidth: Int,
+        val metadata: MediaFileMetadata,
 
         /**
-         * The output height, in pixels.
+         * The resolved dimensions and frame rate for decoded video output.
          */
-        val outputHeight: Int,
-
-        /**
-         * The rotation applied to the source image.
-         */
-        val rotation: VideoRotation,
-
-        /**
-         * The video frame rate, in fps.
-         */
-        val frameRate: Int,
-
-        /**
-         * Whether the input provides audio.
-         */
-        val hasAudio: Boolean,
-
-        /**
-         * The media duration, in microseconds.
-         */
-        val durationUs: Long,
+        val videoFormat: RealtimeVideoFormat,
     )
 
     /**
@@ -1006,6 +1000,7 @@ internal class VideoPlayerController(
             frame: VideoFrame,
         ) {
             if (synchronized(previewLock) { view?.get() == null }) return
+
             pendingFrame.set(frame)
             scheduleDelivery(CoroutineScope(currentCoroutineContext()))
         }
@@ -1019,6 +1014,7 @@ internal class VideoPlayerController(
                 generation += 1L
                 view?.get().also { view = null }
             }
+
             currentView?.clearDecodedVideoPreview()
         }
 
@@ -1053,6 +1049,7 @@ internal class VideoPlayerController(
                         )
                     }
                     if (preview.view == null) continue
+
                     val bitmap = try {
                         Yuv420VideoFrameConverter.makePreviewBitmap(frame)
                     } catch (
@@ -1070,6 +1067,7 @@ internal class VideoPlayerController(
                         continue
                     }
                     var delivered = false
+
                     try {
                         withContext(Dispatchers.Main.immediate) {
                             val remainsAttached = synchronized(previewLock) {

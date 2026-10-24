@@ -38,7 +38,11 @@ public class XmaxClient(
     init {
         XmaxLogger.configure(
             configuration.loggerOptions,
-            configuration.environment,
+            language = if (configuration.environment == XmaxEnvironment.CHINA) {
+                XmaxLogger.Language.CHINESE
+            } else {
+                XmaxLogger.Language.ENGLISH
+            },
         )
     }
 
@@ -81,6 +85,7 @@ public class XmaxClient(
             code = XmaxErrorCode.INVALID_CONFIGURATION,
             message = "Android Context is required to create a storage manager",
         )
+
         return XmaxStorageManager(
             StorageService(
                 apiService = apiService,

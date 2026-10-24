@@ -82,6 +82,7 @@ internal class BitmapDecodedImage(
             videoFormat.height,
             Bitmap.Config.ARGB_8888,
         )
+
         try {
             Canvas(target).drawBitmap(
                 bitmap,
@@ -117,6 +118,7 @@ internal class BitmapDecodedImage(
                 rgba[offset + 2] = pixel.toByte()
                 rgba[offset + 3] = (pixel ushr 24).toByte()
             }
+
             return VideoFrame(
                 format = VideoFormat(
                     width = videoFormat.width,

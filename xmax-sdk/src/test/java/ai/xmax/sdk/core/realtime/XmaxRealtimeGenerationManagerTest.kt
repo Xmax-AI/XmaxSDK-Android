@@ -24,15 +24,55 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import kotlinx.coroutines.cancelAndJoin
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class XmaxRealtimeGenerationManagerTest {
     @Test
+    fun `generation becomes ready only after confirmation first frame and audio activation`() = runTest {
+        val stream = GenerationStreamStub()
+        val interaction = GenerationInteractionStub()
+        val firstFrame = CompletableDeferred<Unit>()
+        val manager = XmaxRealtimeGenerationManager(interaction, stream, RenderControllingStub(firstFrame)) { "task" }
+        val start = async { manager.start(RealtimeVideoFormat(1280, 720, 30), RealtimeContext("first")) {} }
+        runCurrent()
+        assertFalse(start.isCompleted)
+        assertFalse(stream.audioActivated)
+        stream.confirmation.complete(Unit)
+        runCurrent()
+        assertEquals("task", interaction.startedTaskId)
+        assertFalse(start.isCompleted)
+        assertFalse(stream.audioActivated)
+        assertNull(manager.cachedContext)
+        firstFrame.complete(Unit)
+        assertEquals("task", start.await())
+        assertTrue(stream.audioActivated)
+        assertEquals("first", manager.cachedContext!!.prompt)
+    }
+
+    @Test
+    fun `cancelling first frame wait stops the task without publishing cached conditions or audio`() = runTest {
+        val stream = GenerationStreamStub()
+        val firstFrame = CompletableDeferred<Unit>()
+        val manager = XmaxRealtimeGenerationManager(GenerationInteractionStub(), stream, RenderControllingStub(firstFrame)) { "task" }
+        val start = async { manager.start(RealtimeVideoFormat(1280, 720, 30), RealtimeContext("first")) {} }
+        runCurrent()
+        stream.confirmation.complete(Unit)
+        runCurrent()
+        start.cancelAndJoin()
+        assertEquals(listOf("task"), stream.stoppedTasks)
+        assertNull(manager.cachedContext)
+        assertFalse(stream.audioActivated)
+    }
+
+    @Test
     fun `start waits for stream confirmation and caches context`() = runTest {
         val stream = GenerationStreamStub()
         val interaction = GenerationInteractionStub()
-        val manager = XmaxRealtimeGenerationManager(interaction, stream) { "task-fixed" }
+        val manager = XmaxRealtimeGenerationManager(interaction, stream, RenderControllingStub()) { "task-fixed" }
         val format = RealtimeVideoFormat(704, 1280, 24)
         val context = RealtimeContext("first")
 
@@ -54,6 +94,7 @@ class XmaxRealtimeGenerationManagerTest {
         val manager = XmaxRealtimeGenerationManager(
             GenerationInteractionStub(),
             GenerationStreamStub(),
+            RenderControllingStub(),
         ) { "task-fixed" }
 
         val error = try {
@@ -91,8 +132,10 @@ private class GenerationInteractionStub : InteractionControlling {
     override fun submitInteraction(frame: InteractionFrame) = Unit
 }
 
-private class GenerationStreamStub : StreamControlling {
+private class GenerationStreamStub : StreamControllingStub() {
     var startedTaskId: String? = null
+    var audioActivated = false
+    val stoppedTasks = mutableListOf<String>()
     var confirmation = CompletableDeferred<Unit>()
 
     override fun setVideoEncoderConfig(videoFormat: RealtimeVideoFormat) = Unit
@@ -130,7 +173,7 @@ private class GenerationStreamStub : StreamControlling {
         return confirmation
     }
     override fun activateNetworkVideoCompletion(onFinish: (() -> Unit)?) = Unit
-    override fun activateRemoteAudio() = Unit
+    override fun activateRemoteAudio() { audioActivated = true }
     override suspend fun updateGeneration(
         taskId: String,
         videoFormat: RealtimeVideoFormat,
@@ -138,6 +181,6 @@ private class GenerationStreamStub : StreamControlling {
         faceRestoration: Boolean,
         paddingContain: Boolean,
     ) = Unit
-    override suspend fun stopGeneration(taskId: String) = Unit
+    override suspend fun stopGeneration(taskId: String) { stoppedTasks += taskId }
     override suspend fun sendTracks(taskId: String, points: List<RealtimePoint>) = Unit
 }

@@ -36,6 +36,8 @@ import ai.xmax.sdk.service.realtime.RealtimeSessionConnection
 import ai.xmax.sdk.stream.encoding.EncodingController
 import ai.xmax.sdk.stream.encoding.EncodingControlling
 import ai.xmax.sdk.stream.quality.QualityController
+import ai.xmax.sdk.stream.quality.QualityConfiguration
+import ai.xmax.sdk.stream.quality.QualityChange
 import ai.xmax.sdk.stream.quality.QualityControlling
 import ai.xmax.sdk.stream.room.RoomController
 import ai.xmax.sdk.stream.room.RoomControlling
@@ -132,6 +134,81 @@ internal class StreamController(
     }
 
     /**
+     * The fixed media baseline and applied directional transport levels.
+     */
+    override val qualityConfiguration: QualityConfiguration?
+        get() = qualityController.qualityConfiguration
+
+    /**
+     * Prepares independent transport levels from media dimensions and saved history.
+     *
+     * @param baseline The fixed, resolved media format.
+     * @param minimumInputPixels The minimum uplink pixel area.
+     * @param publishLocalMedia Whether the connection publishes local video.
+     * @return The prepared directional quality configuration.
+     */
+    override fun prepareQuality(
+        baseline: RealtimeVideoFormat,
+        minimumInputPixels: Int,
+        publishLocalMedia: Boolean,
+    ): QualityConfiguration = qualityController.prepareQuality(
+        baseline,
+        minimumInputPixels,
+        publishLocalMedia,
+    )
+
+    /**
+     * Proposes transport adjustments without committing a new level.
+     *
+     * @param quality The directional network quality.
+     * @param sampledAt The sample time on the monotonic millisecond clock.
+     * @return Proposed uplink and downlink adjustments.
+     */
+    override fun proposeQuality(
+        quality: RealtimeNetworkQuality,
+        sampledAt: Long,
+    ): QualityChange = qualityController.proposeQuality(
+        quality,
+        sampledAt,
+    )
+
+    /**
+     * Records the outcome of a directional transport adjustment.
+     *
+     * @param downlink Whether the adjustment affects returned video.
+     * @param level The attempted quality level.
+     * @param success Whether configuration succeeded.
+     */
+    override fun completeQuality(
+        downlink: Boolean,
+        level: Int,
+        success: Boolean,
+    ) = qualityController.completeQuality(
+        downlink,
+        level,
+        success,
+    )
+
+    /**
+     * Persists an initially applied level without starting an adaptation cooldown.
+     *
+     * @param downlink Whether the initial level affects returned video.
+     */
+    override fun completeInitialQuality(
+        downlink: Boolean,
+    ) = qualityController.completeInitialQuality(downlink)
+
+    /**
+     * Discards consecutive adaptation samples without changing active levels.
+     */
+    override fun resetQualitySamples() = qualityController.resetQualitySamples()
+
+    /**
+     * Clears connection quality state while retaining history and public listeners.
+     */
+    override fun resetQuality() = qualityController.resetQuality()
+
+    /**
      * Updates uplink dimensions, frame rate, and encoder bitrate.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
@@ -214,6 +291,7 @@ internal class StreamController(
         val userIds = synchronized(stateLock) {
             state.subscribedRemoteAudioUserIds.toList()
         }
+
         userIds.forEach { rtcManager.setRemoteAudioVolume(
             rtcVolume,
             it,
@@ -246,12 +324,14 @@ internal class StreamController(
                 ensureActive,
             )
             ensureActive()
+
             if (publishLocalMedia) {
                 val timing = currentCoroutineContext()[RealtimeTiming.Attempt]
                 timing?.mark(RealtimeTiming.Stage.PUBLICATION_START)
                 publishLocalStream(includeLocalAudio)
                 timing?.mark(RealtimeTiming.Stage.PUBLICATION_END)
             }
+
             qualityController.setUplinkVideoStatisticsEnabled(publishLocalMedia)
         } catch (
             error: Throwable,
@@ -290,6 +370,7 @@ internal class StreamController(
         frame: VideoFrame,
     ) {
         if (!isRequestingExternalFrames) return
+
         try {
             rtcManager.pushExternalVideoFrame(
                 frame,
@@ -332,6 +413,7 @@ internal class StreamController(
         frame: AudioFrame,
     ) {
         if (!synchronized(stateLock) { state.localAudioPublished }) return
+
         rtcManager.pushExternalAudioFrame(frame)
     }
 
@@ -362,6 +444,7 @@ internal class StreamController(
                 "Realtime generation task ID cannot be empty",
             )
         }
+
         val timing = currentCoroutineContext()[RealtimeTiming.Attempt]
         val waiter = synchronized(stateLock) {
             if (state.roomId.isEmpty()) {
@@ -370,12 +453,14 @@ internal class StreamController(
                     "RTC room is not configured",
                 )
             }
+
             if (state.generationTask != null) {
                 throw XmaxError(
                     XmaxErrorCode.RTC_ERROR,
                     "Realtime generation is already active",
                 )
             }
+
             GenerationWaiter(
                 normalizedTaskId,
                 timing,
@@ -387,6 +472,7 @@ internal class StreamController(
                 state.generationWaiter = it
             }
         }
+
         waiter.timeoutJob = generationScope.launch {
             delay(generationTiming.timeoutMillis)
             rejectGenerationStart(
@@ -397,6 +483,7 @@ internal class StreamController(
                 ),
             )
         }
+
         try {
             timing?.beginSignal(normalizedTaskId)
             roomController.startGeneration(
@@ -408,11 +495,14 @@ internal class StreamController(
                 paddingContain,
             )
             withTimeout(generationTiming.timeoutMillis) { rtcManager.awaitPendingMessages() }
+
             synchronized(stateLock) { waiter.signalSent = true }
+
             // The Agora bot may publish before start; reuse its subscription but await a fresh first frame for this task.
             withContext(renderDispatcher) {
                 eventGate.withLock {
                     val users = synchronized(stateLock) { state.subscribedRemoteUserIds.toList() }
+
                     users.forEach { confirmRemoteStream(
                         RemoteStream(
                             state.roomId,
@@ -421,6 +511,7 @@ internal class StreamController(
                     ) }
                 }
             }
+
             return waiter.result
         } catch (
             error: Throwable,
@@ -451,6 +542,7 @@ internal class StreamController(
                 it.completionReady = true
             }
         } ?: return
+
         scheduleNetworkVideoCompletion(task)
     }
 
@@ -466,6 +558,7 @@ internal class StreamController(
     ) {
         val event = runCatching { org.json.JSONObject(message) }.getOrNull() ?: return
         if (event.optString("event") != "video_stopped") return
+
         val task = synchronized(stateLock) {
             state.generationTask?.takeIf {
                 it.isNetworkVideo && event.optString("uid") == it.id &&
@@ -473,6 +566,7 @@ internal class StreamController(
                     (state.botName.isEmpty() || stream.userId == state.botName)
             }?.also { it.finished = true }
         } ?: return
+
         scheduleNetworkVideoCompletion(task)
     }
 
@@ -493,11 +587,13 @@ internal class StreamController(
             }
         }
         if (!shouldSchedule) return
+
         generationScope.launch(renderDispatcher) {
             // Recheck task ownership on the main thread so queued notifications cannot reach a task created after close or retry.
             val callback = synchronized(stateLock) {
                 task.onFinish.takeIf { state.generationTask === task && !task.completionCancelled }
             }
+
             runCatching { callback?.invoke() }.onFailure {
                 XmaxLogger.stream.warn(message = { "Network video completion listener failed: ${it.message}" })
             }
@@ -515,6 +611,7 @@ internal class StreamController(
                 XmaxErrorCode.RTC_ERROR,
                 "Remote generation audio stream is unavailable",
             )
+
             subscribeRemoteAudio(remoteStream.userId)
         }
     }
@@ -554,6 +651,7 @@ internal class StreamController(
     ) {
         val result = stopStreamGeneration(taskId) ?: return
         if (taskId.isNotEmpty() && result.taskId.isEmpty()) return
+
         roomController.stopGeneration(result.taskId)
     }
 
@@ -615,12 +713,14 @@ internal class StreamController(
         eventGate.withLock {
             val normalizedUserId = stream.userId.trim()
             if (normalizedUserId.isEmpty()) return
+
             val currentState = synchronized(stateLock) { state.copy() }
             if (currentState.roomId.isEmpty() || currentState.roomId != stream.roomId ||
                 (currentState.botName.isNotEmpty() && currentState.botName != normalizedUserId)
             ) {
                 return
             }
+
             if (published) {
                 subscribeRemoteVideo(normalizedUserId)
                 confirmRemoteStream(stream)
@@ -634,6 +734,7 @@ internal class StreamController(
                         false
                     }
                 }
+
                 unsubscribeRemoteAudio(normalizedUserId)
                 if (shouldClear) clearRemoteStream()
             }
@@ -685,7 +786,9 @@ internal class StreamController(
 
                 waiter = state.generationWaiter
                 if (waiter != null && !waiter.signalSent) return
+
                 if (waiter == null && state.activeRemoteStream == stream) return
+
                 taskId = task.id
             }
 
@@ -726,6 +829,7 @@ internal class StreamController(
                 "RTC room ID cannot be empty",
             )
         }
+
         synchronized(stateLock) {
             if (state.localVideoPublished || state.localAudioPublished ||
                 state.subscribedRemoteUserIds.isNotEmpty() || state.generationTask != null
@@ -735,6 +839,7 @@ internal class StreamController(
                     "Reset the current RTC room before configuring another one",
                 )
             }
+
             state.roomId = normalizedRoomId
             state.botName = botName?.trim().orEmpty()
         }
@@ -755,13 +860,16 @@ internal class StreamController(
                 "Configure an RTC room before publishing the local stream",
             )
         }
+
         var publishedVideo = false
+
         try {
             if (!currentState.localVideoPublished) {
                 rtcManager.publishLocalVideo()
                 synchronized(stateLock) { state.localVideoPublished = true }
                 publishedVideo = true
             }
+
             if (includeAudio && !currentState.localAudioPublished) {
                 rtcManager.publishLocalAudio()
                 synchronized(stateLock) { state.localAudioPublished = true }
@@ -777,6 +885,7 @@ internal class StreamController(
                     rtcManager.unpublishLocalVideo()
                 }
             }
+
             throw XmaxError.from(error)
         }
     }
@@ -785,11 +894,13 @@ internal class StreamController(
      * Clears stream state, local publication, and remote subscriptions.
      */
     private suspend fun resetStream() {
+        qualityController.resetQuality()
         qualityController.setUplinkVideoStatisticsEnabled(false)
         stopStreamGeneration("")
         val previous = synchronized(stateLock) {
             state.also { state = State() }
         }
+
         previous.subscribedRemoteUserIds.sorted().forEach {
             performCleanup(
                 "取消订阅 RTC 远端视频失败 (Failed to Unsubscribe RTC Remote Video)",
@@ -807,6 +918,7 @@ internal class StreamController(
                 rtcManager.unpublishLocalAudio()
             }
         }
+
         if (previous.localVideoPublished) {
             performCleanup(
                 "取消发布 RTC 本地视频失败 (Failed to Unpublish RTC Local Video)",
@@ -838,6 +950,7 @@ internal class StreamController(
                 val result = synchronized(stateLock) {
                     val currentTaskId = state.generationTask?.id.orEmpty()
                     if (taskId.isNotEmpty() && taskId != currentTaskId) return@withContext null
+
                     StopResult(
                         taskId = currentTaskId,
                         waiter = state.generationWaiter,
@@ -849,6 +962,7 @@ internal class StreamController(
                         state.subscribedRemoteAudioUserIds.clear()
                     }
                 }
+
                 result.waiter?.let {
                     it.timeoutJob?.cancel()
                     it.result.completeExceptionally(
@@ -880,6 +994,7 @@ internal class StreamController(
         userId: String,
     ) {
         if (synchronized(stateLock) { userId in state.subscribedRemoteUserIds }) return
+
         try {
             rtcManager.subscribeRemoteVideo(
                 userId,
@@ -907,6 +1022,7 @@ internal class StreamController(
         userId: String,
     ) {
         if (synchronized(stateLock) { userId in state.subscribedRemoteAudioUserIds }) return
+
         rtcManager.setRemoteAudioVolume(
             remoteAudioVolume.get(),
             userId,
@@ -954,6 +1070,7 @@ internal class StreamController(
                 state.generationWaiter = null
             }
         } ?: return
+
         waiter.timeoutJob?.cancel()
         waiter.result.complete(Unit)
     }
@@ -973,6 +1090,7 @@ internal class StreamController(
                 state.generationWaiter = null
             }
         } ?: return
+
         waiter.timeoutJob?.cancel()
         waiter.result.completeExceptionally(error)
     }

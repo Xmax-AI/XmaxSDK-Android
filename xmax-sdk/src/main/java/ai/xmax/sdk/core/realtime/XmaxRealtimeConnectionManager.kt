@@ -17,6 +17,8 @@ import ai.xmax.sdk.service.realtime.RealtimeSession
 import ai.xmax.sdk.service.realtime.RealtimeSessionServicing
 import ai.xmax.sdk.stream.StreamControlling
 import ai.xmax.sdk.stream.StreamID
+import ai.xmax.sdk.service.media.MediaService
+import ai.xmax.sdk.stream.quality.QualityVideoFormat
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.CancellationException
@@ -49,6 +51,11 @@ internal class XmaxRealtimeConnectionManager(
      * The component managing RTC publication, subscriptions, and generation signaling.
      */
     private val streamController: StreamControlling,
+
+    /**
+     * Model media sizing rules for transport and returned video.
+     */
+    private val mediaService: MediaServicing = MediaService(),
 ) {
 
     /**
@@ -80,6 +87,179 @@ internal class XmaxRealtimeConnectionManager(
      * Whether the current input includes audio.
      */
     private var inputHasAudio = false
+
+    /**
+     * The target dimensions most recently prepared or submitted for returned video.
+     */
+    @Volatile var currentTargetSize: IntSize? = null
+        private set
+
+    /**
+     * Prepares uplink encoding and downlink dimensions from the fixed media baseline.
+     *
+     * @param baseline The resolved local media format.
+     * @param options The model configuration for this connection.
+     * @param publishLocalMedia Whether to configure a local video uplink.
+     * @return The initial downlink output format.
+     */
+    fun prepareQuality(
+        baseline: RealtimeVideoFormat,
+        options: RealtimeConfiguration,
+        publishLocalMedia: Boolean = true,
+    ): RealtimeVideoFormat {
+        val quality = streamController.prepareQuality(
+            baseline,
+            options.model.minimumInputPixels,
+            publishLocalMedia,
+        )
+
+        quality.uplink?.let {
+            streamController.setVideoEncoderConfig(it)
+            streamController.completeInitialQuality(downlink = false)
+        }
+
+        val target = resolveTargetVideoFormat(
+            baseline,
+            quality.downlinkLevel,
+        )
+
+        currentTargetSize = IntSize(
+            target.width,
+            target.height,
+        )
+        updateRemoteVideoFormat(baseline)
+        return target
+    }
+
+    /**
+     * Persists the initial returned-video level once generation is ready.
+     */
+    fun completeInitialQuality() {
+        streamController.completeInitialQuality(downlink = true)
+    }
+
+    /**
+     * Resolves returned dimensions from media aspect ratio and a transmission level.
+     *
+     * @param baseline The fixed, resolved local media format.
+     * @param level The requested downlink level.
+     * @return Four-pixel-aligned output dimensions with 24 fps for bitrate estimation.
+     */
+    fun resolveTargetVideoFormat(
+        baseline: RealtimeVideoFormat,
+        level: Int,
+    ): RealtimeVideoFormat {
+        val size = mediaService.resolveTargetSize(
+            IntSize(
+                baseline.width,
+                baseline.height,
+            ),
+            QualityVideoFormat.resolveDownlinkMaximumSize(
+                baseline,
+                level,
+            ),
+        )
+        return baseline.copy(
+            width = size.width,
+            height = size.height,
+            fps = 24,
+            minimumBitrate = null,
+            maximumBitrate = null,
+        )
+    }
+
+    /**
+     * Applies a transport level and commits its policy and history only after success.
+     *
+     * @param level The requested quality level.
+     * @param downlink Whether to update returned video instead of local encoding.
+     * @param taskId The generation task receiving a downlink update.
+     * @param reason The adjustment reason used in diagnostic logs.
+     * @param ensureCurrent The validity check for the admitted operation.
+     */
+    suspend fun applyQualityLevel(
+        level: Int,
+        downlink: Boolean,
+        taskId: String,
+        reason: String = "manual",
+        ensureCurrent: () -> Unit,
+    ) {
+        val configuration = streamController.qualityConfiguration ?: return
+        val previous = if (downlink) configuration.downlinkLevel else configuration.uplinkLevel
+            ?: throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "No uplink quality configuration is available",
+            )
+
+        try {
+            ensureCurrent()
+            val format = if (downlink) {
+                resolveTargetVideoFormat(
+                    configuration.baseline,
+                    level,
+                )
+            } else {
+                QualityVideoFormat.resolve(
+                    configuration.baseline,
+                    level,
+                    downlink = false,
+                    minimumInputPixels = configuration.minimumInputPixels,
+                )
+            }
+
+            if (downlink) {
+                streamController.updateDownlinkVideoResolution(
+                    taskId,
+                    format,
+                    ensureCurrent,
+                )
+
+                currentTargetSize = IntSize(
+                    format.width,
+                    format.height,
+                )
+                updateRemoteVideoFormat(configuration.baseline)
+            } else {
+                if (!QualityVideoFormat.supportsEncoding(format)) {
+                    throw XmaxError(
+                        XmaxErrorCode.INVALID_CONFIGURATION,
+                        "Quality level conflicts with the configured bitrate range",
+                    )
+                }
+
+                streamController.setVideoEncoderConfig(format)
+            }
+
+            ensureCurrent()
+            streamController.completeQuality(
+                downlink,
+                level,
+                success = true,
+            )
+
+            XmaxLogger.realtime.debug(
+                message = {
+                    "Quality adjustment ${if (downlink) "downlink" else "uplink"}: L$previous -> L$level, " +
+                        "${format.width}x${format.height}, $reason"
+                },
+            )
+        } catch (
+            cancelled: CancellationException,
+        ) {
+            streamController.resetQualitySamples()
+            throw cancelled
+        } catch (
+            error: Throwable,
+        ) {
+            ensureCurrent()
+            streamController.completeQuality(
+                downlink,
+                level,
+                success = false,
+            )
+            throw error
+        }
+    }
 
     /**
      * Checks reuse against the actual room configuration rather than a media snapshot that may already be
@@ -124,7 +304,15 @@ internal class XmaxRealtimeConnectionManager(
         videoFormat: RealtimeVideoFormat,
     ) {
         val track = synchronized(stateLock) { activeRemoteTrack } ?: return
-        track.updateVideoFormat(videoFormat)
+
+        track.updateVideoFormat(
+            currentTargetSize?.let {
+                videoFormat.copy(
+                    width = it.width,
+                    height = it.height,
+                )
+            } ?: videoFormat,
+        )
     }
 
     /**
@@ -154,9 +342,11 @@ internal class XmaxRealtimeConnectionManager(
             XmaxErrorCode.INVALID_CONFIGURATION,
             "Realtime connection is already open",
         )
+
         val timing = currentCoroutineContext()[RealtimeTiming.Attempt]
         timing?.mark(RealtimeTiming.Stage.CONNECTION_START)
         var session: RealtimeSession? = null
+
         try {
             timing?.mark(RealtimeTiming.Stage.SESSION_START)
             session = sessionService.createSession(model)
@@ -166,6 +356,7 @@ internal class XmaxRealtimeConnectionManager(
                 XmaxErrorCode.SESSION_ERROR,
                 "Session does not contain complete RTC join information",
             )
+
             streamController.connect(
                 connection,
                 includeLocalAudio,
@@ -181,7 +372,12 @@ internal class XmaxRealtimeConnectionManager(
             )
             val remoteTrack = RealtimeVideoTrack(
                 id = connection.botName ?: "video-remote",
-                videoFormat = videoFormat,
+                videoFormat = currentTargetSize?.let {
+                    videoFormat.copy(
+                        width = it.width,
+                        height = it.height,
+                    )
+                } ?: videoFormat,
             )
             renderController.registerRemoteTrack(
                 remoteTrack,
@@ -192,6 +388,7 @@ internal class XmaxRealtimeConnectionManager(
             ) { frame ->
                 interactionController.submitInteraction(frame)
             }
+
             synchronized(stateLock) {
                 activeSession = session
                 activeRemoteTrack = remoteTrack
@@ -210,6 +407,7 @@ internal class XmaxRealtimeConnectionManager(
             // Rollback still holds the operation lock, so a later connection cannot yet own these resources.
             cleanupAfterFailure(
                 error,
+                { currentTargetSize = null; streamController.resetQuality() },
                 { sessionService.stopHeartbeat() },
                 { val track = synchronized(stateLock) {
                     activeRemoteTrack.also { activeSession = null; activeRemoteTrack = null }
@@ -234,9 +432,12 @@ internal class XmaxRealtimeConnectionManager(
             ).also {
                 activeSession = null
                 activeRemoteTrack = null
+                currentTargetSize = null
             }
         }
+
         cleanupResources(
+            { streamController.resetQuality() },
             { sessionService.stopHeartbeat() },
             { renderController.resetRemoteTrack(resources.remoteTrack) },
             { streamController.disconnect() },

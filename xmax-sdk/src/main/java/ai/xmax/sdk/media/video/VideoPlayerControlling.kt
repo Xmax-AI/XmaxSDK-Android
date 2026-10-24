@@ -11,8 +11,9 @@
 package ai.xmax.sdk.media.video
 
 import ai.xmax.sdk.VideoContentMode
-import ai.xmax.sdk.VideoRotation
+import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.foundation.media.MediaFileMetadata
 import android.net.Uri
 
 /**
@@ -21,24 +22,16 @@ import android.net.Uri
 internal interface VideoPlayerControlling {
 
     /**
-     * Sets the decoder source, output dimensions, rotation, frame rate, and duration.
+     * Configures local playback using source metadata and the resolved video output format.
      *
      * @param uri A media URI your app can read.
-     * @param outputWidth The output width, in pixels.
-     * @param outputHeight The output height, in pixels.
-     * @param rotation The rotation applied to the source image.
-     * @param frameRate The video frame rate, in fps.
-     * @param hasAudio Whether the input provides audio.
-     * @param durationUs The media duration, in microseconds.
+     * @param metadata The source dimensions, orientation, duration, and audio information.
+     * @param videoFormat The resolved output dimensions and frame rate.
      */
     suspend fun configure(
         uri: Uri,
-        outputWidth: Int,
-        outputHeight: Int,
-        rotation: VideoRotation,
-        frameRate: Int,
-        hasAudio: Boolean,
-        durationUs: Long,
+        metadata: MediaFileMetadata,
+        videoFormat: RealtimeVideoFormat,
     )
 
     /**

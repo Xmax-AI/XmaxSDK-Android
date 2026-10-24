@@ -118,6 +118,7 @@ public class XmaxVideoView @JvmOverloads constructor(
             value,
         ) {
             if (field === value) return
+
             detachCurrentTrack()
             field = value
             attachCurrentTrackIfNeeded()
@@ -131,6 +132,7 @@ public class XmaxVideoView @JvmOverloads constructor(
             value,
         ) {
             if (field == value) return
+
             detachCurrentTrack()
             field = value
             attachCurrentTrackIfNeeded()
@@ -144,6 +146,7 @@ public class XmaxVideoView @JvmOverloads constructor(
             value,
         ) {
             if (field == value) return
+
             field = value
             trajectoryOverlayView.setRequestedInteractionEnabled(value)
         }
@@ -318,6 +321,7 @@ public class XmaxVideoView @JvmOverloads constructor(
         val bitmapToClear = displayedBitmap
         val action: () -> Unit = action@{
             if (displayedBitmap !== bitmapToClear) return@action
+
             imageView.setImageDrawable(null)
             imageView.visibility = View.GONE
             displayedBitmap?.recycle()
@@ -365,6 +369,7 @@ public class XmaxVideoView @JvmOverloads constructor(
      */
     private fun attachCurrentTrackIfNeeded() {
         if (!isAttachedToWindow) return
+
         val currentTrack = track ?: return
         VideoRenderRegistry.binding(currentTrack)?.let { binding ->
             runCatching {
@@ -438,6 +443,7 @@ public class XmaxVideoView @JvmOverloads constructor(
      */
     private fun scheduleFrameDisplayed() {
         if (!isFrameDisplayEnabled || hasDisplayedFrame || pendingFrameDisplay != null || attachedBinding == null) return
+
         val currentTrack = track ?: return
         val generation = renderGeneration
         pendingFrameDisplay = Runnable {
@@ -461,6 +467,7 @@ public class XmaxVideoView @JvmOverloads constructor(
         if (frame.format.pixelFormat != VideoPixelFormat.RGBA || frame.planes.size != 1) {
             throw IllegalArgumentException("Image preview requires a single RGBA video plane")
         }
+
         val width = frame.format.width
         val height = frame.format.height
         val plane = frame.planes.single()
@@ -477,6 +484,7 @@ public class XmaxVideoView @JvmOverloads constructor(
             val alpha = bytes[offset + 3].toInt() and 0xFF
             pixels[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
         }
+
         return Bitmap.createBitmap(
             pixels,
             width,

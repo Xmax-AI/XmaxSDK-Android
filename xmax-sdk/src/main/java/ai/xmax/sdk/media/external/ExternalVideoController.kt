@@ -127,10 +127,12 @@ internal class ExternalVideoController(
         )
         this@ExternalVideoController.source = source
         synchronized(lock) { sink = input }
+
         try {
             rtc.useExternalVideoSource()
             hasAudio = source.hasAudio
             if (hasAudio) rtc.startExternalAudioSource()
+
             VideoRenderRegistry.register(
                 track,
                 VideoRenderBinding(
@@ -141,11 +143,13 @@ internal class ExternalVideoController(
                     detachHandler = { view -> source.detachPreview(view) },
                 ),
             )
+
             currentTrack = track
             source.setPreviewAudio(
                 volume,
                 muted,
             )
+
             source.start(input)
             RealtimeMediaStream(
                 StreamID.LOCAL.value,
@@ -246,6 +250,7 @@ internal class ExternalVideoController(
             timestampUs: Long,
         ) = submit {
             if (timestampUs <= lastVideoUs) return@submit
+
             require(rgba.size.toLong() == videoFormat.width.toLong() * videoFormat.height * 4)
             lastVideoUs = timestampUs
             videoListener(
@@ -277,6 +282,7 @@ internal class ExternalVideoController(
             timestampUs: Long,
         ) = submit {
             if (!audioEnabled || timestampUs <= lastAudioUs) return@submit
+
             require(pcm.size == 960)
             lastAudioUs = timestampUs
             audioListener(
@@ -317,6 +323,7 @@ internal class ExternalVideoController(
             try {
                 synchronized(lock) {
                     if (sink !== this || !requestingFrames()) return
+
                     action()
                 }
             } catch (

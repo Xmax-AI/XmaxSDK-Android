@@ -295,6 +295,7 @@ internal class DecoderSurfaceBridge(
      */
     suspend fun release() {
         if (closed) return
+
         val done = CompletableDeferred<Unit>()
         handler.post {
             try {
@@ -320,6 +321,7 @@ internal class DecoderSurfaceBridge(
                         display,
                         window,
                     )
+
                     decoderSurface?.release(); decoderTexture?.release(); previewSurface?.release()
                     EGL14.eglMakeCurrent(
                         display,
@@ -337,6 +339,7 @@ internal class DecoderSurfaceBridge(
                     )
                     EGL14.eglReleaseThread(); EGL14.eglTerminate(display)
                 }
+
                 done.complete(Unit)
             } catch (
                 error: Exception,
@@ -478,6 +481,7 @@ internal class DecoderSurfaceBridge(
         val texture = decoderTexture ?: return
         texture.updateTexImage()
         if (texture.timestamp == lastTextureTimestamp) return
+
         lastTextureTimestamp = texture.timestamp
         texture.getTransformMatrix(transform)
         val sink = input()?.takeIf { it.isRequestingFrames }
@@ -496,6 +500,7 @@ internal class DecoderSurfaceBridge(
                 SystemClock.elapsedRealtime() - started,
             )
         }
+
         if (window != EGL14.EGL_NO_SURFACE) {
             makeCurrent(window)
             GLES20.glBindFramebuffer(
@@ -514,6 +519,7 @@ internal class DecoderSurfaceBridge(
                 ),
             ) { "Preview EGL swap failed" }
         }
+
         renderedFrames++
     }
 
@@ -580,6 +586,7 @@ internal class DecoderSurfaceBridge(
             pixels = ByteBuffer.allocateDirect(width * height * 4)
             captureWidth = width; captureHeight = height
         }
+
         GLES20.glBindFramebuffer(
             GLES20.GL_FRAMEBUFFER,
             framebuffer,
@@ -610,6 +617,7 @@ internal class DecoderSurfaceBridge(
                 stride,
             )
         }
+
         sink.pushVideo(
             rgba,
             timestampUs,
@@ -787,6 +795,7 @@ internal class DecoderSurfaceBridge(
         action: () -> Unit,
     ) {
         if (closed) return
+
         try { action() } catch (
             error: Exception,
         ) {

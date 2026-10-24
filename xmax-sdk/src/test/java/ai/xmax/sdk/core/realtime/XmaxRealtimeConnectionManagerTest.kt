@@ -169,7 +169,7 @@ private class InteractionControllerStub : InteractionControlling {
 
 private class StreamControllerStub(
     private val connectError: Throwable? = null,
-) : StreamControlling {
+) : StreamControllingStub() {
     var disconnected = false
 
     override fun setVideoEncoderConfig(videoFormat: RealtimeVideoFormat) = Unit

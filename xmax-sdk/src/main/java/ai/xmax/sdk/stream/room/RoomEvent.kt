@@ -64,11 +64,13 @@ internal object RoomEvent {
                         "Contain padding requires a target size and a realtime frame input",
                     )
                 }
+
                 put(
                     "padding",
                     "contain",
                 )
             }
+
             put(
                 "mirror",
                 false,

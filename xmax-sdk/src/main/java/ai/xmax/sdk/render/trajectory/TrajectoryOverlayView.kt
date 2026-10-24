@@ -140,6 +140,7 @@ internal class TrajectoryOverlayView(
         contentMode: VideoContentMode,
     ) {
         if (videoContentMode == contentMode) return
+
         videoContentMode = contentMode
         cancelInteraction()
         updateInteractionState()
@@ -154,6 +155,7 @@ internal class TrajectoryOverlayView(
         resolvedMediaSize: IntSize?,
     ) {
         if (this.resolvedMediaSize == resolvedMediaSize) return
+
         this.resolvedMediaSize = resolvedMediaSize
         cancelInteraction()
         updateInteractionState()
@@ -168,6 +170,7 @@ internal class TrajectoryOverlayView(
         enabled: Boolean,
     ) {
         if (requestedInteractionEnabled == enabled) return
+
         requestedInteractionEnabled = enabled
         if (!enabled) cancelInteraction()
         updateInteractionState()
@@ -184,6 +187,7 @@ internal class TrajectoryOverlayView(
     ): Boolean {
         val interactionFrame = interactionFrame()
         if (!isEnabled || !isClickable || interactionFrame == null) return false
+
         if ((event.actionMasked == MotionEvent.ACTION_DOWN ||
                 event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) &&
             !interactionFrame.contains(
@@ -193,6 +197,7 @@ internal class TrajectoryOverlayView(
         ) {
             return event.actionMasked != MotionEvent.ACTION_DOWN
         }
+
         val timestamp = nowSeconds()
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN,
@@ -232,6 +237,7 @@ internal class TrajectoryOverlayView(
                             touch.location,
                             location,
                         ) < MINIMUM_MOVE_SQUARED) continue
+
                         touch.location = location
                         add(touch.asTrajectoryPoint(timestamp))
                     }
@@ -245,6 +251,7 @@ internal class TrajectoryOverlayView(
             MotionEvent.ACTION_POINTER_UP -> finishPointer(event.getPointerId(event.actionIndex))
             MotionEvent.ACTION_CANCEL -> cancelInteraction()
         }
+
         return true
     }
 
@@ -316,7 +323,9 @@ internal class TrajectoryOverlayView(
         force: Boolean = false,
     ) {
         if (activeTouches.isEmpty()) return
+
         if (!force && nowNanos - lastSampleNanos < SAMPLE_INTERVAL_NANOS) return
+
         lastSampleNanos = nowNanos
         binding?.submit(
             InteractionFrame(
@@ -406,6 +415,7 @@ internal class TrajectoryOverlayView(
      */
     private fun postFrameCallback() {
         if (frameCallbackPosted) return
+
         frameCallbackPosted = true
         Choreographer.getInstance().postFrameCallback(frameCallback)
     }
@@ -415,6 +425,7 @@ internal class TrajectoryOverlayView(
      */
     private fun stopFrameCallback() {
         if (!frameCallbackPosted) return
+
         Choreographer.getInstance().removeFrameCallback(frameCallback)
         frameCallbackPosted = false
     }
@@ -487,6 +498,7 @@ internal class TrajectoryOverlayView(
                 0f,
             )
         }
+
         return TrajectoryPoint(
             id = id,
             location = PointF(

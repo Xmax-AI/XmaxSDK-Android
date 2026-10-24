@@ -137,6 +137,7 @@ internal class MediaService(
             maximumSize.width.toDouble() / sourceSize.width,
             maximumSize.height.toDouble() / sourceSize.height,
         )
+
         return alignedSize(
             sourceSize,
             scale,
@@ -268,6 +269,7 @@ internal class MediaService(
             val minimumHeight = (minimumUnits + widthUnits - 1L) / widthUnits
             val maximumHeight = maximumUnits / widthUnits
             if (minimumHeight > maximumHeight) continue
+
             val preferredHeight = round(height / alignment).toLong()
             val heightUnits = preferredHeight.coerceIn(
                 minimumHeight,
@@ -286,6 +288,7 @@ internal class MediaService(
                 )
             }
         }
+
         return bestSize
     }
 

@@ -115,6 +115,7 @@ internal open class RtcEngineManager internal constructor(
             val lease = synchronized(stateLock) {
                 activeLease.also { activeLease = null }
             }
+
             try {
                 if (lease != null) destroyEngine()
             } catch (
@@ -125,6 +126,7 @@ internal open class RtcEngineManager internal constructor(
             } finally {
                 leaseMutex.unlock()
             }
+
             throw when (error) {
                 is CancellationException,
                 is XmaxError,

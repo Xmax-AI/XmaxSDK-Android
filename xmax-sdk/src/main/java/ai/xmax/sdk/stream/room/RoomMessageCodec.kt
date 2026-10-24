@@ -54,6 +54,7 @@ internal class RoomMessageCodec {
     ): List<String> {
         require(message.toByteArray(Charsets.UTF_8).size <= MAX_MESSAGE_BYTES) { "Room message is too large" }
         if (message.toByteArray(Charsets.UTF_8).size <= 800) return listOf(message)
+
         val pieces = mutableListOf<String>()
         val part = StringBuilder()
         var bytes = 0
@@ -67,15 +68,18 @@ internal class RoomMessageCodec {
                 part.setLength(0)
                 bytes = 0
             }
+
             part.append(character)
             bytes += cost
             offset += Character.charCount(codePoint)
         }
+
         if (part.isNotEmpty()) pieces += part.toString()
         val id = UUID.randomUUID().toString().replace(
             "-",
             "",
         )
+
         return pieces.mapIndexed { index, data ->
             JSONObject().put(
                 "event",
@@ -110,13 +114,16 @@ internal class RoomMessageCodec {
         message: String,
     ): String? {
         if (message.toByteArray(Charsets.UTF_8).size > MAX_MESSAGE_BYTES) return null
+
         val json = runCatching { JSONObject(message) }.getOrNull() ?: return null
         if (json.optString("event") != EVENT) return message
+
         val id = json.opt("eventId") as? String ?: return null
         val index = json.opt("index") as? Int ?: return null
         val count = json.opt("count") as? Int ?: return null
         val data = json.opt("data") as? String ?: return null
         if (id.isBlank() || id.length > 128 || count !in 1..512 || index !in 0 until count) return null
+
         val key = sender to id
         val record = records.getOrPut(key) { Record(count) }
         while (records.size > 64) records.remove(records.keys.first())
@@ -124,15 +131,19 @@ internal class RoomMessageCodec {
             records.remove(key)
             return null
         }
+
         if (index !in record.parts) {
             record.parts[index] = data
             record.bytes += data.toByteArray(Charsets.UTF_8).size
         }
+
         if (record.bytes > MAX_MESSAGE_BYTES) {
             records.remove(key)
             return null
         }
+
         if (record.parts.size != count) return null
+
         records.remove(key)
         val joined = (0 until count).joinToString("") { record.parts.getValue(it) }
         return joined.takeIf { runCatching { JSONObject(it) }.isSuccess }

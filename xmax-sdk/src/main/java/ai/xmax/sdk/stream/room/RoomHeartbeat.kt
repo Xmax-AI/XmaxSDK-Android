@@ -88,6 +88,7 @@ internal class RoomHeartbeat(
             cycle.incrementAndGet()
             heartbeatTask.also { heartbeatTask = null }
         }
+
         job?.cancelAndJoin()
     }
 
@@ -106,6 +107,7 @@ internal class RoomHeartbeat(
                 sleeper()
                 currentCoroutineContext().ensureActive()
                 if (cycle.get() != version) return
+
                 rtcManager.sendRoomMessage(RoomEvent.heartbeat(userId))
             } catch (
                 _: CancellationException,
@@ -115,6 +117,7 @@ internal class RoomHeartbeat(
                 error: Throwable,
             ) {
                 if (cycle.get() != version) return
+
                 XmaxLogger.room.error(
                     message = {
                         "发送 RTC 房间心跳失败 (Failed to Send RTC Room Heartbeat)\n" +

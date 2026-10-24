@@ -599,7 +599,7 @@ private data object EncodingStub : EncodingControlling {
     override fun configure(videoFormat: RealtimeVideoFormat) = Unit
 }
 
-private data object QualityStub : QualityControlling {
+private data object QualityStub : QualityControlling by ai.xmax.sdk.stream.quality.QualityController(RtcManagingStub()) {
     override fun setAdaptiveQualityListener(listener: ((RealtimeNetworkQuality) -> Unit)?) = Unit
     override fun setUplinkVideoStatisticsListener(listener: UplinkVideoStatisticsListener?) = Unit
     override fun setDownlinkVideoStatisticsListener(listener: DownlinkVideoStatisticsListener?) = Unit

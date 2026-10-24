@@ -227,6 +227,7 @@ internal class ApiService(
         ) {
             throw invalidPathError()
         }
+
         return try {
             resolved.toURL()
         } catch (

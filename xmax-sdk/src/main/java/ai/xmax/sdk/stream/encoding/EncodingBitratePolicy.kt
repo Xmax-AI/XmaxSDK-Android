@@ -249,6 +249,7 @@ internal object EncodingBitratePolicy {
     ): Double {
         val first = points.first()
         if (value <= first.value) return first.bitrate * (value / first.value)
+
         points.drop(1).forEachIndexed { index, upper ->
             if (value <= upper.value) {
                 val lower = points[index]

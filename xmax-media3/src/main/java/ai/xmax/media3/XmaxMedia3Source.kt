@@ -315,6 +315,7 @@ public class XmaxMedia3Source(
         container: FrameLayout,
     ) {
         if (previewHost !== container) return
+
         preview?.let(container::removeView)
         preview = null; previewHost = null
     }

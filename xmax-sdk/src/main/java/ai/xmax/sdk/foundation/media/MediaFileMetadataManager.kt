@@ -44,6 +44,7 @@ internal class MediaFileMetadataManager(
     ): MediaFileMetadata =
         withContext(Dispatchers.IO) {
             val retriever = MediaMetadataRetriever()
+
             try {
                 retriever.setDataSource(
                     applicationContext,

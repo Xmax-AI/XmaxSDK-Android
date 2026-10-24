@@ -1,5 +1,5 @@
 //
-//  RealtimeCoordinator.kt
+//  XmaxRealtimeLifecycleManager.kt
 //  XmaxSDK
 //
 //  Author: 翁跃庭 (Yueting Weng)
@@ -39,7 +39,7 @@ import kotlinx.coroutines.withContext
  *
  * @param dispatcher The dispatcher for background operations; defaults to `Dispatchers.Default`.
  */
-internal class RealtimeCoordinator(
+internal class XmaxRealtimeLifecycleManager(
     /**
      * The dispatcher for app state and video frame callbacks.
      */
@@ -51,6 +51,11 @@ internal class RealtimeCoordinator(
      * The function checking whether local media is still available.
      */
     private val hasLocalMedia: () -> Boolean = { false },
+
+    /**
+     * The manager recording errors without owning media or connection resources.
+     */
+    private val errorManager: XmaxRealtimeErrorManager = XmaxRealtimeErrorManager(dispatcher),
 
     /**
      * The suspending cleanup operation for a termination scope.
@@ -200,7 +205,9 @@ internal class RealtimeCoordinator(
      */
     fun localPreviewDidBecomeReady() = synchronized(lock) {
         if (state.connectionState == RealtimeConnectionState.PREPARING && termination == null) {
-            setState(RealtimeState(RealtimeConnectionState.READY))
+            val ready = RealtimeState(RealtimeConnectionState.READY)
+            val operation = active?.takeIf { it.kind == OperationKind.MEDIA }
+            if (operation != null) operation.completionState = ready else setState(ready)
         }
     }
 
@@ -257,6 +264,7 @@ internal class RealtimeCoordinator(
          */
         fun ensureCurrent() = synchronized(lock) {
             if ((active !== operation && operation !in settings) || operation.invalidated) throw CancellationException("Realtime operation was superseded")
+
             operation.generation?.let {
                 if (generation !== it || !it.job.isActive) throw CancellationException("Realtime generation was superseded")
             }
@@ -272,7 +280,25 @@ internal class RealtimeCoordinator(
             next: RealtimeState,
         ) = synchronized(lock) {
             ensureCurrent()
+            if (next.connectionState == RealtimeConnectionState.PREPARING && operation.kind == OperationKind.MEDIA) {
+                operation.didBeginMediaPreparation = true
+            }
             setState(next)
+        }
+
+        /**
+         * Publishes the final state only after the operation releases lifecycle admission.
+         *
+         * @param next The final successful state snapshot.
+         * @param onComplete The action run after publishing the state and releasing admission.
+         */
+        fun complete(
+            next: RealtimeState,
+            onComplete: () -> Unit = {},
+        ) = synchronized(lock) {
+            ensureCurrent()
+            operation.completionState = next
+            operation.completionAction = onComplete
         }
 
         /**
@@ -316,6 +342,7 @@ internal class RealtimeCoordinator(
                 it.task.cancel(CancellationException("Adaptive quality yields to a foreground operation"))
             }
         }
+
         try {
             background?.task?.join()
             synchronized(lock) { if (active === background) active = null }
@@ -394,6 +421,7 @@ internal class RealtimeCoordinator(
                         "Another realtime operation is in progress; wait for it to finish",
                     )
                 }
+
                 val previous = generation
                 request = GenerationRequest(
                     coroutineContext.job,
@@ -406,6 +434,7 @@ internal class RealtimeCoordinator(
                 previous?.job?.cancel(CancellationException("Realtime generation was superseded"))
                 previous to termination?.task
             }
+
             try {
                 withContext(NonCancellable) {
                     previous?.finished?.await()
@@ -456,9 +485,11 @@ internal class RealtimeCoordinator(
             if (background && (foregroundRequests > 0 || active != null || settings.isNotEmpty() || termination != null || generation != null)) {
                 throw CancellationException("Adaptive quality requires an idle coordinator")
             }
+
             if (request != null && (generation !== request || !request.job.isActive)) {
                 throw CancellationException("Realtime generation was superseded")
             }
+
             // During generation, startGeneration changes conditions rather than beginning another lifecycle.
             val operationKind = if (kind == OperationKind.GENERATION &&
                 state.connectionState == RealtimeConnectionState.GENERATING
@@ -471,6 +502,7 @@ internal class RealtimeCoordinator(
                 XmaxErrorCode.INVALID_CONFIGURATION,
                 "Another realtime operation is in progress; wait for it to finish",
             )
+
             operation = Operation(
                 operationKind,
                 if (operationKind == OperationKind.CONFIGURATION) null else failureScope,
@@ -487,9 +519,26 @@ internal class RealtimeCoordinator(
             if (operationKind == OperationKind.SETTING) settings += operation else active = operation
             task
         }
+
         task.start()
+
         try {
-            return task.await()
+            val value = task.await()
+            currentCoroutineContext().ensureActive()
+
+            val completion = synchronized(lock) {
+                Token(operation).ensureCurrent()
+                operation.completionState?.let { next ->
+                    if (active === operation) active = null
+                    settings.remove(operation)
+                    if (generation === operation.generation) generation = null
+                    setState(next)
+                    operation.completionAction
+                }
+            }
+
+            completion?.invoke()
+            return value
         } catch (
             cancelled: CancellationException,
         ) {
@@ -516,6 +565,7 @@ internal class RealtimeCoordinator(
                         )
                     }
                 }
+
                 terminal?.await()
             }
             if (currentCoroutineContext().isActive) operation.terminationError?.let { throw it }
@@ -535,7 +585,7 @@ internal class RealtimeCoordinator(
             }
             if (terminal != null) {
                 withContext(NonCancellable) { terminal.await() }
-            } else if (operation.kind == OperationKind.MEDIA) {
+            } else if (operation.didBeginMediaPreparation) {
                 synchronized(lock) {
                     if (state.connectionState == RealtimeConnectionState.PREPARING) {
                         setState(
@@ -547,6 +597,7 @@ internal class RealtimeCoordinator(
                     }
                 }
             }
+
             throw resolved
         } finally {
             synchronized(lock) {
@@ -615,12 +666,17 @@ internal class RealtimeCoordinator(
      *
      * @param error The operation failure or SDK error.
      * @param target The resources to terminate.
+     * @param isCurrent The check identifying the originating runtime or session.
      */
     fun reportFailure(
         error: XmaxError,
         target: TerminationScope,
+        isCurrent: () -> Boolean = { true },
     ) = synchronized(lock) {
+        if (!isCurrent()) return@synchronized
+
         if (state.reason is RealtimeReason.Failure && termination == null) return@synchronized
+
         requestTermination(
             target,
             error,
@@ -649,6 +705,7 @@ internal class RealtimeCoordinator(
             if (it.error == null) it.error = error
             it.job.cancel(CancellationException("Realtime generation terminated"))
         }
+
         val existing = termination
         val pending = existing ?: Termination(target).also { termination = it }
         if (target > pending.target) pending.target = target
@@ -661,6 +718,7 @@ internal class RealtimeCoordinator(
                 effects.withLock {
                     while (true) {
                         val requested = synchronized(lock) { pending.target }
+
                         try {
                             cleanup(requested)
                         } catch (
@@ -675,6 +733,7 @@ internal class RealtimeCoordinator(
                             )
                             pending.error?.let { if (it !== cleanupError) it.addSuppressed(cleanupError) }
                         }
+
                         var stateNotification: RealtimeState? = null
                         val done = synchronized(lock) {
                             if (pending.target != requested) false else {
@@ -701,17 +760,14 @@ internal class RealtimeCoordinator(
                         }
                         if (done) {
                             stateNotification?.let(callbacks::state)
-                            pending.error?.let { error ->
-                                XmaxLogger.realtime.error(
-                                    message = { "Realtime service error: ${ErrorMessageFormatter.format(error)}" },
-                                )
-                            }
+                            pending.error?.let(errorManager::report)
                             break
                         }
                     }
                 }
             }
         }
+
         (listOfNotNull(active) + settings).filter { pending.target.affects(it.kind) && it !== origin }.forEach {
             it.invalidated = true
             it.terminated = true
@@ -726,6 +782,7 @@ internal class RealtimeCoordinator(
                 ),
             )
         }
+
         pending.task.start()
         return pending.task
     }
@@ -739,6 +796,7 @@ internal class RealtimeCoordinator(
         next: RealtimeState,
     ) {
         if (state == next) return
+
         state = next
         callbacks.state(next)
     }
@@ -803,6 +861,21 @@ internal class RealtimeCoordinator(
          * The error causing operation termination.
          */
         var terminationError: XmaxError? = null
+
+        /**
+         * Whether this operation entered media preparation and owns its rollback state.
+         */
+        var didBeginMediaPreparation = false
+
+        /**
+         * The final state published after successful execution releases admission.
+         */
+        var completionState: RealtimeState? = null
+
+        /**
+         * The action run after the completed state is published.
+         */
+        var completionAction: () -> Unit = {}
     }
 
     /**

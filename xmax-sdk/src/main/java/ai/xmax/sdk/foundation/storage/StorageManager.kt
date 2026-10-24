@@ -76,7 +76,9 @@ internal class StorageManager(
         progress: StorageProgressListener?,
     ): StoredFile = suspendCancellableCoroutine { continuation ->
         if (!continuation.isActive) return@suspendCancellableCoroutine
+
         val completed = AtomicBoolean(false)
+
         try {
             val serviceConfig = makeServiceConfiguration(configuration)
             val service = CosXmlSimpleService(
@@ -145,6 +147,7 @@ internal class StorageManager(
                             false,
                             true,
                         )) return
+
                         try {
                             val uploadResult = result as? COSXMLUploadTask.COSXMLUploadTaskResult
                             val url = resolveUrl(
@@ -182,6 +185,7 @@ internal class StorageManager(
                             false,
                             true,
                         )) return
+
                         val cause = serviceException ?: clientException
                         continuation.resumeWithException(
                             XmaxError(
@@ -266,6 +270,7 @@ internal class StorageManager(
                 builder.setHost(Uri.parse(normalized))
             }
         }
+
         return builder.builder()
     }
 
@@ -284,6 +289,7 @@ internal class StorageManager(
     ): String {
         val value = candidate?.trim().orEmpty()
         if (value.startsWith("//")) return "https:$value"
+
         if (value.startsWith("https://") || value.startsWith("http://")) return value
 
         var endpoint = configuration.endpoint.trim()
@@ -307,6 +313,7 @@ internal class StorageManager(
                 "%20",
             )
         }
+
         return "$endpoint/$encodedKey"
     }
 }
@@ -349,12 +356,14 @@ internal suspend fun downloadFile(
         XmaxErrorCode.INVALID_CONFIGURATION,
         "Another download is writing to this destination",
     )
+
     try {
         withCancellableConnection(
             URL(remoteUrl),
             factory = connectionFactory,
         ) { connection, ensureActive ->
             var temporaryFile: File? = null
+
             try {
                 connection.connectTimeout = 15_000
                 connection.readTimeout = 15_000
@@ -382,6 +391,7 @@ internal suspend fun downloadFile(
                             ensureActive()
                             val count = input.read(buffer)
                             if (count < 0) break
+
                             output.write(
                                 buffer,
                                 0,

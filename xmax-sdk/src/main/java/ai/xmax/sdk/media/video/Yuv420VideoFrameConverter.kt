@@ -47,6 +47,7 @@ internal object Yuv420VideoFrameConverter {
         if (image.format != ImageFormat.YUV_420_888 || image.planes.size < PLANE_COUNT) {
             throw mediaError("The video decoder output is not YUV 4:2:0")
         }
+
         val crop = image.cropRect
         return convert(
             source = Source(
@@ -171,6 +172,7 @@ internal object Yuv420VideoFrameConverter {
         if (frame.format.pixelFormat != VideoPixelFormat.I420 || frame.planes.size != PLANE_COUNT) {
             throw IllegalArgumentException("Decoded video preview requires an I420 frame")
         }
+
         val width = frame.format.width
         val height = frame.format.height
         val yPlane = frame.planes[Y_PLANE]
@@ -226,6 +228,7 @@ internal object Yuv420VideoFrameConverter {
                 outputOffset += 1
             }
         }
+
         return Bitmap.createBitmap(
             pixels,
             width,

@@ -32,8 +32,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Converts RTC quality events, feeds internal adaptation samples, and dispatches public statistics and alarms
- * on the main thread.
+ * Owns directional quality policies and history, converts RTC events, and dispatches public statistics and
+ * alarms on the main thread.
  *
  * @param rtcManager The manager for RTC capture, publication, subscription, and rendering.
  */
@@ -46,12 +46,42 @@ internal class QualityController(
     private val callbackScope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main,
     ),
+
+    /**
+     * Successful directional quality levels retained across connections.
+     */
+    private val history: QualityHistory = QualityHistory(),
+
+    /**
+     * The monotonic millisecond clock used for sample freshness and adjustment intervals.
+     */
+    private val now: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : QualityControlling, RtcQualityListener {
 
     /**
-     * The lock protecting quality listener settings.
+     * The lock protecting quality policies and listener settings.
      */
     private val listenerLock = Any()
+
+    /**
+     * The active uplink policy, absent for server-read video.
+     */
+    private var uplinkQuality: QualityDirection? = null
+
+    /**
+     * The active downlink policy.
+     */
+    private var downlinkQuality: QualityDirection? = null
+
+    /**
+     * The fixed media baseline defining this connection's transport levels.
+     */
+    private var baseline: RealtimeVideoFormat? = null
+
+    /**
+     * The minimum uplink pixel area for the active model.
+     */
+    private var minimumInputPixels = 0
 
     /**
      * The network quality listener registration revision.
@@ -107,6 +137,151 @@ internal class QualityController(
      * The downlink video statistics listener.
      */
     private var downlinkStatisticsListener: DownlinkVideoStatisticsListener? = null
+
+    init {
+        rtcManager.setQualityListener(this)
+    }
+
+    /**
+     * The committed transport levels and fixed media baseline.
+     */
+    override val qualityConfiguration: QualityConfiguration?
+        get() = synchronized(listenerLock) {
+            val media = baseline ?: return@synchronized null
+            val downlink = downlinkQuality ?: return@synchronized null
+            QualityConfiguration(
+                baseline = media,
+                uplinkLevel = uplinkQuality?.level,
+                downlinkLevel = downlink.level,
+                minimumInputPixels = minimumInputPixels,
+            )
+        }
+
+    /**
+     * Restores initial transport levels from model-specific history.
+     *
+     * @param baseline The fixed, resolved media format.
+     * @param minimumInputPixels The minimum uplink pixel area.
+     * @param publishLocalMedia Whether to prepare a local uplink policy.
+     * @return The prepared directional transport configuration.
+     */
+    override fun prepareQuality(
+        baseline: RealtimeVideoFormat,
+        minimumInputPixels: Int,
+        publishLocalMedia: Boolean,
+    ): QualityConfiguration = synchronized(listenerLock) {
+        this.baseline = baseline
+        this.minimumInputPixels = minimumInputPixels
+        uplinkQuality = if (publishLocalMedia) {
+            val level = history.read(downlink = false)
+            val previous = uplinkQuality
+            if (previous?.baseline == baseline && previous.level == level && previous.minimumInputPixels == minimumInputPixels) {
+                previous.apply { resetSamples() }
+            } else {
+                QualityDirection(
+                    baseline,
+                    level,
+                    downlink = false,
+                    minimumInputPixels = minimumInputPixels,
+                )
+            }
+        } else null
+        downlinkQuality = QualityDirection(
+            baseline,
+            history.read(downlink = true),
+            downlink = true,
+        )
+        checkNotNull(qualityConfiguration)
+    }
+
+    /**
+     * Proposes levels from a fresh directional sample without publishing configuration.
+     *
+     * @param quality The directional network quality.
+     * @param sampledAt The sample time on the monotonic millisecond clock.
+     * @return The proposed directional adjustments.
+     */
+    override fun proposeQuality(
+        quality: RealtimeNetworkQuality,
+        sampledAt: Long,
+    ): QualityChange = synchronized(listenerLock) {
+        val currentTime = now()
+        QualityChange(
+            uplink = uplinkQuality?.observe(
+                quality.uplink,
+                sampledAt,
+                currentTime,
+            ),
+            downlink = downlinkQuality?.observe(
+                quality.downlink,
+                sampledAt,
+                currentTime,
+            ),
+        )
+    }
+
+    /**
+     * Records an applied adjustment and persists its successful level.
+     *
+     * @param downlink Whether to update the returned video policy.
+     * @param level The attempted quality level.
+     * @param success Whether the configuration was applied successfully.
+     */
+    override fun completeQuality(
+        downlink: Boolean,
+        level: Int,
+        success: Boolean,
+    ) = synchronized(listenerLock) {
+        val direction = (if (downlink) downlinkQuality else uplinkQuality) ?: return@synchronized
+
+        direction.complete(
+            QualityDirection.Change(
+                direction.level,
+                level,
+                "configuration",
+            ),
+            success,
+            now(),
+        )
+
+        if (success) history.write(
+            downlink,
+            level,
+        )
+    }
+
+    /**
+     * Discards consecutive samples while retaining committed levels and cooldowns.
+     */
+    override fun resetQualitySamples(): Unit = synchronized(listenerLock) {
+        uplinkQuality?.resetSamples()
+        downlinkQuality?.resetSamples()
+    }
+
+    /**
+     * Persists an initial configuration without delaying its first network samples.
+     *
+     * @param downlink Whether the initial level affects returned video.
+     */
+    override fun completeInitialQuality(
+        downlink: Boolean,
+    ): Unit = synchronized(listenerLock) {
+        val direction = (if (downlink) downlinkQuality else uplinkQuality) ?: return@synchronized
+        history.write(
+            downlink,
+            direction.level,
+        )
+    }
+
+    /**
+     * Clears connection policies without releasing saved levels or public listeners.
+     */
+    override fun resetQuality() = synchronized(listenerLock) {
+        uplinkQuality = null
+        downlinkQuality = null
+        baseline = null
+        minimumInputPixels = 0
+    }
 
     /**
      * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
@@ -178,11 +353,14 @@ internal class QualityController(
     ) {
         val registration = synchronized(listenerLock) {
             if (statistics != null && !uplinkStatisticsEnabled) return
+
             uplinkStatisticsVersion to uplinkStatisticsListener
         }
         if (registration.second == null) return
+
         callbackScope.launch {
             if (synchronized(listenerLock) { uplinkStatisticsVersion != registration.first }) return@launch
+
             protect { registration.second?.onStatistics(statistics) }
         }
     }
@@ -197,17 +375,16 @@ internal class QualityController(
     ) {
         val registration = synchronized(listenerLock) {
             if (statistics != null && statistics.userId != downlinkStatisticsUser) return
+
             downlinkStatisticsVersion to downlinkStatisticsListener
         }
         if (registration.second == null) return
+
         callbackScope.launch {
             if (synchronized(listenerLock) { downlinkStatisticsVersion != registration.first }) return@launch
+
             protect { registration.second?.onStatistics(statistics) }
         }
-    }
-
-    init {
-        rtcManager.setQualityListener(this)
     }
 
     /**
@@ -264,10 +441,13 @@ internal class QualityController(
             networkQualityLevel(downlink),
         )
         val adaptive = synchronized(listenerLock) { adaptiveQualityListener }
+
         protect { adaptive?.invoke(quality) }
         val registration = synchronized(listenerLock) { networkVersion to networkQualityListener }
+
         callbackScope.launch {
             if (synchronized(listenerLock) { networkVersion != registration.first }) return@launch
+
             protect { registration.second?.onNetworkQualityChanged(quality) }
         }
     }
@@ -287,8 +467,10 @@ internal class QualityController(
         suggestedFrameRate: Int,
     ) {
         val registration = synchronized(listenerLock) { performanceVersion to performanceAlarmListener }
+
         callbackScope.launch {
             if (synchronized(listenerLock) { performanceVersion != registration.first }) return@launch
+
             protect { registration.second?.onPerformanceAlarm(
                 RealtimePerformanceAlarm(
                     status = if (limited) {
@@ -362,224 +544,5 @@ internal class QualityController(
         )
     } else {
         null
-    }
-
-    /**
-     * One direction's quality state machine, committing a candidate level only after successful application.
-     *
-     * @param level The quality level to apply or retain; 1 is highest.
-     */
-    internal class Direction(
-        /**
-         * The original input format used to calculate quality levels.
-         */
-        val baseline: RealtimeVideoFormat,
-
-        level: Int,
-
-        /**
-         * Whether this direction is downlink rather than uplink.
-         */
-        val downlink: Boolean,
-
-        /**
-         * The thresholds and cooldowns for quality adaptation.
-         */
-        private val policy: QualityPolicy = QualityPolicy(),
-
-        /**
-         * The minimum uplink pixel area; ignored for downlink.
-         */
-        val minimumInputPixels: Int = 0,
-    ) {
-
-        /**
-         * The currently committed quality level.
-         */
-        @Volatile var level = QualityVideoFormat.initialLevel(
-            baseline,
-            level,
-            downlink,
-            minimumInputPixels,
-        )
-            private set
-
-        /**
-         * The transmission format derived from the baseline and level.
-         */
-        val format: RealtimeVideoFormat get() = QualityVideoFormat.resolve(
-            baseline,
-            level,
-            downlink,
-            minimumInputPixels,
-        )
-
-        /**
-         * The consecutive good network sample count.
-         */
-        private var good = 0
-
-        /**
-         * The consecutive poor network sample count.
-         */
-        private var poor = 0
-
-        /**
-         * The latest network sample time, in milliseconds.
-         */
-        private var lastSample: Long? = null
-
-        /**
-         * The end of the post-adjustment stabilization interval.
-         */
-        private var stableUntil = 0L
-
-        /**
-         * The earliest permitted upgrade time, in milliseconds.
-         */
-        private var upgradeAfter = 0L
-
-        /**
-         * The upgrade observation deadline, in milliseconds.
-         */
-        private var probeUntil = 0L
-
-        /**
-         * A quality adjustment with its old level, target, and reason.
-         */
-        data class Change(
-            /**
-             * The previous quality level.
-             */
-            val from: Int,
-
-            /**
-             * The target quality level.
-             */
-            val to: Int,
-
-            /**
-             * The reason for the transition or failure.
-             */
-            val reason: String,
-        )
-
-        /**
-         * Clears consecutive samples while retaining the level, stabilization interval, and upgrade cooldown.
-         */
-        @Synchronized
-        fun resetSamples() {
-            good = 0
-            poor = 0
-            lastSample = null
-        }
-
-        /**
-         * Evaluates fresh consecutive samples for the next quality adjustment.
-         *
-         * @param quality The current network quality sample.
-         * @param sampleAt The sample time on the monotonic millisecond clock.
-         * @param now The current monotonic time, in milliseconds.
-         * @return A suggested level change, or null if no change is needed or currently allowed.
-         */
-        @Synchronized
-        fun observe(
-            quality: RealtimeNetworkQualityLevel,
-            sampleAt: Long,
-            now: Long,
-        ): Change? {
-            if (sampleAt > now || (lastSample != null && sampleAt <= lastSample!!)) return null
-
-            if (lastSample != null && sampleAt - lastSample!! > policy.sampleTimeoutMs) resetSamples()
-
-            lastSample = sampleAt
-            if (now - sampleAt > policy.sampleTimeoutMs || sampleAt < stableUntil) {
-                good = 0
-                poor = 0
-                return null
-            }
-
-            val step = when (quality) {
-                RealtimeNetworkQualityLevel.BAD, RealtimeNetworkQualityLevel.VERY_BAD -> {
-                    good = 0
-                    if (++poor < policy.poorSamples) return null
-                    1
-                }
-                RealtimeNetworkQualityLevel.EXCELLENT, RealtimeNetworkQualityLevel.GOOD -> {
-                    poor = 0
-                    if (sampleAt < upgradeAfter) {
-                        good = 0
-                        return null
-                    }
-
-                    if (++good < policy.goodSamples) return null
-                    -1
-                }
-                else -> {
-                    good = 0
-                    poor = 0
-                    return null
-                }
-            }
-            var next = level + step
-            while (next in 1..QualityTiers.percentages.size && QualityVideoFormat.resolve(
-                baseline,
-                next,
-                downlink,
-                minimumInputPixels,
-            ) == format) {
-                next += step
-            }
-            good = 0
-            poor = 0
-            if (next !in 1..QualityTiers.percentages.size) return null
-
-            next = QualityVideoFormat.canonicalLevel(
-                baseline,
-                next,
-                downlink,
-                minimumInputPixels,
-            )
-            if (!downlink && !QualityVideoFormat.supportsEncoding(
-                QualityVideoFormat.resolve(
-                    baseline,
-                    next,
-                    false,
-                    minimumInputPixels,
-                ),
-            )) return null
-
-            return Change(
-                level,
-                next,
-                if (step < 0) "probeUpgrade" else if (now < probeUntil) "failedProbe" else "poorNetwork",
-            )
-        }
-
-        /**
-         * Records adjustment success and updates stabilization and upgrade probe state.
-         *
-         * @param change The quality adjustment being applied.
-         * @param success Whether the level was applied successfully.
-         * @param now The current monotonic time, in milliseconds.
-         */
-        @Synchronized
-        fun complete(
-            change: Change,
-            success: Boolean,
-            now: Long,
-        ) {
-            resetSamples()
-            stableUntil = now + policy.stabilizationMs
-            if (!success) return
-
-            if (change.to < level) {
-                probeUntil = now + policy.probeMs
-            } else if (change.to > level) {
-                if (now < probeUntil) upgradeAfter = now + policy.upgradeCooldownMs
-                probeUntil = 0
-            }
-            level = change.to
-        }
     }
 }

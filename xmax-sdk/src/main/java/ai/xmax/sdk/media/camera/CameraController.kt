@@ -146,6 +146,7 @@ internal class CameraController(
             videoFormat = resolvedFormat,
             position = position,
         )
+
         try {
             permissionManager.ensureCameraPermission()
             if (useMicrophone) permissionManager.ensureMicrophonePermission()
@@ -175,10 +176,12 @@ internal class CameraController(
                     detachHandler = { rtcManager.unbindLocalVideo() },
                 ),
             )
+
             synchronized(stateLock) {
                 activeTrack = track
                 storedUseMicrophone = useMicrophone
             }
+
             return RealtimeMediaStream(
                 StreamID.LOCAL.value,
                 track,
@@ -214,6 +217,7 @@ internal class CameraController(
                 )
             val resolved = resolveVideoFormat(videoFormat)
             if (resolved == track.videoFormat) return
+
             rtcManager.updateVideoCaptureFormat(
                 resolved.width,
                 resolved.height,
@@ -243,6 +247,7 @@ internal class CameraController(
      */
     fun stopMicrophoneCapture() {
         if (!synchronized(stateLock) { isMicrophoneCapturing }) return
+
         rtcManager.stopAudioCapture()
         synchronized(stateLock) { isMicrophoneCapturing = false }
     }
@@ -257,6 +262,7 @@ internal class CameraController(
                 storedUseMicrophone = false
             }
         }
+
         try {
             cleanupResources(
                 { stopMicrophoneCapture() },
@@ -286,8 +292,10 @@ internal class CameraController(
             CameraPosition.FRONT -> CameraPosition.BACK
             CameraPosition.BACK -> CameraPosition.FRONT
         }
+
         return try {
             rtcManager.switchCamera(nextPosition)
+
             track.updatePosition(nextPosition)
             RealtimeMediaStream(
                 StreamID.LOCAL.value,
@@ -317,6 +325,7 @@ internal class CameraController(
             ),
             source = RealtimeMediaSource.CAMERA,
         )
+
         return videoFormat.copy(
             width = size.width,
             height = size.height,

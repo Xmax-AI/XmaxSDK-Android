@@ -78,8 +78,10 @@ internal class VideoController(
                 "Stop the current local video stream before creating another one",
             )
         }
+
         var track: RealtimeVideoTrack? = null
         var externalAudioStarted = false
+
         try {
             val configuration = mediaSourceController.prepare(uri)
             val localTrack = RealtimeVideoTrack(
@@ -92,6 +94,7 @@ internal class VideoController(
                 rtcManager.startExternalAudioSource()
                 externalAudioStarted = true
             }
+
             VideoRenderRegistry.register(
                 localTrack,
                 VideoRenderBinding(
@@ -100,6 +103,7 @@ internal class VideoController(
                 ),
             )
             mediaSourceController.start()
+
             synchronized(stateLock) { activeTrack = localTrack }
             return RealtimeMediaStream(
                 StreamID.LOCAL.value,
@@ -151,6 +155,7 @@ internal class VideoController(
             activeTrack = null
             track to hasAudio
         }
+
         cleanupResources(
             { mediaSourceController.stop() },
             { if (state.second) rtcManager.stopExternalAudioSource() },

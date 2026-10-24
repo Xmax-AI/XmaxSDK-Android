@@ -103,12 +103,14 @@ internal class RealtimeVideoFrameDispatcher(
     ) {
         val version = synchronized(lock) {
             if (this.generation !== generation || listener == null) return
+
             version
         }
         // Do not copy pixels without a listener; borrowed native pixels are accessible only inside the RTC callback.
         val copy = frame.copy()
         val launch = synchronized(lock) {
             if (this.version != version || this.generation !== generation || listener == null) return
+
             pending = Pending(
                 version,
                 copy,
@@ -127,9 +129,11 @@ internal class RealtimeVideoFrameDispatcher(
                 val next = pending
                 pending = null
                 if (next == null) { draining = false; return }
+
                 val callback = listener.takeIf { next.version == version }
                 next.frame to callback
             }
+
             try {
                 delivery.second?.onFrame(delivery.first)
             } catch (

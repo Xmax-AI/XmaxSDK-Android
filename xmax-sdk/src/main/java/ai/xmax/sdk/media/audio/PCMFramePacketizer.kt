@@ -56,11 +56,13 @@ internal class PCMFramePacketizer(
         atSample: Int,
     ) {
         if (writtenSampleCount >= totalSamples || samples.isEmpty()) return
+
         val normalizedStart = atSample.coerceAtLeast(0)
         while (writtenSampleCount < normalizedStart && writtenSampleCount < totalSamples) {
             pendingSamples.addLast(0)
             writtenSampleCount += 1
         }
+
         val skippedSamples = (writtenSampleCount - normalizedStart).coerceAtLeast(0)
         var index = skippedSamples
         while (index < samples.size && writtenSampleCount < totalSamples) {
@@ -91,11 +93,13 @@ internal class PCMFramePacketizer(
         ) {
             return null
         }
+
         val bytes = ByteBuffer.allocate(AudioFrame.samplesPerFrame * Short.SIZE_BYTES)
             .order(ByteOrder.LITTLE_ENDIAN)
         repeat(AudioFrame.samplesPerFrame) {
             bytes.putShort(pendingSamples.removeFirst())
         }
+
         return Packet(
             data = bytes.array(),
             sampleOffset = emittedSampleCount,

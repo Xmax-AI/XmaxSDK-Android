@@ -65,8 +65,7 @@ class MediaSourceControllerTest {
         MediaFileMetadata(width, height, rotation, durationUs = 1_000_000, hasAudio = false)
 
     private object PlayerStub : VideoPlayerControlling {
-        override suspend fun configure(uri: Uri, outputWidth: Int, outputHeight: Int, rotation: VideoRotation,
-            frameRate: Int, hasAudio: Boolean, durationUs: Long) = Unit
+        override suspend fun configure(uri: Uri, metadata: MediaFileMetadata, videoFormat: RealtimeVideoFormat) = Unit
         override suspend fun start() = Unit
         override suspend fun stop() = Unit
         override suspend fun setLocalAudioPreviewMuted(muted: Boolean) = Unit

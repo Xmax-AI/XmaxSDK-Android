@@ -115,6 +115,7 @@ internal class RenderController(
         frameDispatcher.setGeneration(next)
         previous?.ready?.cancel(CancellationException("Remote generation was replaced"))
         remoteView?.get()?.invalidateVideoPresentation()
+
         try {
             if (previous != null) {
                 val failure = runCatching {
@@ -123,16 +124,20 @@ internal class RenderController(
                         null,
                     )
                 }.exceptionOrNull()
+
                 try {
                     rtcManager.unbindRemoteVideo(previous.stream)
                 } catch (
                     error: Throwable,
                 ) {
                     if (failure == null) throw error
+
                     if (failure !== error) failure.addSuppressed(error)
                 }
+
                 failure?.let { throw it }
             }
+
             if (next != null) {
                 // Register frames after the target publisher is confirmed; never reuse the previous task's first-frame flag, even for the same stream.
                 rtcManager.setRemoteVideoFrameListener(
@@ -183,6 +188,7 @@ internal class RenderController(
                             error: XmaxError,
                         ): Unit = operationLock.withLock {
                             if (generation !== next) return
+
                             frameDispatcher.setGeneration(null)
                             if (!next.ready.completeExceptionally(error)) errorListener(error)
                         }
@@ -234,6 +240,7 @@ internal class RenderController(
             code = XmaxErrorCode.RTC_ERROR,
             message = "Remote video stream is unavailable",
         )
+
         try {
             withTimeout(remoteFrameReadyTimeoutMillis) { current.ready.await() }
         } catch (
@@ -260,6 +267,7 @@ internal class RenderController(
         operationLock.withLock {
             track?.let(VideoRenderRegistry::unregister)
             track?.let(TrajectoryRegistry::unregister)
+
             try {
                 setRemoteStream(null)
             } finally {
@@ -300,6 +308,7 @@ internal class RenderController(
         view: XmaxVideoView,
     ): Unit = operationLock.withLock {
         if (remoteView?.get() !== view) return
+
         view.invalidateVideoPresentation()
         remoteView = null
         generation?.takeIf { it.isReady }?.let { rtcManager.unbindRemoteVideo(it.stream) }
@@ -318,6 +327,7 @@ internal class RenderController(
         height: Int,
     ): Unit = operationLock.withLock {
         if (generation !== current || current.ready.isCompleted || width <= 0 || height <= 0) return
+
         try {
             updateDisplayedFormat(
                 width,
@@ -329,6 +339,7 @@ internal class RenderController(
                     view,
                 )
             }
+
             current.isReady = true
             current.ready.complete(Unit)
         } catch (
@@ -337,6 +348,7 @@ internal class RenderController(
             // Returns native renderer configuration failures through startup and cleans up connection resources.
             current.ready.completeExceptionally(error)
         }
+
         Unit
     }
 
@@ -370,6 +382,7 @@ internal class RenderController(
         height: Int,
     ) {
         if (width <= 0 || height <= 0) return
+
         val track = remoteTrack ?: return
         val previous = track.videoFormat ?: return
         if (previous.width == width && previous.height == height) return

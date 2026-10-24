@@ -103,6 +103,7 @@ internal class InteractionController(
             pendingSubmission = null
             drainJob.also { drainJob = null }
         }
+
         job?.cancelAndJoin()
     }
 
@@ -115,7 +116,9 @@ internal class InteractionController(
         frame: InteractionFrame,
     ) {
         val interaction = synchronized(stateLock) { activeInteraction } ?: return
+
         if (frame.points.isEmpty()) return
+
         val points = frame.points.mapNotNull { point ->
             InteractionCoordinateMapper.map(
                 point = point,
@@ -129,11 +132,13 @@ internal class InteractionController(
         synchronized(stateLock) {
             val current = activeInteraction
             if (current == null || current.taskId != interaction.taskId) return
+
             pendingSubmission = Submission(
                 current.taskId,
                 points,
             )
             if (drainJob?.isActive == true) return
+
             val generation = drainGeneration
             drainJob = scope.launch { drainPendingFrames(generation) }
         }
@@ -150,6 +155,7 @@ internal class InteractionController(
         while (true) {
             val submission = synchronized(stateLock) {
                 if (generation != drainGeneration) return
+
                 pendingSubmission.also { pendingSubmission = null }
             }
             if (submission == null) {
@@ -161,6 +167,7 @@ internal class InteractionController(
                 }
                 continue
             }
+
             try {
                 currentCoroutineContext().ensureActive()
                 listener(

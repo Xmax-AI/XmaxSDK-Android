@@ -75,6 +75,7 @@ static jboolean valid_plane(
         maximum_x < 0 || maximum_y < 0) {
         return JNI_FALSE;
     }
+
     const jlong last = (jlong) plane->offset +
         (jlong) maximum_y * plane->row_stride +
         (jlong) maximum_x * plane->pixel_stride;
@@ -249,6 +250,7 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
     const double scale = width_scale > height_scale ? width_scale : height_scale;
     const double display_left = (display_width - output_width / scale) / 2.0;
     const double display_top = (display_height - output_height / scale) / 2.0;
+
     for (jint x = 0; x < output_width; ++x) {
         jint mapped = (jint) (display_left + (x + 0.5) / scale);
         if (mapped < 0) mapped = 0;

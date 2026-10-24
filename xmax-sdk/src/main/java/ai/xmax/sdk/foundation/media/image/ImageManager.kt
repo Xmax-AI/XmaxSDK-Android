@@ -33,12 +33,14 @@ internal class ImageManager : ImageManaging {
         data: ByteArray,
     ): DecodedImage {
         if (data.isEmpty()) throw processingError("Image source data must not be empty")
+
         val decoded = BitmapFactory.decodeByteArray(
             data,
             0,
             data.size,
         )
             ?: throw processingError("Failed to decode image")
+
         return try {
             BitmapDecodedImage(
                 applyOrientation(
@@ -66,11 +68,13 @@ internal class ImageManager : ImageManaging {
         if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) {
             throw processingError("Bitmap image is unavailable")
         }
+
         val copy = bitmap.copy(
             Bitmap.Config.ARGB_8888,
             false,
         )
             ?: throw processingError("Failed to copy bitmap image")
+
         return BitmapDecodedImage(copy)
     }
 
@@ -129,6 +133,7 @@ internal class ImageManager : ImageManaging {
             ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(-90f)
             else -> return ensureArgb8888(bitmap)
         }
+
         val transformed = Bitmap.createBitmap(
             bitmap,
             0,
@@ -152,6 +157,7 @@ internal class ImageManager : ImageManaging {
         bitmap: Bitmap,
     ): Bitmap {
         if (bitmap.config == Bitmap.Config.ARGB_8888) return bitmap
+
         val copy = bitmap.copy(
             Bitmap.Config.ARGB_8888,
             false,

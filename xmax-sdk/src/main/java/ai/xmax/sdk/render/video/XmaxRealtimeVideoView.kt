@@ -76,6 +76,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
             value,
         ) {
             if (field === value) return
+
             require(value !== this && (value?.parent == null || value.parent === this))
             field?.let(::removeView)
             field = value
@@ -90,6 +91,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
                     ),
                 )
             }
+
             showLocalPreview()
         }
 
@@ -101,6 +103,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
             value,
         ) {
             if (field === value) return
+
             field = value
             localVideoView.track = value.takeIf { localPreviewView == null }
         }
@@ -114,6 +117,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
             value,
         ) {
             if (field === value) return
+
             field = value
             showLocalPreview()
             remoteVideoView.track = value
@@ -129,6 +133,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
             value,
         ) {
             if (field == value) return
+
             field = value
             showLocalPreview()
             localVideoView.videoContentMode = value

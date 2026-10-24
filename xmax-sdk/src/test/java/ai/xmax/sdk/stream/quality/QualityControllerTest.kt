@@ -30,6 +30,130 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 public class QualityControllerTest {
     @Test
+    public fun `quality policies restore history and commit only successful adjustments`() = runTest {
+        val history = QualityHistory(now = { 1_000L })
+        history.write(downlink = false, level = 2)
+        history.write(downlink = true, level = 4)
+        val controller = QualityController(
+            RtcManagingStub(),
+            callbackScope = this,
+            history = history,
+            now = { testScheduler.currentTime },
+        )
+        val baseline = RealtimeVideoFormat(1024, 1920, 30)
+        val initial = controller.prepareQuality(baseline)
+        assertEquals(2, initial.uplinkLevel)
+        assertEquals(4, initial.downlinkLevel)
+        assertEquals(baseline, initial.baseline)
+        controller.completeInitialQuality(downlink = false)
+        controller.completeInitialQuality(downlink = true)
+
+        val poor = RealtimeNetworkQuality(
+            RealtimeNetworkQualityLevel.BAD,
+            RealtimeNetworkQualityLevel.BAD,
+        )
+        repeat(2) {
+            assertEquals(QualityChange(null, null), controller.proposeQuality(poor, testScheduler.currentTime))
+            testScheduler.advanceTimeBy(1_000)
+        }
+        val proposed = controller.proposeQuality(poor, testScheduler.currentTime)
+        assertEquals(3, proposed.uplink?.to)
+        assertEquals(5, proposed.downlink?.to)
+        assertEquals(initial, controller.qualityConfiguration)
+
+        controller.completeQuality(downlink = false, level = 3, success = false)
+        controller.completeQuality(downlink = true, level = 5, success = true)
+        assertEquals(2, controller.qualityConfiguration?.uplinkLevel)
+        assertEquals(5, controller.qualityConfiguration?.downlinkLevel)
+        assertEquals(2, history.read(downlink = false))
+        assertEquals(5, history.read(downlink = true))
+    }
+
+    @Test
+    public fun `preparing unchanged media retains uplink stabilization until disconnection`() = runTest {
+        val controller = QualityController(
+            RtcManagingStub(),
+            callbackScope = this,
+            history = QualityHistory(now = { 1_000L }),
+            now = { testScheduler.currentTime },
+        )
+        val baseline = RealtimeVideoFormat(1024, 1920, 30)
+        val poor = RealtimeNetworkQuality(
+            RealtimeNetworkQualityLevel.BAD,
+            RealtimeNetworkQualityLevel.BAD,
+        )
+        controller.prepareQuality(baseline)
+        controller.completeQuality(downlink = false, level = 2, success = true)
+        controller.prepareQuality(baseline)
+        repeat(4) {
+            assertNull(controller.proposeQuality(poor, testScheduler.currentTime).uplink)
+            testScheduler.advanceTimeBy(1_000)
+        }
+        controller.proposeQuality(poor, testScheduler.currentTime)
+        testScheduler.advanceTimeBy(1_000)
+        controller.proposeQuality(poor, testScheduler.currentTime)
+        testScheduler.advanceTimeBy(1_000)
+        assertEquals(3, controller.proposeQuality(poor, testScheduler.currentTime).uplink?.to)
+
+        controller.resetQuality()
+        controller.prepareQuality(baseline)
+        repeat(2) {
+            assertNull(controller.proposeQuality(poor, testScheduler.currentTime).uplink)
+            testScheduler.advanceTimeBy(1_000)
+        }
+        assertEquals(3, controller.proposeQuality(poor, testScheduler.currentTime).uplink?.to)
+    }
+
+    @Test
+    public fun `quality reset retains history and public listeners for the next connection`() = runTest {
+        val rtc = RtcManagingStub()
+        val history = QualityHistory(now = { 1_000L })
+        val controller = QualityController(rtc, callbackScope = this, history = history)
+        val received = mutableListOf<RealtimeNetworkQuality>()
+        controller.setNetworkQualityListener(received::add)
+        controller.prepareQuality(RealtimeVideoFormat(1024, 1920, 30))
+        controller.completeQuality(downlink = false, level = 3, success = true)
+        controller.resetQuality()
+        assertNull(controller.qualityConfiguration)
+        assertEquals(QualityChange(null, null), controller.proposeQuality(
+            RealtimeNetworkQuality(RealtimeNetworkQualityLevel.BAD, RealtimeNetworkQualityLevel.BAD),
+            0,
+        ))
+
+        val restored = controller.prepareQuality(RealtimeVideoFormat(1024, 1920, 30))
+        assertEquals(3, restored.uplinkLevel)
+        rtc.emitNetworkQuality(RtcQualityLevel.GOOD, RtcQualityLevel.GOOD)
+        runCurrent()
+        assertEquals(1, received.size)
+    }
+
+    @Test
+    public fun `server read video prepares only a downlink quality policy`() = runTest {
+        val controller = QualityController(
+            RtcManagingStub(),
+            callbackScope = this,
+            now = { testScheduler.currentTime },
+        )
+        val prepared = controller.prepareQuality(
+            RealtimeVideoFormat(1920, 1080, 30),
+            publishLocalMedia = false,
+        )
+        assertNull(prepared.uplinkLevel)
+        assertNull(prepared.uplink)
+        val poor = RealtimeNetworkQuality(
+            RealtimeNetworkQualityLevel.BAD,
+            RealtimeNetworkQualityLevel.BAD,
+        )
+        controller.proposeQuality(poor, 0)
+        testScheduler.advanceTimeBy(1_000)
+        controller.proposeQuality(poor, 1_000)
+        testScheduler.advanceTimeBy(1_000)
+        val proposed = controller.proposeQuality(poor, 2_000)
+        assertNull(proposed.uplink)
+        assertEquals(2, proposed.downlink?.to)
+    }
+
+    @Test
     public fun `internal adaptation samples survive removal of public quality listener`() = runTest {
         val rtc = RtcManagingStub()
         val controller = QualityController(rtc, callbackScope = this)

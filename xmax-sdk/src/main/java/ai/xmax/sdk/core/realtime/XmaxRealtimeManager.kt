@@ -10,16 +10,13 @@
 
 package ai.xmax.sdk
 
-import ai.xmax.sdk.RealtimeCoordinator.OperationKind
-import ai.xmax.sdk.RealtimeCoordinator.TerminationScope
+import ai.xmax.sdk.XmaxRealtimeLifecycleManager.OperationKind
+import ai.xmax.sdk.XmaxRealtimeLifecycleManager.TerminationScope
 import ai.xmax.sdk.media.MediaControlling
 import ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher
 import ai.xmax.sdk.service.network.ApiServicing
 import ai.xmax.sdk.service.media.MediaService
 import androidx.compose.ui.unit.IntSize
-import ai.xmax.sdk.stream.quality.QualityController
-import ai.xmax.sdk.stream.quality.QualityHistory
-import ai.xmax.sdk.stream.quality.QualityVideoFormat
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
@@ -41,7 +38,7 @@ import kotlinx.coroutines.withContext
 /**
  * Coordinates local media, server sessions, generation tasks, and remote presentation for the public realtime
  * API.
- * RealtimeCoordinator owns lifecycle state and operations; RealtimeCallbacks delivers app notifications.
+ * XmaxRealtimeLifecycleManager owns lifecycle state and operations; RealtimeCallbacks delivers app notifications.
  * Components are created on demand. Each runtime identifies its failure sources so callbacks from released
  * resources cannot affect a later connection.
  *
@@ -56,7 +53,7 @@ internal class XmaxRealtimeManager(
     /**
      * The factory creating realtime components with failure callbacks and a frame dispatcher.
      */
-    private val componentFactory: ((XmaxError) -> Unit, (XmaxError) -> Unit, RealtimeVideoFrameDispatcher) -> RealtimeComponents,
+    private val componentFactory: ((XmaxError) -> Unit, (XmaxError) -> Unit, RealtimeVideoFrameDispatcher) -> XmaxRealtimeComponents,
 
     /**
      * The dispatcher for app state and video frame callbacks.
@@ -71,14 +68,14 @@ internal class XmaxRealtimeManager(
     private val timing: RealtimeTiming = RealtimeTiming(),
 
     /**
-     * The history of successful quality levels by model and direction.
-     */
-    private val qualityHistory: QualityHistory = QualityHistory(),
-
-    /**
      * The monotonic clock returning milliseconds for quality adjustment intervals.
      */
     private val qualityNow: () -> Long = { System.nanoTime() / 1_000_000 },
+
+    /**
+     * The manager routing current runtime failures to lifecycle termination.
+     */
+    private val errorManager: XmaxRealtimeErrorManager = XmaxRealtimeErrorManager(dispatcher),
 ) : XmaxRealtimeManaging {
 
     /**
@@ -96,7 +93,7 @@ internal class XmaxRealtimeManager(
         this(
             options,
             { onError, onMediaError, frames ->
-                createRealtimeComponents(
+                XmaxRealtimeFactory.make(
                     context,
                     apiService,
                     options.model,
@@ -105,10 +102,6 @@ internal class XmaxRealtimeManager(
                     frames,
                 )
             },
-            qualityHistory = QualityHistory.create(
-                context,
-                options.model.id,
-            ),
         )
 
     /**
@@ -122,7 +115,7 @@ internal class XmaxRealtimeManager(
     private val qualityRevision = AtomicLong()
 
     /**
-     * Background callbacks also read runtime identity; the coordinator serializes creation and release.
+     * The active runtime, created and released by serialized lifecycle operations.
      */
     @Volatile private var runtime: Runtime? = null
 
@@ -167,11 +160,12 @@ internal class XmaxRealtimeManager(
     private var downlinkVideoStatisticsListener: DownlinkVideoStatisticsListener? = null
 
     /**
-     * The coordinator owning realtime operations and state.
+     * The manager owning realtime operations and state.
      */
-    private val coordinator = RealtimeCoordinator(
+    private val lifecycleManager = XmaxRealtimeFactory.assemble(
         callbacks,
         dispatcher,
+        errorManager,
         hasLocalMedia = { runtime?.components?.media?.currentTrack != null },
         cleanup = ::cleanup,
     )
@@ -179,7 +173,7 @@ internal class XmaxRealtimeManager(
     /**
      * The current media and generation state.
      */
-    override val currentState: RealtimeState get() = coordinator.currentState
+    override val currentState: RealtimeState get() = lifecycleManager.currentState
 
     /**
      * The current camera media format, unaffected by transmission quality changes.
@@ -221,8 +215,12 @@ internal class XmaxRealtimeManager(
         val owner = runtime ?: return null
         val state = currentState.connectionState
         if (state != RealtimeConnectionState.CONNECTED && state != RealtimeConnectionState.GENERATING) return null
-        val direction = if (downlink) owner.downlinkQuality else owner.uplinkQuality
-        return direction?.level?.let { value -> RealtimeQualityLevel.entries.first { it.rawValue == value } }
+
+        if (downlink && owner.qualityTaskId == null) return null
+
+        val configuration = owner.components.stream.qualityConfiguration ?: return null
+        val level = if (downlink) configuration.downlinkLevel else configuration.uplinkLevel
+        return level?.let { value -> RealtimeQualityLevel.entries.first { it.rawValue == value } }
     }
 
     /**
@@ -263,7 +261,7 @@ internal class XmaxRealtimeManager(
         level: RealtimeQualityLevel,
         downlink: Boolean,
     ) {
-        coordinator.run(OperationKind.CONFIGURATION) { token ->
+        lifecycleManager.run(OperationKind.CONFIGURATION) { token ->
             token.ensureCurrent()
             val owner = runtime ?: throw invalid("Quality levels can only be changed while generating")
             val state = currentState
@@ -271,17 +269,17 @@ internal class XmaxRealtimeManager(
             if (state.connectionState != RealtimeConnectionState.GENERATING || taskId == null || owner.qualityTaskId != taskId) {
                 throw invalid("Quality levels can only be changed while generating")
             }
-            val direction = (if (downlink) owner.downlinkQuality else owner.uplinkQuality)
-                ?: throw invalid("No ${if (downlink) "downlink" else "uplink"} quality configuration is available")
+
+            val configuration = owner.components.stream.qualityConfiguration
+                ?: throw invalid("No quality configuration is available")
+            if (!downlink && configuration.uplinkLevel == null) {
+                throw invalid("No uplink quality configuration is available")
+            }
+
             qualityRevision.incrementAndGet()
-            applyQualityLevel(
-                owner,
-                direction,
-                QualityController.Direction.Change(
-                    direction.level,
-                    level.rawValue,
-                    "manual",
-                ),
+            owner.components.connection.applyQualityLevel(
+                level.rawValue,
+                downlink,
                 taskId,
             ) {
                 token.ensureCurrent()
@@ -490,6 +488,7 @@ internal class XmaxRealtimeManager(
             if (currentState.connectionState != RealtimeConnectionState.READY || current == null) {
                 throw invalid("Camera preview must be ready before updating its format")
             }
+
             token.ensureCurrent()
             c.media.updateCameraFormat(resolve(current))
             token.ensureCurrent()
@@ -742,6 +741,7 @@ internal class XmaxRealtimeManager(
             } else {
                 token.setFailureScope(TerminationScope.ALL)
             }
+
             val result = action(c.media)
             token.ensureCurrent()
             token.setFailureScope(TerminationScope.ALL)
@@ -750,7 +750,7 @@ internal class XmaxRealtimeManager(
                 configuredRemoteAudioVolume = volume
             }
             if (!waitForCameraPreview) {
-                token.commit(
+                token.complete(
                     RealtimeState(
                         if (c.media.currentTrack == null) {
                             RealtimeConnectionState.IDLE
@@ -760,6 +760,7 @@ internal class XmaxRealtimeManager(
                     ),
                 )
             }
+
             result
         }
 
@@ -780,6 +781,7 @@ internal class XmaxRealtimeManager(
                     ),
                 )
             }
+
             val stream = c.media.switchCamera()
             token.ensureCurrent()
             if (wasGenerating) {
@@ -791,6 +793,7 @@ internal class XmaxRealtimeManager(
                     c.generation.cachedFaceRestoration,
                 ) }
             }
+
             stream
         }
 
@@ -806,6 +809,7 @@ internal class XmaxRealtimeManager(
             token,
             c,
             localStream,
+            completesOperation = true,
         ) }
 
     /**
@@ -816,23 +820,28 @@ internal class XmaxRealtimeManager(
      * @param c The realtime components used by this operation.
      * @param localStream The local input stream.
      * @param resetGeneration Whether to clear cached generation conditions; defaults to true.
+     * @param completesOperation Whether CONNECTED completes this operation or precedes generation startup.
      */
     private suspend fun connect(
-        token: RealtimeCoordinator.Token,
-        c: RealtimeComponents,
+        token: XmaxRealtimeLifecycleManager.Token,
+        c: XmaxRealtimeComponents,
         localStream: RealtimeMediaStream,
         resetGeneration: Boolean = true,
+        completesOperation: Boolean = false,
     ): RealtimeMediaStream {
         requireDisconnected(c)
         val videoFormat = localStream.videoTrack?.videoFormat
         if (videoFormat == null || !c.media.owns(localStream)) throw invalid("The local stream must be created and started by this realtime manager")
+
         token.setFailureScope(TerminationScope.CONNECTION)
         token.commit(RealtimeState(RealtimeConnectionState.CONNECTING))
+
         try {
             if (resetGeneration) c.generation.reset()
-            prepareUplinkQuality(
-                c,
+            c.connection.prepareQuality(
                 videoFormat,
+                options,
+                publishLocalMedia = c.media.networkVideoReference == null,
             )
             c.media.startMicrophoneCapture()
             token.ensureCurrent()
@@ -848,20 +857,20 @@ internal class XmaxRealtimeManager(
                 onHeartbeatFailure = { sessionId, error ->
                     // Check both runtime identity and session identity so an old heartbeat cannot terminate a later connection.
                     if (runtime === owner && c.connection.currentSessionId == sessionId) {
-                        coordinator.reportFailure(
+                        errorManager.forward(
                             error,
                             TerminationScope.CONNECTION,
+                            isCurrent = { runtime === owner && c.connection.currentSessionId == sessionId },
                         )
                     }
                 },
             )
             currentCoroutineContext().ensureActive()
-            token.commit(
-                RealtimeState(
-                    RealtimeConnectionState.CONNECTED,
-                    sessionId = c.connection.currentSessionId,
-                ),
+            val connected = RealtimeState(
+                RealtimeConnectionState.CONNECTED,
+                sessionId = c.connection.currentSessionId,
             )
+            if (completesOperation) token.complete(connected) else token.commit(connected)
             return remote
         } catch (
             error: Throwable,
@@ -928,6 +937,7 @@ internal class XmaxRealtimeManager(
         ) { token, c ->
             measureStartup {
                 if (!c.media.owns(localStream)) throw invalid("The local stream must be created and started by this realtime manager")
+
                 val remote = if (c.connection.currentSessionId.isNotEmpty()) {
                     c.connection.currentRemoteStream ?: throw XmaxError(
                         XmaxErrorCode.RTC_ERROR,
@@ -983,8 +993,8 @@ internal class XmaxRealtimeManager(
      * @param faceRestoration Whether to enable face restoration through `face_replace`.
      */
     private suspend fun start(
-        token: RealtimeCoordinator.Token,
-        c: RealtimeComponents,
+        token: XmaxRealtimeLifecycleManager.Token,
+        c: XmaxRealtimeComponents,
         context: RealtimeContext?,
         faceRestoration: Boolean,
     ) {
@@ -997,6 +1007,7 @@ internal class XmaxRealtimeManager(
             )) {
             throw invalid("Realtime connection is not open")
         }
+
         val resolvedContext = (context ?: c.generation.cachedContext)?.let { supplied ->
             c.media.networkVideoReference?.let { supplied.copy(referenceVideo = it) } ?: supplied
         }
@@ -1029,66 +1040,59 @@ internal class XmaxRealtimeManager(
             )
             return
         }
+
         c.generation.validateContext(resolvedContext)
-        prepareUplinkQuality(
-            c,
+        val target = c.connection.prepareQuality(
             format,
+            options,
+            publishLocalMedia = c.media.networkVideoReference == null,
         )
         val owner = checkNotNull(runtime)
-        val downlink = QualityController.Direction(
-            format,
-            qualityHistory.read(downlink = true),
-            downlink = true,
-        )
-        owner.downlinkQuality = downlink
         token.setFailureScope(TerminationScope.CONNECTION)
         var taskId = ""
+
         try {
             c.media.setLocalAudioPreviewMuted(true)
             taskId = c.generation.start(
                 videoFormat = format,
                 context = resolvedContext,
                 faceRestoration = faceRestoration,
-                targetVideoFormat = resolveTargetVideoFormat(
-                    format,
-                    downlink.level,
-                ),
+                targetVideoFormat = target,
                 generationVideoFormat = generationFormat,
                 paddingContain = paddingContain,
                 ensureCurrent = token::ensureCurrent,
             )
-            c.render.waitUntilRemoteFrameReady()
             currentCoroutineContext().ensureActive()
             token.ensureCurrent()
-            c.stream.activateRemoteAudio()
-            token.commit(
+
+            owner.qualityTaskId = taskId
+            c.connection.completeInitialQuality()
+            token.complete(
                 current.copy(
                     connectionState = RealtimeConnectionState.GENERATING,
                     taskId = taskId,
                 ),
-            )
-            owner.qualityTaskId = taskId
-            qualityHistory.write(
-                downlink = true,
-                level = downlink.level,
-            )
-            c.stream.activateNetworkVideoCompletion(
-                c.media.networkVideoFinishHandler?.let { onFinish ->
-                    {
-                        val snapshot = currentState
-                        if (runtime?.components === c && snapshot.taskId == taskId &&
-                            snapshot.connectionState == RealtimeConnectionState.GENERATING
-                        ) onFinish()
-                    }
+                onComplete = {
+                    c.stream.activateNetworkVideoCompletion(
+                        c.media.networkVideoFinishHandler?.let { onFinish ->
+                            {
+                                val snapshot = currentState
+                                if (runtime?.components === c && snapshot.taskId == taskId &&
+                                    snapshot.connectionState == RealtimeConnectionState.GENERATING
+                                ) onFinish()
+                            }
+                        },
+                    )
                 },
             )
+
             currentCoroutineContext()[RealtimeTiming.Attempt]?.finish(taskId)
         } catch (
             error: Throwable,
         ) {
             cleanupAfterFailure(
                 error,
-                { c.generation.stop(taskId) },
+                { if (taskId.isNotEmpty()) c.generation.stop(taskId) },
                 { c.media.setLocalAudioPreviewMuted(false) },
             )
             throw error
@@ -1100,7 +1104,7 @@ internal class XmaxRealtimeManager(
      */
     override suspend fun disconnect() {
         invalidateQualitySamples()
-        coordinator.disconnect()
+        lifecycleManager.disconnect()
     }
 
     /**
@@ -1112,7 +1116,7 @@ internal class XmaxRealtimeManager(
         reason: RealtimeReason,
     ) {
         invalidateQualitySamples()
-        coordinator.disconnect(reason)
+        lifecycleManager.disconnect(reason)
     }
 
     /**
@@ -1121,7 +1125,7 @@ internal class XmaxRealtimeManager(
      */
     override suspend fun close() {
         invalidateQualitySamples()
-        coordinator.terminate(TerminationScope.ALL)
+        lifecycleManager.terminate(TerminationScope.ALL)
     }
 
     /**
@@ -1134,8 +1138,7 @@ internal class XmaxRealtimeManager(
     ) {
         val owner = runtime ?: return
         owner.qualityTaskId = null
-        owner.downlinkQuality = null
-        owner.uplinkQuality?.resetSamples()
+        owner.components.stream.resetQualitySamples()
         val c = owner.components
         cleanupResources(
             { if (target == TerminationScope.ALL) {
@@ -1149,16 +1152,11 @@ internal class XmaxRealtimeManager(
                     c.stream.setDownlinkVideoStatisticsListener(null)
                 }
             } },
-            { if (target >= TerminationScope.CONNECTION) c.generation.reset(currentState.taskId.orEmpty()) else c.generation.stop(currentState.taskId.orEmpty()) },
-            { if (target >= TerminationScope.CONNECTION) c.media.stopMicrophoneCapture() },
-            { if (target >= TerminationScope.CONNECTION) c.connection.disconnect() },
-            { c.media.setLocalAudioPreviewMuted(false) },
-            { if (target == TerminationScope.ALL) {
-                cleanupResources(
-                    { c.media.stopLocalStream() },
-                    { c.media.setCameraPreviewReadyListener(null) },
-                )
-            } },
+            { XmaxRealtimeFactory.cleanup(
+                c,
+                target,
+                currentState.taskId.orEmpty(),
+            ) },
             { if (target == TerminationScope.ALL) synchronized(listenerLock) { runtime = null } },
         )
     }
@@ -1177,10 +1175,10 @@ internal class XmaxRealtimeManager(
         kind: OperationKind,
         context: RealtimeContext? = null,
         faceRestoration: Boolean = false,
-        action: suspend (RealtimeCoordinator.Token, RealtimeComponents) -> T,
+        action: suspend (XmaxRealtimeLifecycleManager.Token, XmaxRealtimeComponents) -> T,
     ): T {
         invalidateQualitySamples()
-        return coordinator.run(
+        return lifecycleManager.run(
             kind,
             failureScope = null,
             context = context,
@@ -1213,8 +1211,7 @@ internal class XmaxRealtimeManager(
      */
     private fun invalidateQualitySamples() {
         qualityRevision.incrementAndGet()
-        runtime?.uplinkQuality?.resetSamples()
-        runtime?.downlinkQuality?.resetSamples()
+        runtime?.components?.stream?.resetQualitySamples()
     }
 
     /**
@@ -1222,18 +1219,18 @@ internal class XmaxRealtimeManager(
      *
      * @return Components sharing the same RTC manager.
      */
-    private suspend fun components(): RealtimeComponents {
+    private suspend fun components(): XmaxRealtimeComponents {
         val owner = runtime ?: Runtime().also { created ->
             created.components = componentFactory(
-                { error -> forwardFailure(
-                    created,
+                { error -> errorManager.forward(
                     error,
                     TerminationScope.CONNECTION,
+                    isCurrent = { runtime === created },
                 ) },
-                { error -> forwardFailure(
-                    created,
+                { error -> errorManager.forward(
                     error,
                     TerminationScope.ALL,
+                    isCurrent = { runtime === created },
                 ) },
                 callbacks.remoteVideoFrames,
             )
@@ -1245,6 +1242,7 @@ internal class XmaxRealtimeManager(
             configuredRemoteAudioVolume?.let { owner.components.stream.setRemoteAudioVolume(it) }
             owner.audioSettingsApplied = true
         }
+
         if (!owner.listenersApplied) {
             owner.components.stream.setAdaptiveQualityListener { handleAdaptiveQuality(
                 owner,
@@ -1252,7 +1250,7 @@ internal class XmaxRealtimeManager(
             ) }
             owner.components.media.setCameraPreviewReadyListener {
                 if (runtime === owner) {
-                    coordinator.localPreviewDidBecomeReady()
+                    lifecycleManager.localPreviewDidBecomeReady()
                 }
             }
             synchronized(listenerLock) {
@@ -1263,33 +1261,8 @@ internal class XmaxRealtimeManager(
                 owner.listenersApplied = true
             }
         }
-        return owner.components
-    }
 
-    /**
-     * Rejects failures from old runtimes and selects cleanup by source; cancellation produces diagnostics
-     * only.
-     *
-     * @param owner The runtime owning this operation.
-     * @param error The operation failure or SDK error.
-     * @param target The resources to terminate.
-     */
-    private fun forwardFailure(
-        owner: Runtime,
-        error: XmaxError,
-        target: TerminationScope,
-    ) {
-        if (runtime !== owner) return
-        if (error.code != XmaxErrorCode.CANCELLED) {
-            coordinator.reportFailure(
-                error,
-                target,
-            )
-        } else {
-            XmaxLogger.realtime.warn(
-                message = { "Realtime diagnostic: ${ErrorMessageFormatter.format(error)}" },
-            )
-        }
+        return owner.components
     }
 
     /**
@@ -1298,7 +1271,7 @@ internal class XmaxRealtimeManager(
      * @param c The realtime components used by this operation.
      */
     private fun requireDisconnected(
-        c: RealtimeComponents,
+        c: XmaxRealtimeComponents,
     ) {
         if (c.connection.currentSessionId.isNotEmpty() || currentState.connectionState in setOf(
             RealtimeConnectionState.CONNECTING,
@@ -1333,81 +1306,10 @@ internal class XmaxRealtimeManager(
     )
 
     /**
-     * Restores uplink quality from the original media format without changing capture or generation
-     * dimensions.
+     * Evaluates connection quality only while its generation task remains current.
      *
-     * @param c The realtime components used by this operation.
-     * @param baseline The original input format used to calculate quality tiers.
-     */
-    private fun prepareUplinkQuality(
-        c: RealtimeComponents,
-        baseline: RealtimeVideoFormat,
-    ) {
-        val owner = checkNotNull(runtime)
-        if (c.media.networkVideoReference != null) {
-            owner.uplinkQuality = null
-            return
-        }
-
-        val track = c.media.currentTrack
-        val previous = owner.uplinkQuality
-        val level = qualityHistory.read(downlink = false)
-        val direction = if (owner.qualityTrack === track && previous?.baseline == baseline && previous.level == level) previous else {
-            QualityController.Direction(
-                baseline,
-                level,
-                downlink = false,
-                minimumInputPixels = options.model.minimumInputPixels,
-            )
-        }
-        c.stream.setVideoEncoderConfig(direction.format)
-        owner.qualityTrack = track
-        owner.uplinkQuality = direction
-        direction.resetSamples()
-        qualityHistory.write(
-            downlink = false,
-            level = direction.level,
-        )
-    }
-
-    /**
-     * Resolves aspect-preserving downlink dimensions with four-pixel alignment from the baseline and quality
-     * level.
-     *
-     * @param baseline The fixed media format, unaffected by quality changes.
-     * @param level The target downlink level, from 1 to 5.
-     * @return A format within the downlink bounds; 24 fps is used only for bitrate estimation.
-     */
-    private fun resolveTargetVideoFormat(
-        baseline: RealtimeVideoFormat,
-        level: Int,
-    ): RealtimeVideoFormat {
-        val maximumSize = QualityVideoFormat.resolveDownlinkMaximumSize(
-            baseline,
-            level,
-        )
-        val size = MediaService(options.model).resolveTargetSize(
-            IntSize(
-                baseline.width,
-                baseline.height,
-            ),
-            maximumSize,
-        )
-        return baseline.copy(
-            width = size.width,
-            height = size.height,
-            fps = 24,
-            minimumBitrate = null,
-            maximumBitrate = null,
-        )
-    }
-
-    /**
-     * Evaluates uplink and downlink quality independently from each network sample, applying changes through
-     * the coordinator.
-     *
-     * @param owner The runtime owning this operation.
-     * @param quality The current network quality sample.
+     * @param owner The runtime owning this sample.
+     * @param quality The directional network quality.
      */
     private fun handleAdaptiveQuality(
         owner: Runtime,
@@ -1415,14 +1317,12 @@ internal class XmaxRealtimeManager(
     ) {
         if (runtime !== owner) return
 
+        val stream = owner.components.stream
         val revision = qualityRevision.get()
         val taskId = owner.qualityTaskId
-        val up = owner.uplinkQuality
-        val down = owner.downlinkQuality
         val state = currentState
-        if (taskId == null || state.taskId != taskId || state.connectionState != RealtimeConnectionState.GENERATING || coordinator.isBusy) {
-            up?.resetSamples()
-            down?.resetSamples()
+        if (taskId == null || state.taskId != taskId || state.connectionState != RealtimeConnectionState.GENERATING || lifecycleManager.isBusy) {
+            stream.resetQualitySamples()
             return
         }
 
@@ -1430,52 +1330,60 @@ internal class XmaxRealtimeManager(
             false,
             true,
         )) {
-            up?.resetSamples()
-            down?.resetSamples()
+            stream.resetQualitySamples()
             return
         }
 
         val sampleAt = qualityNow()
         qualityScope.launch {
-            try {
-                coordinator.runAdaptiveConfiguration { token ->
+            /**
+             * Discards samples only while their original generation and foreground revision remain current.
+             */
+            fun resetSamplesIfCurrent() {
+                if (runtime === owner && owner.qualityTaskId == taskId && qualityRevision.get() == revision) {
+                    stream.resetQualitySamples()
+                }
+            }
 
+            try {
+                val accepted = lifecycleManager.runAdaptiveConfiguration { token ->
                     /**
-                     * Replaced or terminated operations exit through coroutine cancellation rather than
-                     * reporting stale results as new failures.
+                     * Rejects adjustments belonging to a replaced runtime, generation, or foreground request.
                      */
                     fun ensureCurrent() {
                         token.ensureCurrent()
                         val current = currentState
-                        val ownsRuntime = runtime === owner && owner.uplinkQuality === up && owner.downlinkQuality === down
-                        val ownsTask = owner.qualityTaskId == taskId && current.taskId == taskId
-                        if (!ownsRuntime || !ownsTask || qualityRevision.get() != revision || current.connectionState != RealtimeConnectionState.GENERATING) {
+                        if (runtime !== owner || owner.qualityTaskId != taskId || current.taskId != taskId ||
+                            qualityRevision.get() != revision || current.connectionState != RealtimeConnectionState.GENERATING
+                        ) {
                             throw CancellationException("Adaptive quality belongs to an inactive generation")
                         }
                     }
-                    for ((direction, sample) in listOf(
-                        up to quality.uplink,
-                        down to quality.downlink,
+
+                    ensureCurrent()
+                    val change = stream.proposeQuality(
+                        quality,
+                        sampleAt,
+                    )
+                    for ((candidate, downlink) in listOf(
+                        change.uplink to false,
+                        change.downlink to true,
                     )) {
                         ensureCurrent()
-                        if (direction == null) continue
-                        val change = direction.observe(
-                            sample,
-                            sampleAt,
-                            qualityNow(),
-                        ) ?: continue
+                        if (candidate == null) continue
+
                         try {
-                            applyQualityLevel(
-                                owner,
-                                direction,
-                                change,
+                            owner.components.connection.applyQualityLevel(
+                                candidate.to,
+                                downlink,
                                 taskId,
-                                ::ensureCurrent,
+                                reason = candidate.reason,
+                                ensureCurrent = ::ensureCurrent,
                             )
                         } catch (
                             cancelled: CancellationException,
                         ) {
-                            direction.resetSamples()
+                            resetSamplesIfCurrent()
                             throw cancelled
                         } catch (
                             error: Throwable,
@@ -1484,101 +1392,20 @@ internal class XmaxRealtimeManager(
                             XmaxLogger.realtime.warn(message = { "Quality adjustment failed: ${ErrorMessageFormatter.format(error)}" })
                         }
                     }
-                }.also { applied ->
-                    if (!applied) {
-                        up?.resetSamples()
-                        down?.resetSamples()
-                    }
                 }
+                if (!accepted) resetSamplesIfCurrent()
             } catch (
                 cancelled: CancellationException,
             ) {
-                up?.resetSamples()
-                down?.resetSamples()
+                resetSamplesIfCurrent()
             } catch (
                 error: Throwable,
             ) {
-                up?.resetSamples()
-                down?.resetSamples()
+                resetSamplesIfCurrent()
                 XmaxLogger.realtime.warn(message = { "Adaptive quality failed: ${ErrorMessageFormatter.format(error)}" })
             } finally {
                 owner.qualityPending.set(false)
             }
-        }
-    }
-
-    /**
-     * Applies a transmission format and updates the level and history only after success.
-     *
-     * @param owner The current realtime runtime.
-     * @param direction The transmission direction to adjust.
-     * @param change The old level, target level, and adjustment reason.
-     * @param taskId The current generation task identifier.
-     * @param ensureCurrent Confirms that the operation still belongs to the current task.
-     */
-    private suspend fun applyQualityLevel(
-        owner: Runtime,
-        direction: QualityController.Direction,
-        change: QualityController.Direction.Change,
-        taskId: String,
-        ensureCurrent: () -> Unit,
-    ) {
-        try {
-            ensureCurrent()
-            val target = if (direction.downlink) {
-                resolveTargetVideoFormat(
-                    direction.baseline,
-                    change.to,
-                )
-            } else {
-                QualityVideoFormat.resolve(
-                    direction.baseline,
-                    change.to,
-                    false,
-                    minimumInputPixels = direction.minimumInputPixels,
-                )
-            }
-            if (direction.downlink) {
-                owner.components.stream.updateDownlinkVideoResolution(
-                    taskId,
-                    target,
-                    ensureCurrent,
-                )
-            } else {
-                if (!QualityVideoFormat.supportsEncoding(target)) throw invalid("Quality level conflicts with the configured bitrate range")
-                owner.components.stream.setVideoEncoderConfig(target)
-            }
-            ensureCurrent()
-            direction.complete(
-                change,
-                true,
-                qualityNow(),
-            )
-            qualityHistory.write(
-                direction.downlink,
-                change.to,
-            )
-            XmaxLogger.realtime.debug(
-                message = {
-                    "Quality adjustment ${if (direction.downlink) "downlink" else "uplink"}: L${change.from} -> L${change.to}, " +
-                        "${target.width}x${target.height}, ${change.reason}"
-                },
-            )
-        } catch (
-            cancelled: CancellationException,
-        ) {
-            direction.resetSamples()
-            throw cancelled
-        } catch (
-            error: Throwable,
-        ) {
-            ensureCurrent()
-            direction.complete(
-                change,
-                false,
-                qualityNow(),
-            )
-            throw error
         }
     }
 
@@ -1590,7 +1417,7 @@ internal class XmaxRealtimeManager(
         /**
          * The current runtime components.
          */
-        lateinit var components: RealtimeComponents
+        lateinit var components: XmaxRealtimeComponents
 
         /**
          * Whether volume settings have been applied to this runtime.
@@ -1606,21 +1433,6 @@ internal class XmaxRealtimeManager(
          * The task associated with current uplink and downlink quality state.
          */
         @Volatile var qualityTaskId: String? = null
-
-        /**
-         * The uplink quality level and adaptation state.
-         */
-        @Volatile var uplinkQuality: QualityController.Direction? = null
-
-        /**
-         * The downlink quality level and adaptation state.
-         */
-        @Volatile var downlinkQuality: QualityController.Direction? = null
-
-        /**
-         * The local track owning the current quality configuration.
-         */
-        var qualityTrack: RealtimeVideoTrack? = null
 
         /**
          * Whether a quality adjustment is pending.

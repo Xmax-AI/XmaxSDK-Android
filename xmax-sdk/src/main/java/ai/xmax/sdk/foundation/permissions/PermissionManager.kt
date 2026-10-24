@@ -64,6 +64,7 @@ internal class PermissionManager(
      */
     override suspend fun ensureCameraPermission() {
         if (isCameraPermissionGranted()) return
+
         throw XmaxError(
             code = XmaxErrorCode.CAMERA_PERMISSION_DENIED,
             message = "Camera permission is unavailable or was denied",
@@ -75,6 +76,7 @@ internal class PermissionManager(
      */
     override suspend fun ensureMicrophonePermission() {
         if (isMicrophonePermissionGranted()) return
+
         throw XmaxError(
             code = XmaxErrorCode.MICROPHONE_PERMISSION_DENIED,
             message = "Microphone permission is unavailable or was denied",

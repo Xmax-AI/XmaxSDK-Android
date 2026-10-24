@@ -42,6 +42,7 @@ internal class LocalAudioPreviewPlayer {
     @Synchronized
     fun start() {
         if (audioTrack != null) return
+
         val minimumBufferSize = AudioTrack.getMinBufferSize(
             AudioFrame.sampleRate,
             AudioFormat.CHANNEL_OUT_MONO,
@@ -68,6 +69,7 @@ internal class LocalAudioPreviewPlayer {
             track.release()
             error("Failed to initialize local audio preview")
         }
+
         track.setVolume(if (muted) 0f else volume)
         track.play()
         audioTrack = track

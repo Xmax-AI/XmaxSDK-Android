@@ -76,6 +76,7 @@ internal object QualityVideoFormat {
             scale,
             minimumPixels = if (downlink) 0 else minimumInputPixels,
         )
+
         return baseline.copy(
             width = size.width,
             height = size.height,
@@ -158,6 +159,7 @@ internal object QualityVideoFormat {
             shortSide,
             QualityTiers.MINIMUM_SHORT_SIDE,
         )
+
         return max(
             QualityTiers.percentages[level - 1] / 100.0,
             minimum.toDouble() / shortSide,

@@ -70,6 +70,7 @@ internal class QualityHistory(
         level: Int,
     ) {
         if (level !in 1..QualityTiers.percentages.size) return
+
         val key = if (downlink) "downlink" else "uplink"
         val entry = Entry(
             level,

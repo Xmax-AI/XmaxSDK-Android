@@ -170,6 +170,7 @@ internal fun validateNetworkVideoUrl(
             "Network video requires a valid HTTP or HTTPS URL",
         )
     }
+
     return value
 }
 
@@ -263,6 +264,7 @@ private class NetworkVideoPreview(
                 height: Int,
             ) {
                 if (this@NetworkVideoPreview.texture !== texture) return
+
                 bindSurface(value)
                 updateTransform()
             }
@@ -316,6 +318,7 @@ private class NetworkVideoPreview(
         view: XmaxVideoView,
     ) {
         if (this.view !== view) return
+
         detachSurface()
         texture?.surfaceTextureListener = null
         texture = null
@@ -384,6 +387,7 @@ private class NetworkVideoPreview(
         player: MediaPlayer,
     ) {
         if (!prepared || surface == null) return
+
         if (completed) {
             // Restore the final frame when rebinding a view without replaying the entire video.
             player.seekTo(
@@ -401,6 +405,7 @@ private class NetworkVideoPreview(
     private fun updateTransform() {
         val target = texture ?: return
         if (target.width <= 0 || target.height <= 0 || videoWidth <= 0 || videoHeight <= 0) return
+
         val widthRatio = target.width.toFloat() / videoWidth
         val heightRatio = target.height.toFloat() / videoHeight
         val scale = if (contentMode == VideoContentMode.FIT) minOf(

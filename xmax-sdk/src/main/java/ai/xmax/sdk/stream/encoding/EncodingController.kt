@@ -60,6 +60,7 @@ internal class EncodingController(
                 message = "Minimum bitrate must not exceed maximum bitrate after applying SDK defaults",
             )
         }
+
         rtcManager.configureVideoEncoding(
             VideoEncodingConfiguration(
                 width = videoFormat.width,

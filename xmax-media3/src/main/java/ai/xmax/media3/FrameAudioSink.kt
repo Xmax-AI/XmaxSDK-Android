@@ -157,6 +157,7 @@ internal class FrameAudioSink(
             )
             drain(sink)
         }
+
         return consumed
     }
 
@@ -170,10 +171,12 @@ internal class FrameAudioSink(
     ) {
         val positionUs = super.getCurrentPositionUs(false)
         if (positionUs == Long.MIN_VALUE) return
+
         while (pending.isNotEmpty() && pending.first.ptsUs <= positionUs + 10_000) {
             val packet = pending.removeFirst()
             val ageUs = positionUs - packet.ptsUs
             if (ageUs > 100_000) continue
+
             sink.pushAudio(
                 packet.data,
                 (SystemClock.elapsedRealtimeNanos() / 1000 - ageUs).coerceAtLeast(0),

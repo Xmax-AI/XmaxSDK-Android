@@ -113,6 +113,7 @@ internal class RealtimeTiming(
                 stage,
                 clock(),
             )
+
             Unit
         }
 
@@ -156,6 +157,7 @@ internal class RealtimeTiming(
                 stage,
                 clock(),
             )
+
             Unit
         }
 
@@ -169,9 +171,11 @@ internal class RealtimeTiming(
         ) {
             val message = synchronized(lock) {
                 if (completed || this.taskId != taskId) return
+
                 completed = true
                 successMessage(clock())
             }
+
             log(message)
         }
 
@@ -186,15 +190,18 @@ internal class RealtimeTiming(
         ) {
             val message = synchronized(lock) {
                 if (completed) return
+
                 completed = true
                 val isCancellation = error is CancellationException ||
                     (error is XmaxError && error.code == XmaxErrorCode.CANCELLED)
                 if (isCancellation) return
+
                 failureMessage(
                     clock(),
                     error,
                 )
             }
+
             log(message)
         }
 
@@ -327,6 +334,7 @@ internal class RealtimeTiming(
                 times[Stage.SIGNAL_START],
                 readyAt,
             )
+
             return lines.joinToString("\n")
         }
 
@@ -435,6 +443,7 @@ internal class RealtimeTiming(
                     "Failure Reason: ",
                 )}${ErrorMessageFormatter.format(error)}",
             )
+
             return lines.joinToString("\n")
         }
 

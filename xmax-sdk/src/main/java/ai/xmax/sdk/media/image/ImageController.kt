@@ -104,6 +104,7 @@ internal class ImageController(
         val track = synchronized(stateLock) {
             activeTrack.also { activeTrack = null }
         }
+
         cleanupResources(
             { imageSourceController.stop() },
             { track?.let { VideoRenderRegistry.binding(it)?.detach() } },
@@ -125,7 +126,9 @@ internal class ImageController(
                 "Stop the current local image stream before creating another one",
             )
         }
+
         var track: RealtimeVideoTrack? = null
+
         try {
             val source = prepare()
             val localTrack = RealtimeVideoTrack(

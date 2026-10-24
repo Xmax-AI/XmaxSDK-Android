@@ -174,6 +174,7 @@ internal class RtcMessageQueue(
             checkAvailable()
             completions.toList()
         }
+
         snapshot.forEach { it.await() }
     }
 
@@ -183,6 +184,7 @@ internal class RtcMessageQueue(
     fun close() {
         synchronized(lock) {
             if (closed) return
+
             closed = true
             completions.forEach { it.cancel(CancellationException("RTC room was closed")) }
             completions.clear()
@@ -205,6 +207,7 @@ internal class RtcMessageQueue(
      */
     private suspend fun drain() {
         val sent = ArrayDeque<Pair<Long, Int>>()
+
         try {
             while (true) {
                 coroutineContext.ensureActive()
@@ -218,6 +221,7 @@ internal class RtcMessageQueue(
                             next.packets.first().size,
                         )
                     }
+
                     if (next != null && waitMillis == 0L) pending.removeFirst() else null
                 }
                 if (entry == null) {
@@ -233,12 +237,15 @@ internal class RtcMessageQueue(
                             packet.size,
                         )
                         if (remaining == 0L) break
+
                         withTimeoutOrNull(remaining) { wake.receive() }
                     }
+
                     coroutineContext.ensureActive()
                     send(packet)
                     sent.addLast(nowMillis() to packet.size)
                 }
+
                 synchronized(lock) {
                     entry.completion.complete(Unit)
                     completions.remove(entry.completion)
@@ -273,6 +280,7 @@ internal class RtcMessageQueue(
         val now = nowMillis()
         while (sent.isNotEmpty() && now - sent.first().first >= 1_000) sent.removeFirst()
         if (sent.size < 58 && sent.sumOf { it.second } + byteCount <= 29_000) return 0
+
         return (1_000 - (now - sent.first().first)).coerceAtLeast(1)
     }
 }

@@ -189,6 +189,7 @@ private class AgoraRtcPlatform(
                 }
             },
         ) as RtcEngineEx
+
         try {
             checkRtc(
                 engine.enableVideo(),
@@ -256,6 +257,7 @@ private class AgoraRtcPlatform(
                                 true,
                                 false,
                             )) previewListener.get()?.invoke()
+
                             return true
                         }
 
@@ -298,6 +300,7 @@ private class AgoraRtcPlatform(
                         ): Boolean {
                             val room = activeRoom.get()?.takeIf { !it.closed && it.roomId == channel } ?: return true
                             val sink = frameSinks[room.userId(uid)] ?: return true
+
                             try {
                                 sink.onFrame(AgoraRemoteVideoFrame(frame))
                                 sink.onFirstFrame(
@@ -315,6 +318,7 @@ private class AgoraRtcPlatform(
                                     ),
                                 )
                             }
+
                             return true
                         }
                     },
@@ -388,6 +392,7 @@ private class AgoraRtcPlatform(
         frame: AudioFrame,
     ) {
         if (audioTrackId < 0) return
+
         engine.pushExternalAudioFrame(
             RtcAudioConverter.convertFrame(frame),
             frame.timestampUs / 1_000L,
@@ -410,6 +415,7 @@ private class AgoraRtcPlatform(
             Constants.ExternalVideoSourceType.VIDEO_FRAME,
         )
         if (result < 0) return result
+
         externalVideo = true
         return updateVideoEncoding()
     }
@@ -421,6 +427,7 @@ private class AgoraRtcPlatform(
      */
     override fun startExternalAudioSource(): Int {
         if (audioTrackId >= 0) return 0
+
         val id = engine.createCustomAudioTrack(
             Constants.AudioTrackType.AUDIO_TRACK_DIRECT,
             AudioTrackConfig().apply {
@@ -429,6 +436,7 @@ private class AgoraRtcPlatform(
             },
         )
         if (id < 0) return id
+
         audioTrackId = id
         externalAudio = true
         return 0
@@ -441,11 +449,13 @@ private class AgoraRtcPlatform(
      */
     override fun stopExternalAudioSource(): Int {
         if (audioTrackId < 0) return 0
+
         val result = engine.destroyCustomAudioTrack(audioTrackId)
         if (result >= 0) {
             audioTrackId = -1
             externalAudio = false
         }
+
         return result
     }
 
@@ -459,6 +469,7 @@ private class AgoraRtcPlatform(
             val result = stopExternalAudioSource()
             if (result < 0) return result
         }
+
         return engine.enableLocalAudio(true)
     }
 
@@ -488,6 +499,7 @@ private class AgoraRtcPlatform(
             Constants.ExternalVideoSourceType.VIDEO_FRAME,
         )
         if (source < 0) return source
+
         externalVideo = false
         val config = updateVideoCaptureFormat(
             width,
@@ -495,8 +507,10 @@ private class AgoraRtcPlatform(
             frameRate,
         )
         if (config < 0) return config
+
         val enable = engine.enableLocalVideo(true)
         if (enable < 0) return enable
+
         awaitingCameraFrame.set(true)
         val result = engine.startPreview()
         if (result >= 0) cameraStarted = true
@@ -544,6 +558,7 @@ private class AgoraRtcPlatform(
             configureVideoEncoding(restoredEncoding)
             videoEncodingConfiguration = previousEncoding
         }
+
         return result
     }
 
@@ -579,6 +594,7 @@ private class AgoraRtcPlatform(
             val result = engine.setCameraCapturerConfiguration(cameraConfiguration())
             if (result < 0) return result
         }
+
         return updateVideoEncoding()
     }
 
@@ -803,6 +819,7 @@ private class AgoraRtcPlatform(
             send = { bytes ->
                 synchronized(sendLock) {
                     if (!isCurrent()) throw CancellationException("RTC room was closed")
+
                     val result = engine.sendStreamMessageEx(
                         dataStreamId,
                         bytes,
@@ -882,6 +899,7 @@ private class AgoraRtcPlatform(
                 accounts[info.uid] = account
                 return info.uid
             }
+
             throw XmaxError(
                 XmaxErrorCode.RTC_ERROR,
                 "RTC user account is not available: $account",
@@ -906,6 +924,7 @@ private class AgoraRtcPlatform(
             published: Boolean,
         ) {
             if (!isCurrent()) return
+
             publications[uid] = published
             // Use the business account for remote identity; confirm the result publisher only after account mapping is available.
             if (accounts[uid] != null) listener.get()?.onRemoteVideoPublished(
@@ -935,6 +954,7 @@ private class AgoraRtcPlatform(
                 elapsed: Int,
             ) {
                 if (!isCurrent()) return
+
                 localUid = uid
                 dataStreamId = engine.createDataStreamEx(
                     DataStreamConfig().apply {
@@ -951,6 +971,7 @@ private class AgoraRtcPlatform(
                     )
                     return
                 }
+
                 joined = true
                 stateListener?.invoke(
                     roomId,
@@ -970,6 +991,7 @@ private class AgoraRtcPlatform(
                 info: UserInfo,
             ) {
                 if (!isCurrent()) return
+
                 val account = info.userAccount?.takeIf(String::isNotBlank) ?: return
                 accounts[uid] = account
                 publications[uid]?.let { publish(
@@ -1091,6 +1113,7 @@ private class AgoraRtcPlatform(
                     uid,
                     true,
                 )
+
                 if (reason == Constants.REMOTE_VIDEO_STATE_REASON_REMOTE_MUTED || reason == Constants.REMOTE_VIDEO_STATE_REASON_REMOTE_OFFLINE) publish(
                     uid,
                     false,
@@ -1108,6 +1131,7 @@ private class AgoraRtcPlatform(
                 reason: Int,
             ) {
                 if (!isCurrent()) return
+
                 if (state == Constants.CONNECTION_STATE_FAILED) stateListener?.invoke(
                     roomId,
                     false,
@@ -1139,6 +1163,7 @@ private class AgoraRtcPlatform(
                 data: ByteArray,
             ) {
                 if (!isCurrent()) return
+
                 codec.decode(
                     userId(uid),
                     data.toString(Charsets.UTF_8),
@@ -1182,6 +1207,7 @@ private class AgoraRtcPlatform(
                 stats: LocalVideoStats,
             ) {
                 if (!isCurrent()) return
+
             val statistics = RtcQualityConverter.uplinkVideoStatistics(stats)
             RtcStatsLogger.logUplinkVideoStatistics(statistics)
             qualityListener.get()?.onUplinkVideoStatistics(statistics)
@@ -1202,6 +1228,7 @@ private class AgoraRtcPlatform(
                 stats: RemoteVideoStats,
             ) {
                 if (!isCurrent()) return
+
                 val account = accounts[stats.uid] ?: return
             val statistics = RtcQualityConverter.downlinkVideoStatistics(
                 account,
@@ -1235,10 +1262,12 @@ private class AgoraRtcPlatform(
             configuration: RoomJoinConfiguration,
         ): Int {
             if (configuration.appId != appId) return -2
+
             if (!activeRoom.compareAndSet(
                 null,
                 this,
             )) return -5
+
             localAccount = configuration.userId
             val result = engine.joinChannelWithUserAccountEx(
                 configuration.token,
@@ -1256,6 +1285,7 @@ private class AgoraRtcPlatform(
                 },
                 events,
             )
+
             return result
         }
 
@@ -1357,6 +1387,7 @@ private class AgoraRtcPlatform(
             replacingPendingMessage: String?,
         ): Long = synchronized(sendLock) {
             if (!isCurrent() || !joined) return -3
+
             sender.enqueue(
                 message,
                 replacingPendingMessage,
@@ -1389,6 +1420,7 @@ private class AgoraRtcPlatform(
          */
         override fun leave(): Int = synchronized(sendLock) {
             if (closed) return 0
+
             closed = true
             joined = false
             sender.close()

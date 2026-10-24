@@ -53,6 +53,7 @@ internal class VideoFrame(
                 message = "Video frame timestamp must be non-negative",
             )
         }
+
         if (planes.isEmpty()) {
             throw XmaxError(
                 code = XmaxErrorCode.INVALID_CONFIGURATION,

@@ -1,5 +1,5 @@
 //
-//  RealtimeCoordinatorTest.kt
+//  XmaxRealtimeLifecycleManagerTest.kt
 //  XmaxSDK
 //  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
@@ -11,8 +11,8 @@
 
 package ai.xmax.sdk
 
-import ai.xmax.sdk.RealtimeCoordinator.OperationKind
-import ai.xmax.sdk.RealtimeCoordinator.TerminationScope
+import ai.xmax.sdk.XmaxRealtimeLifecycleManager.OperationKind
+import ai.xmax.sdk.XmaxRealtimeLifecycleManager.TerminationScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlin.coroutines.CoroutineContext
@@ -21,10 +21,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -32,13 +34,50 @@ import org.junit.Assert.*
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class RealtimeCoordinatorTest {
+class XmaxRealtimeLifecycleManagerTest {
+    @Test
+    fun `completion listeners can immediately enter the next operation`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val callbacks = RealtimeCallbacks(UnconfinedTestDispatcher(testScheduler))
+        val lifecycle = XmaxRealtimeLifecycleManager(callbacks, dispatcher) {}
+        val next = CompletableDeferred<Result<Unit>>()
+        callbacks.setStateListener({ state ->
+            if (state.connectionState == RealtimeConnectionState.GENERATING) {
+                backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    next.complete(runCatching {
+                        lifecycle.run(OperationKind.MEDIA, failureScope = null) {
+                            it.complete(RealtimeState(RealtimeConnectionState.READY))
+                        }
+                    })
+                }
+            }
+        }, lifecycle.currentState)
+        lifecycle.run(OperationKind.GENERATION) {
+            it.complete(RealtimeState(RealtimeConnectionState.GENERATING, taskId = "task"))
+        }
+        assertTrue(next.await().isSuccess)
+        assertEquals(RealtimeConnectionState.READY, lifecycle.currentState.connectionState)
+    }
+
+    @Test
+    fun `failed unrelated media operations do not roll back an existing preparation state`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val lifecycle = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
+        lifecycle.run(OperationKind.MEDIA, failureScope = null) {
+            it.commit(RealtimeState(RealtimeConnectionState.PREPARING))
+        }
+        assertTrue(runCatching {
+            lifecycle.run(OperationKind.MEDIA, failureScope = null) { error("Existing media is preparing") }
+        }.isFailure)
+        assertEquals(RealtimeConnectionState.PREPARING, lifecycle.currentState.connectionState)
+    }
+
     @Test
     fun `foreground operations preempt adaptive configuration without generation cleanup`() = runTest {
         for (kind in listOf(OperationKind.GENERATION, OperationKind.REPLACEMENT, OperationKind.MEDIA, OperationKind.SETTING)) {
             val dispatcher = StandardTestDispatcher(testScheduler)
             var cleanups = 0
-            val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) { cleanups++ }
+            val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) { cleanups++ }
             coordinator.run(OperationKind.GENERATION) {
                 it.commit(RealtimeState(RealtimeConnectionState.GENERATING, taskId = "task"))
             }
@@ -67,7 +106,7 @@ class RealtimeCoordinatorTest {
     @Test
     fun `adaptive work cannot enter while foreground is suspended`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) {}
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
         val finish = CompletableDeferred<Unit>()
         val foreground = async { coordinator.run(OperationKind.GENERATION) { finish.await() } }
         runCurrent()
@@ -81,7 +120,7 @@ class RealtimeCoordinatorTest {
     fun `disconnect cancels adaptive work and configuration errors do not terminate generation`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         var cleanups = 0
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) { cleanups++ }
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) { cleanups++ }
         coordinator.run(OperationKind.GENERATION) {
             it.commit(RealtimeState(RealtimeConnectionState.GENERATING, taskId = "task"))
         }
@@ -104,7 +143,7 @@ class RealtimeCoordinatorTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val rollback = CompletableDeferred<Unit>()
         val events = mutableListOf<String>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) { events += "cleanup" }
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) { events += "cleanup" }
         val first = async {
             coordinator.run(OperationKind.GENERATION) {
                 events += "A"
@@ -134,7 +173,7 @@ class RealtimeCoordinatorTest {
             val dispatcher = StandardTestDispatcher(testScheduler)
             val rollback = CompletableDeferred<Unit>()
             var restarted = false
-            val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) {}
+            val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
             val first = async {
                 coordinator.run(OperationKind.GENERATION) {
                     try { awaitCancellation() }
@@ -162,7 +201,7 @@ class RealtimeCoordinatorTest {
     @Test fun `new generation after disconnect waits for shutdown before starting`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val cleanup = CompletableDeferred<Unit>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) { cleanup.await() }
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) { cleanup.await() }
         coordinator.run(OperationKind.GENERATION) { it.commit(RealtimeState(RealtimeConnectionState.GENERATING)) }
         val stop = async { coordinator.disconnect() }
         runCurrent()
@@ -178,7 +217,7 @@ class RealtimeCoordinatorTest {
     @Test fun `background failure cancels pending replacement and retains first failure during close`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val rollback = CompletableDeferred<Unit>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) {}
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
         val first = async {
             coordinator.run(OperationKind.GENERATION) {
                 try { awaitCancellation() }
@@ -203,7 +242,7 @@ class RealtimeCoordinatorTest {
     @Test fun `generation cannot replace media or switch operations or enter during close`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         for (kind in listOf(OperationKind.MEDIA, OperationKind.SWITCH, OperationKind.CONNECTION)) {
-            val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) {}
+            val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
             val running = async { coordinator.run(kind) { awaitCancellation() } }
             runCurrent()
             val error = runCatching { coordinator.run(OperationKind.GENERATION) {} }.exceptionOrNull() as XmaxError
@@ -212,7 +251,7 @@ class RealtimeCoordinatorTest {
             running.join()
         }
         val cleanup = CompletableDeferred<Unit>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) { cleanup.await() }
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) { cleanup.await() }
         val close = async { coordinator.terminate(TerminationScope.ALL) }
         runCurrent()
         val error = runCatching { coordinator.run(OperationKind.GENERATION) {} }.exceptionOrNull() as XmaxError
@@ -224,7 +263,7 @@ class RealtimeCoordinatorTest {
     @Test fun `cancelling latest pending generation still waits for predecessor cleanup`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val rollback = CompletableDeferred<Unit>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) {}
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
         val first = async {
             coordinator.run(OperationKind.GENERATION) {
                 try { awaitCancellation() }
@@ -250,7 +289,7 @@ class RealtimeCoordinatorTest {
         val late = CompletableDeferred<Unit>()
         var rejected = false
         var callerContinued = false
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) {}
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
         val first = async {
             try {
                 coordinator.run(OperationKind.GENERATION, failureScope = null) { token ->
@@ -280,7 +319,7 @@ class RealtimeCoordinatorTest {
     @Test fun `media preparation failure without owned resources resets state without cleanup`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val cleanups = mutableListOf<TerminationScope>()
-        val coordinator = RealtimeCoordinator(
+        val coordinator = XmaxRealtimeLifecycleManager(
             RealtimeCallbacks(dispatcher),
             dispatcher,
             cleanup = cleanups::add,
@@ -302,7 +341,7 @@ class RealtimeCoordinatorTest {
     @Test fun `connection failure scope cleans up even for configuration error code`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val cleanups = mutableListOf<TerminationScope>()
-        val coordinator = RealtimeCoordinator(
+        val coordinator = XmaxRealtimeLifecycleManager(
             RealtimeCallbacks(dispatcher),
             dispatcher,
             cleanup = cleanups::add,
@@ -325,7 +364,7 @@ class RealtimeCoordinatorTest {
     @Test fun `camera readiness and reasoned disconnect follow iOS state lifecycle`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         var mediaPresent = false
-        val coordinator = RealtimeCoordinator(
+        val coordinator = XmaxRealtimeLifecycleManager(
             callbacks = RealtimeCallbacks(dispatcher),
             dispatcher = dispatcher,
             hasLocalMedia = { mediaPresent },
@@ -365,7 +404,7 @@ class RealtimeCoordinatorTest {
     @Test fun `caller cancellation of configuration preserves generation`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val cleanups = mutableListOf<TerminationScope>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher, cleanup = cleanups::add)
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher, cleanup = cleanups::add)
         coordinator.run(OperationKind.GENERATION) { token ->
             token.commit(
                 RealtimeState(
@@ -397,7 +436,7 @@ class RealtimeCoordinatorTest {
     @Test fun `disconnect cancels and waits for configuration before connection cleanup`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val events = mutableListOf<String>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) {
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {
             events += "cleanup:$it"
         }
         val changing = async {
@@ -423,7 +462,7 @@ class RealtimeCoordinatorTest {
     @Test fun `disconnect sees pending connection before it commits connecting state`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val cleanups = mutableListOf<TerminationScope>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher, cleanup = cleanups::add)
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher, cleanup = cleanups::add)
         val started = CompletableDeferred<Unit>()
         val connecting = async {
             coordinator.run(OperationKind.CONNECTION, TerminationScope.CONNECTION) {
@@ -447,7 +486,7 @@ class RealtimeCoordinatorTest {
     @Test fun `disconnect is idle safe and does not cancel media preparation`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val cleanups = mutableListOf<TerminationScope>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher, cleanup = cleanups::add)
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher, cleanup = cleanups::add)
         coordinator.disconnect()
         assertEquals(RealtimeConnectionState.IDLE, coordinator.currentState.connectionState)
         assertTrue(cleanups.isEmpty())
@@ -471,7 +510,7 @@ class RealtimeCoordinatorTest {
     @Test fun `final notification unregisters old operation before reentrant start`() = runTest {
         val callbacks = RealtimeCallbacks(ImmediateDispatcher)
         val cleanups = mutableListOf<TerminationScope>()
-        val coordinator = RealtimeCoordinator(callbacks, ImmediateDispatcher, cleanup = cleanups::add)
+        val coordinator = XmaxRealtimeLifecycleManager(callbacks, ImmediateDispatcher, cleanup = cleanups::add)
         val started = CompletableDeferred<Unit>()
         val running = async {
             runCatching {
@@ -504,7 +543,7 @@ class RealtimeCoordinatorTest {
     @Test fun `close started by idle notification completes full cleanup`() = runTest {
         val callbacks = RealtimeCallbacks(ImmediateDispatcher)
         val cleanups = mutableListOf<TerminationScope>()
-        val coordinator = RealtimeCoordinator(callbacks, ImmediateDispatcher, cleanup = cleanups::add)
+        val coordinator = XmaxRealtimeLifecycleManager(callbacks, ImmediateDispatcher, cleanup = cleanups::add)
         coordinator.run(OperationKind.CONNECTION) { token ->
             token.commit(RealtimeState(RealtimeConnectionState.CONNECTED))
         }
@@ -531,7 +570,7 @@ class RealtimeCoordinatorTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val events = mutableListOf<String>()
         val rollback = CompletableDeferred<Unit>()
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) { events += "cleanup:$it" }
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) { events += "cleanup:$it" }
         val start = async {
             coordinator.run(OperationKind.GENERATION) { token ->
                 token.commit(RealtimeState(RealtimeConnectionState.CONNECTING))
@@ -566,7 +605,7 @@ class RealtimeCoordinatorTest {
         val events = mutableListOf<String>()
         val errors = mutableListOf<XmaxError>()
         val released = CompletableDeferred<Unit>()
-        val coordinator = RealtimeCoordinator(callbacks, dispatcher) {
+        val coordinator = XmaxRealtimeLifecycleManager(callbacks, dispatcher) {
             released.await(); events += "cleaned"
         }
         callbacks.setStateListener({ state ->
@@ -602,7 +641,7 @@ class RealtimeCoordinatorTest {
         val workers = QueuedDispatcher()
         var cleaned = false
         var allocated = false
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(StandardTestDispatcher(testScheduler)), workers) { cleaned = true }
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(StandardTestDispatcher(testScheduler)), workers) { cleaned = true }
         val caller = async(start = CoroutineStart.UNDISPATCHED) {
             coordinator.run(OperationKind.MEDIA) { allocated = true; "stream" }
         }
@@ -621,7 +660,7 @@ class RealtimeCoordinatorTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val released = CompletableDeferred<Unit>()
         var cleaned = false
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) { released.await(); cleaned = true }
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) { released.await(); cleaned = true }
         val close = async {
             coordinator.terminate(TerminationScope.ALL)
         }
@@ -661,7 +700,7 @@ class RealtimeCoordinatorTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val callbacks = RealtimeCallbacks(dispatcher)
         val errors = mutableListOf<XmaxError>()
-        val coordinator = RealtimeCoordinator(callbacks, dispatcher) {}
+        val coordinator = XmaxRealtimeLifecycleManager(callbacks, dispatcher) {}
         callbacks.setStateListener({ state ->
             (state.reason as? RealtimeReason.Failure)?.let { errors += it.error }
         }, coordinator.currentState)
@@ -677,7 +716,7 @@ class RealtimeCoordinatorTest {
     @Test fun `settings wait for startup and close cancels queued settings`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         var applied = 0
-        val coordinator = RealtimeCoordinator(RealtimeCallbacks(dispatcher), dispatcher) {}
+        val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
         val start = async { coordinator.run(OperationKind.GENERATION) { awaitCancellation() } }
         runCurrent()
         val localVolume = async { coordinator.run(OperationKind.SETTING) { applied++ } }

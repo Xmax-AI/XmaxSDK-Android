@@ -734,15 +734,15 @@ class XmaxRealtimeManagerTest {
         }
         val stream = ai.xmax.sdk.stream.StreamController(
             rtcManager = rtc,
-            qualityController = QualityController(rtc, callbackScope = backgroundScope),
+            qualityController = QualityController(rtc, callbackScope = backgroundScope, now = { testScheduler.currentTime }),
             roomController = ai.xmax.sdk.stream.room.RoomController(rtc,
                 ai.xmax.sdk.stream.room.RoomHeartbeat(rtc, sleeper = { awaitCancellation() }, scope = backgroundScope)),
             generationScope = backgroundScope, renderDispatcher = dispatcher,
         )
         val manager = XmaxRealtimeManager(RealtimeConfiguration(), { _, _, _ ->
-            RealtimeComponents(media, stream, render,
+            XmaxRealtimeComponents(media, stream, render,
                 XmaxRealtimeConnectionManager(session, media, render, stream),
-                XmaxRealtimeGenerationManager(media, stream))
+                XmaxRealtimeGenerationManager(media, stream, render))
         }, RealtimeCallbacks(dispatcher), dispatcher, qualityNow = { testScheduler.currentTime })
         val local = manager.createLocalImageStream(byteArrayOf(1))
         media.networkVideoReference = RealtimeReferenceVideo("https://example.test/driver.mp4")
@@ -1192,9 +1192,9 @@ class XmaxRealtimeManagerTest {
             val media = MediaStub().also(mediaInstances::add)
             val stream = StreamStub().also(streamInstances::add)
             val render = RenderStub()
-            RealtimeComponents(media, stream, render,
+            XmaxRealtimeComponents(media, stream, render,
                 XmaxRealtimeConnectionManager(SessionStub(), media, render, stream),
-                XmaxRealtimeGenerationManager(media, stream))
+                XmaxRealtimeGenerationManager(media, stream, render))
         }, RealtimeCallbacks(dispatcher), dispatcher)
 
         assertEquals(0.45f, manager.localAudioVolume)
@@ -1272,9 +1272,9 @@ class XmaxRealtimeManagerTest {
             val media = MediaStub().also(mediaInstances::add)
             val stream = StreamStub().also(streamInstances::add)
             val render = RenderStub()
-            RealtimeComponents(media, stream, render,
+            XmaxRealtimeComponents(media, stream, render,
                 XmaxRealtimeConnectionManager(SessionStub(), media, render, stream),
-                XmaxRealtimeGenerationManager(media, stream))
+                XmaxRealtimeGenerationManager(media, stream, render))
         }, callbacks, dispatcher)
         val networkListener = RealtimeNetworkQualityListener { _ -> }
         val performanceListener = RealtimePerformanceAlarmListener { _ -> }
@@ -1664,7 +1664,7 @@ class XmaxRealtimeManagerTest {
         qualityHistory: QualityHistory = QualityHistory(),
     ) {
         val media = MediaStub()
-        val stream = StreamStub()
+        val stream = StreamStub(qualityHistory, qualityNow)
         val render = object : RenderControlling by frameGate {
             // JVM tests exercise the real frame gate; Android view/trajectory binding has device tests.
             override fun registerRemoteTrack(track: RealtimeVideoTrack, resolvedMediaSize: IntSize, interactionListener: (InteractionFrame) -> Unit) = Unit
@@ -1672,10 +1672,10 @@ class XmaxRealtimeManagerTest {
         val session = SessionStub()
         val errors = mutableListOf<XmaxError>()
         val manager = XmaxRealtimeManager(RealtimeConfiguration(), { _, _, _ ->
-            RealtimeComponents(media, stream, render,
+            XmaxRealtimeComponents(media, stream, render,
                 XmaxRealtimeConnectionManager(session, media, render, stream),
-                XmaxRealtimeGenerationManager(media, stream))
-        }, RealtimeCallbacks(dispatcher, frames), dispatcher, timing, qualityHistory = qualityHistory, qualityNow = qualityNow)
+                XmaxRealtimeGenerationManager(media, stream, render))
+        }, RealtimeCallbacks(dispatcher, frames), dispatcher, timing, qualityNow = qualityNow)
         init { stream.onStop = { render.setRemoteStream(null) } }
         suspend fun listen() {
             manager.setStateListener { state ->
@@ -1804,7 +1804,10 @@ private class MediaStub : MediaControlling {
     override suspend fun stopInteraction() = Unit
     override fun submitInteraction(frame: InteractionFrame) = Unit
 }
-private class StreamStub : StreamControlling {
+private class StreamStub(
+    history: QualityHistory = QualityHistory(),
+    now: () -> Long = { System.nanoTime() / 1_000_000 },
+) : StreamControllingStub(history, now) {
     var encoderError: Throwable? = null
     val startedPadding = mutableListOf<Boolean>()
     val updatedPadding = mutableListOf<Boolean>()

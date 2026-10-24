@@ -28,11 +28,11 @@ class AdaptiveQualityTest {
     fun `explicit minimum bitrate prevents incompatible initial and automatic lower tiers`() {
         val maximumAtFullSize = EncodingBitratePolicy.resolve(baseline.width, baseline.height, baseline.fps).second
         val input = baseline.copy(minimumBitrate = maximumAtFullSize)
-        val up = QualityController.Direction(input, 2, false)
+        val up = QualityDirection(input, 2, false)
         assertEquals(1, up.level)
         repeat(6) { assertNull(up.observe(bad, it * 1000L, it * 1000L)) }
         assertEquals(input, up.format)
-        assertEquals(2, QualityController.Direction(input, 2, true).level)
+        assertEquals(2, QualityDirection(input, 2, true).level)
     }
 
     @Test
@@ -65,18 +65,18 @@ class AdaptiveQualityTest {
         val capped = QualityVideoFormat.resolve(RealtimeVideoFormat(480, 640, 30), 5, false)
         assertEquals(240 to 320, capped.width to capped.height)
         assertEquals(16, capped.fps)
-        val down = QualityController.Direction(RealtimeVideoFormat(480, 640, 30), 5, true)
+        val down = QualityDirection(RealtimeVideoFormat(480, 640, 30), 5, true)
         assertEquals(5, down.level)
         repeat(10) { assertNull(down.observe(bad, it * 1000L, it * 1000L)) }
     }
 
     @Test
     fun `three poor samples downgrade and failure does not commit level`() {
-        val direction = QualityController.Direction(baseline, 2, false)
+        val direction = QualityDirection(baseline, 2, false)
         assertNull(direction.observe(bad, 0, 0))
         assertNull(direction.observe(bad, 1000, 1000))
         val change = requireNotNull(direction.observe(bad, 2000, 2000))
-        assertEquals(QualityController.Direction.Change(2, 3, "poorNetwork"), change)
+        assertEquals(QualityDirection.Change(2, 3, "poorNetwork"), change)
         assertEquals(2, direction.level)
         direction.complete(change, false, 2000)
         assertEquals(2, direction.level)
@@ -90,7 +90,7 @@ class AdaptiveQualityTest {
 
     @Test
     fun `failed probe blocks upgrades for sixty seconds without blocking downgrades`() {
-        val direction = QualityController.Direction(baseline, 3, false)
+        val direction = QualityDirection(baseline, 3, false)
         repeat(4) { assertNull(direction.observe(good, it * 1000L, it * 1000L)) }
         val upgrade = requireNotNull(direction.observe(good, 4000, 4000))
         assertEquals("probeUpgrade", upgrade.reason)
@@ -113,7 +113,7 @@ class AdaptiveQualityTest {
 
     @Test
     fun `stale duplicated future interrupted and unknown samples cannot accumulate`() {
-        val direction = QualityController.Direction(baseline, 2, true)
+        val direction = QualityDirection(baseline, 2, true)
         assertNull(direction.observe(bad, 0, 0))
         repeat(10) { assertNull(direction.observe(bad, 0, 0)) }
         assertNull(direction.observe(bad, 2000, 1000))
@@ -133,8 +133,8 @@ class AdaptiveQualityTest {
 
     @Test
     fun `uplink and downlink make independent decisions and never exceed bounds`() {
-        val up = QualityController.Direction(baseline, 1, false)
-        val down = QualityController.Direction(baseline, 5, true)
+        val up = QualityDirection(baseline, 1, false)
+        val down = QualityDirection(baseline, 5, true)
         repeat(10) {
             assertNull(up.observe(good, it * 1000L, it * 1000L))
             assertNull(down.observe(bad, it * 1000L, it * 1000L))
@@ -227,7 +227,7 @@ class AdaptiveQualityTest {
                 assertTrue(format.fps <= input.fps)
             }
         }
-        val up = QualityController.Direction(baseline, 5, false, minimumInputPixels = model.minimumInputPixels)
+        val up = QualityDirection(baseline, 5, false, minimumInputPixels = model.minimumInputPixels)
         assertEquals(RealtimeVideoFormat(528, 990, 16), up.format)
         assertEquals(baseline, up.baseline)
     }

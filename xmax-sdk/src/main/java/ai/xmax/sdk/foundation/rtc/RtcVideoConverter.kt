@@ -145,6 +145,7 @@ internal object RtcVideoConverter {
                         output[i + 3] = alpha
                     }
                 }
+
                 if (pixel == VideoPixelFormat.NV12) {
                     for (i in width * height until output.size step 2) {
                         val u = output[i]
@@ -154,6 +155,7 @@ internal object RtcVideoConverter {
                 }
             }
         }
+
         return AgoraVideoFrame().apply {
             format = when (pixel) {
                 VideoPixelFormat.I420 -> AgoraVideoFrame.FORMAT_I420

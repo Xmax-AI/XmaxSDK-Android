@@ -88,18 +88,17 @@ internal class MediaSourceController(
                 "Stop the current media source before preparing another file",
             )
         }
+
         try {
             val metadata = metadataManager.readMetadata(uri)
             val resolvedFormat = resolveVideoFormat(metadata)
+
             playerController.configure(
                 uri = uri,
-                outputWidth = resolvedFormat.width,
-                outputHeight = resolvedFormat.height,
-                rotation = metadata.rotation,
-                frameRate = resolvedFormat.fps,
-                hasAudio = metadata.hasAudio,
-                durationUs = metadata.durationUs,
+                metadata = metadata,
+                videoFormat = resolvedFormat,
             )
+
             val configuration = MediaSourceConfiguration(
                 resolvedFormat,
                 metadata.hasAudio,
@@ -129,14 +128,17 @@ internal class MediaSourceController(
                     "Prepare the media file before starting it",
                 )
             }
+
             if (isRunning) {
                 throw XmaxError(
                     XmaxErrorCode.INVALID_CONFIGURATION,
                     "Local media source is already active",
                 )
             }
+
             isRunning = true
         }
+
         try {
             playerController.start()
         } catch (
@@ -244,6 +246,7 @@ internal class MediaSourceController(
             displaySize,
             RealtimeMediaSource.VIDEO,
         )
+
         return RealtimeVideoFormat(
             resolvedMediaSize.width,
             resolvedMediaSize.height,

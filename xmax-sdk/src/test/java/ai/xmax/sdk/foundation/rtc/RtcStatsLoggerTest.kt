@@ -13,7 +13,6 @@ package ai.xmax.sdk.foundation.rtc
 
 import ai.xmax.sdk.DownlinkVideoStatistics
 import ai.xmax.sdk.UplinkVideoStatistics
-import ai.xmax.sdk.XmaxEnvironment
 import ai.xmax.sdk.XmaxLogger
 import ai.xmax.sdk.XmaxLoggerOption
 import org.junit.After
@@ -28,7 +27,7 @@ class RtcStatsLoggerTest {
 
     @Test
     fun `uplink log preserves each standard metric in Chinese`() {
-        XmaxLogger.configure(XmaxLoggerOption.none, XmaxEnvironment.CHINA)
+        XmaxLogger.configure(XmaxLoggerOption.none, XmaxLogger.Language.CHINESE)
         val statistics = UplinkVideoStatistics(
             width = 1024,
             height = 1920,
@@ -53,7 +52,7 @@ class RtcStatsLoggerTest {
 
     @Test
     fun `downlink log distinguishes unavailable and zero metrics in English`() {
-        XmaxLogger.configure(XmaxLoggerOption.none, XmaxEnvironment.GLOBAL)
+        XmaxLogger.configure(XmaxLoggerOption.none, XmaxLogger.Language.ENGLISH)
         val statistics = DownlinkVideoStatistics(
             userId = "bot",
             width = 1920,
@@ -77,7 +76,7 @@ class RtcStatsLoggerTest {
 
     @Test
     fun `missing uplink metrics are not logged as measurements`() {
-        XmaxLogger.configure(XmaxLoggerOption.none, XmaxEnvironment.GLOBAL)
+        XmaxLogger.configure(XmaxLoggerOption.none, XmaxLogger.Language.ENGLISH)
 
         assertEquals(
             "视频上行统计 (Video Uplink Statistics)\n" +

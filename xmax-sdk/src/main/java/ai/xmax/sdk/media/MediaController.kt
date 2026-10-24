@@ -252,6 +252,7 @@ internal class MediaController(
                     "Camera preview is not started",
                 )
             }
+
             cameraController.updateVideoFormat(videoFormat)
         }
     }
@@ -425,6 +426,7 @@ internal class MediaController(
         if (synchronized(stateLock) { activeSource } == LocalMediaKind.EXTERNAL) {
             externalController?.setAudio(muted = muted)
         }
+
         if (synchronized(stateLock) { activeSource } == LocalMediaKind.VIDEO) {
             videoController?.setLocalAudioPreviewMuted(muted)
         }
@@ -452,6 +454,7 @@ internal class MediaController(
                 "The current local media source is not a camera",
             )
         }
+
         cameraController.switchCamera()
     }
 
@@ -490,6 +493,7 @@ internal class MediaController(
                 "Stop the current local media stream before creating another one",
             )
         }
+
         try {
             rtcManager.initialize()
             create().also {

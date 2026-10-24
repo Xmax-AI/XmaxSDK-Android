@@ -36,6 +36,7 @@ internal object RtcAudioConverter {
                 "Audio frame must contain exactly $expected bytes",
             )
         }
+
         return bytes
     }
 }

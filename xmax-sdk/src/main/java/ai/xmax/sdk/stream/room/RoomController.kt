@@ -84,6 +84,7 @@ internal class RoomController(
                     message = "Leave the current RTC room before joining another one",
                 )
             }
+
             UUID.randomUUID().also {
                 state = State.Joining(it)
             }
@@ -126,6 +127,7 @@ internal class RoomController(
                 error,
                 { leave() },
             )
+
             throw XmaxError.from(error)
         }
     }
@@ -289,8 +291,10 @@ internal class RoomController(
     ) {
         val userId = synchronized(stateLock) {
             if (taskId.isEmpty()) return
+
             (state as? State.Joined)?.userId ?: return
         }
+
         send(
             RoomEvent.stop(
                 userId,
@@ -311,6 +315,7 @@ internal class RoomController(
         points: List<RealtimePoint>,
     ) {
         if (taskId.isEmpty() || points.isEmpty()) return
+
         send(
             RoomEvent.tracks(
                 userId = requireUserId(),

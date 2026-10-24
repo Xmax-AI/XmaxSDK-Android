@@ -86,7 +86,7 @@ class RealtimeTimingTest {
 
     @Test
     fun `global environment uses English timing details`() = runTest {
-        XmaxLogger.configure(XmaxLoggerOption.none, XmaxEnvironment.GLOBAL)
+        XmaxLogger.configure(XmaxLoggerOption.none, XmaxLogger.Language.ENGLISH)
         val clock = Clock()
         val logs = mutableListOf<String>()
         RealtimeTiming(clock::now, logs::add).measure {

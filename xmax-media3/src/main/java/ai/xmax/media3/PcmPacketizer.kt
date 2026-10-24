@@ -88,6 +88,7 @@ internal class PcmPacketizer(
         if (rate != sampleRate || channels != channelCount || kotlin.math.abs(timestampUs - expectedUs) > 30_000L) {
             reset(); rate = sampleRate; channels = channelCount; originUs = timestampUs
         }
+
         val input = data.duplicate().order(ByteOrder.LITTLE_ENDIAN)
         while (input.remaining() >= channelCount * 2) {
             var sum = 0L
@@ -118,6 +119,7 @@ internal class PcmPacketizer(
                     packet.clear(); packetSamples = 0
                 }
             }
+
             previous = current
             inputSamples++
         }

@@ -47,6 +47,7 @@ internal suspend fun <T> withCancellableConnection(
                 context.ensureActive()
                 val opened = factory(url)
                 connection.set(opened)
+
                 try {
                     context.ensureActive()
                     block(opened) { context.ensureActive() }

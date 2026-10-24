@@ -12,15 +12,17 @@ package ai.xmax.sdk
 
 import ai.xmax.sdk.stream.StreamControlling
 import ai.xmax.sdk.media.interaction.InteractionControlling
+import ai.xmax.sdk.render.RenderControlling
+import kotlinx.coroutines.currentCoroutineContext
 import java.nio.ByteBuffer
 import java.util.Base64
 import java.util.UUID
 
 /**
- * Owns generation identifiers, cached conditions, and interaction bindings; RealtimeCoordinator serializes
+ * Owns generation identifiers, cached conditions, and interaction bindings; XmaxRealtimeLifecycleManager serializes
  * operations.
  * Core shares one taskId with Stream and Interaction to associate signaling, frames, and trajectories.
- * This manager waits for Stream confirmation; XmaxRealtimeManager also waits for a renderable remote frame.
+ * Generation becomes ready after Stream confirmation, a renderable remote frame, and audio activation.
  */
 internal class XmaxRealtimeGenerationManager(
     /**
@@ -32,6 +34,11 @@ internal class XmaxRealtimeGenerationManager(
      * The component managing RTC publication, subscriptions, and generation signaling.
      */
     private val streamController: StreamControlling,
+
+    /**
+     * The remote presentation gate confirming that the first generated frame is ready.
+     */
+    private val renderController: RenderControlling,
 
     /**
      * The function allocating a generation task identifier.
@@ -82,7 +89,7 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * Starts a generation task and commits its context and interaction binding after remote confirmation.
+     * Starts a generation task and commits its context after its first remote frame and audio are ready.
      * Failure or cancellation stops that taskId; only results passing ensureCurrent can return.
      *
      * @param videoFormat The resolved local media baseline used for interaction coordinates.
@@ -110,6 +117,7 @@ internal class XmaxRealtimeGenerationManager(
                 XmaxErrorCode.INVALID_CONFIGURATION,
                 "A realtime context is required for the first generation",
             )
+
         val taskId = taskIdGenerator()
         val confirmation = streamController.beginGeneration(
             taskId,
@@ -119,17 +127,27 @@ internal class XmaxRealtimeGenerationManager(
             targetVideoFormat,
             paddingContain,
         )
+
         try {
             confirmation.await()
             ensureCurrent()
+
             interactionController.startInteraction(
                 taskId,
                 videoFormat,
             )
+            ensureCurrent()
+
+            renderController.waitUntilRemoteFrameReady()
+            ensureCurrent()
+            streamController.activateRemoteAudio()
+            ensureCurrent()
+
             synchronized(stateLock) {
                 currentContext = resolvedContext
                 currentFaceRestoration = faceRestoration
             }
+
             return taskId
         } catch (
             error: Throwable,
@@ -171,6 +189,7 @@ internal class XmaxRealtimeGenerationManager(
                 XmaxErrorCode.INVALID_CONFIGURATION,
                 "A realtime context is required for the first generation",
             )
+
         streamController.updateGeneration(
             taskId,
             generationVideoFormat,
@@ -179,10 +198,12 @@ internal class XmaxRealtimeGenerationManager(
             paddingContain,
         )
         ensureCurrent()
+
         interactionController.startInteraction(
             taskId,
             videoFormat,
         )
+
         synchronized(stateLock) {
             currentContext = resolvedContext
             currentFaceRestoration = faceRestoration

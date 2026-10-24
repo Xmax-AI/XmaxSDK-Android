@@ -77,6 +77,7 @@ internal class VideoFramePlane(
         ) {
             throw invalidRangeError()
         }
+
         if (stride <= 0) {
             throw XmaxError(
                 code = XmaxErrorCode.INVALID_CONFIGURATION,
