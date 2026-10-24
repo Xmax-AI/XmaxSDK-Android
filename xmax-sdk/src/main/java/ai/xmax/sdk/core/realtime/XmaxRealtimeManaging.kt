@@ -23,7 +23,7 @@ import android.net.Uri
  * [disconnect] and [close] cancel affected pending operations and wait for cleanup.
  * Suspending calls report failures through exceptions and preserve CancellationException semantics.
  * When enabled in [RealtimeConfiguration], uplink and downlink adapt independently to network quality,
- * starting at L1 (100% dimensions) when no history exists. Disabling adaptation starts each connection at L1
+ * starting at L2 when no valid history exists. Disabling adaptation starts each connection at L1
  * without reading or updating history; manual quality changes remain available.
  * Adaptation leaves original media dimensions, the model canvas, and interaction coordinates unchanged and
  * does not depend on public statistics listeners.

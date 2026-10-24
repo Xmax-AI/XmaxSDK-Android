@@ -283,13 +283,6 @@ internal class ImageSourceController(
     private fun resolveVideoFormat(
         sourceSize: IntSize,
     ): RealtimeVideoFormat {
-        if (sourceSize.width < 2 || sourceSize.height < 2) {
-            throw XmaxError(
-                XmaxErrorCode.INVALID_CONFIGURATION,
-                "Image dimensions must be at least two pixels",
-            )
-        }
-
         val resolvedMediaSize = mediaService.resolveMediaSize(
             sourceSize,
             RealtimeMediaSource.IMAGE,

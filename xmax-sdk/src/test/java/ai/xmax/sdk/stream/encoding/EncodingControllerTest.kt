@@ -149,7 +149,7 @@ public class EncodingControllerTest {
             Case(3_840, 2_160, 30, 500, 15_120),
             Case(120, 120, 30, 100, 100),
             Case(1_920, 1_080, 1, 200, 200),
-            Case(2, 2, 1, 100, 100),
+            Case(4, 4, 1, 100, 100),
         )
 
         cases.forEach { case ->
@@ -217,8 +217,8 @@ public class EncodingControllerTest {
         val error = expectXmaxError {
             controller.configure(
                 RealtimeVideoFormat(
-                    width = Int.MAX_VALUE - 1,
-                    height = Int.MAX_VALUE - 1,
+                    width = Int.MAX_VALUE - 3,
+                    height = Int.MAX_VALUE - 3,
                     fps = Int.MAX_VALUE,
                 ),
             )
@@ -244,6 +244,18 @@ public class EncodingControllerTest {
             error.message,
         )
         assertTrue(rtcManager.encodingConfigurations.isEmpty())
+    }
+
+    @Test
+    public fun `configure rejects even dimensions that are not multiples of four before calling RTC`() {
+        val rtc = RtcManagingStub()
+        val controller = EncodingController(rtc)
+        for (format in listOf(RealtimeVideoFormat(802, 600, 30), RealtimeVideoFormat(600, 802, 30), RealtimeVideoFormat(2, 2, 30))) {
+            val error = expectXmaxError { controller.configure(format) }
+            assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, error.code)
+            assertEquals("Uplink video width and height must be multiples of 4", error.message)
+        }
+        assertTrue(rtc.encodingConfigurations.isEmpty())
     }
 
     @Test

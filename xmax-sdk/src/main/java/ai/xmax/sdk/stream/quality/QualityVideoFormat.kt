@@ -49,7 +49,7 @@ internal object QualityVideoFormat {
     }
 
     /**
-     * Resolves transmission dimensions with even alignment, preferring the exact media aspect ratio.
+     * Resolves transmission dimensions, preferring exact aspect ratio with four-pixel-aligned uplink.
      * The downlink's 24 fps is used only for bitrate estimation, not to set server frame rate.
      *
      * @param baseline The original input format used to calculate quality tiers.
@@ -75,6 +75,7 @@ internal object QualityVideoFormat {
                 baseline.height,
             ),
             scale,
+            alignment = if (downlink) 2 else 4,
             minimumPixels = if (downlink) 0 else minimumInputPixels,
         )
 
@@ -91,16 +92,18 @@ internal object QualityVideoFormat {
     }
 
     /**
-     * Downscales media with even alignment and a minimum pixel area, preferring the exact aspect ratio.
+     * Downscales media with the required dimension alignment, preferring exact aspect ratio.
      *
      * @param size The original integer pixel dimensions.
      * @param scale The requested dimension scale, no greater than one.
+     * @param alignment The required multiple for each output dimension.
      * @param minimumPixels The minimum output area, capped at the source area to prevent enlargement.
-     * @return Even dimensions satisfying the minimum area without enlarging the source.
+     * @return Aligned dimensions satisfying the minimum area without enlarging the source.
      */
     fun scaledSize(
         size: IntSize,
         scale: Double,
+        alignment: Int,
         minimumPixels: Int = 0,
     ): IntSize {
         var divisor = size.width
@@ -110,15 +113,19 @@ internal object QualityVideoFormat {
             divisor = remainder
             remainder = next
         }
+
         val pixels = size.width.toDouble() * size.height
-        val minimumScale = sqrt(min(minimumPixels.coerceAtLeast(0).toDouble(), pixels) / pixels)
-        val minimumUnits = ceil(divisor * minimumScale / 2).toInt() * 2
-        val units = floor(divisor * scale + 0.0000001).toInt() / 2 * 2
-        if (units >= 2) {
-            val resolvedUnits = max(
-                units,
-                minimumUnits,
-            )
+        val minimumScale = sqrt(min(
+            minimumPixels.coerceAtLeast(0).toDouble(),
+            pixels,
+        ) / pixels)
+        val minimumUnits = ceil(divisor * minimumScale / alignment).toInt() * alignment
+        val units = floor(divisor * scale + 0.0000001).toInt() / alignment * alignment
+        val resolvedUnits = max(
+            units,
+            minimumUnits,
+        )
+        if (units >= alignment && resolvedUnits <= divisor) {
             return IntSize(
                 size.width / divisor * resolvedUnits,
                 size.height / divisor * resolvedUnits,
@@ -127,14 +134,14 @@ internal object QualityVideoFormat {
 
         return IntSize(
             maxOf(
-                2,
-                floor(size.width * scale / 2).toInt() * 2,
-                ceil(size.width * minimumScale / 2).toInt() * 2,
+                alignment,
+                floor(size.width * scale / alignment).toInt() * alignment,
+                ceil(size.width * minimumScale / alignment).toInt() * alignment,
             ),
             maxOf(
-                2,
-                floor(size.height * scale / 2).toInt() * 2,
-                ceil(size.height * minimumScale / 2).toInt() * 2,
+                alignment,
+                floor(size.height * scale / alignment).toInt() * alignment,
+                ceil(size.height * minimumScale / alignment).toInt() * alignment,
             ),
         )
     }

@@ -16,7 +16,7 @@ package ai.xmax.sdk.stream.quality
 internal object QualityTiers {
 
     /**
-     * The default transmission level.
+     * The initial transmission level when automatic adaptation is disabled.
      */
     const val INITIAL_LEVEL = 1
 

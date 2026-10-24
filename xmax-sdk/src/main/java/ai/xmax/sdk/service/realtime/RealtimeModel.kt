@@ -68,7 +68,7 @@ public enum class RealtimeModel(
      * The minimum local media and uplink pixel area; also limits variable generation canvases.
      */
     public val minimumInputPixels: Int
-        get() = 500_000
+        get() = 200_000
 
     /**
      * The maximum local frame pixel area; also limits generation canvases when fixed buckets are absent.

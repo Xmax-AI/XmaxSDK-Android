@@ -22,8 +22,8 @@ public data class RealtimeConfiguration @JvmOverloads constructor(
     /**
      * Whether uplink and downlink quality levels adapt automatically.
      *
-     * When disabled, each connection starts at L1 without reading or updating quality history. Manual
-     * changes remain available.
+     * Without valid history, enabled connections start at L2. When disabled, each connection starts at L1
+     * without reading or updating quality history. Manual changes remain available.
      */
     public val isAdaptiveQualityEnabled: Boolean = true,
 )

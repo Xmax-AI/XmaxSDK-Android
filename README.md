@@ -309,11 +309,11 @@ lifecycleScope.launch {
 frame arrives, then transitions to the remote video. Touch interaction is enabled by
 default after the generated video becomes visible.
 
-Local camera, image, video, and external input dimensions are capped at the model's
-maximum pixel count without upscaling, and aligned to multiples of four, preserving
-the exact aspect ratio where possible. Both preview models accept processed media between 500,000
-and 2,100,000 pixels; smaller inputs are rejected rather than enlarged. Only camera
-requests must match a supported model resolution bucket.
+Local camera, image, video, and external input dimensions are resized into the model's
+minimum and maximum pixel-area limits and aligned to multiples of four, preserving
+the exact aspect ratio where possible. Both preview models accept processed media
+between 200,000 and 2,100,000 pixels; smaller inputs are enlarged and larger inputs
+are reduced. Only camera requests must match a supported model resolution bucket.
 
 The SDK selects the generation canvas (`size`) separately by the closest model
 aspect ratio. Live frame input uses `padding: "contain"` only when its aspect ratio
@@ -615,10 +615,14 @@ realtime.setDownlinkQualityLevel(RealtimeQualityLevel.L2)
 ```
 
 L1–L5 target 100%, 90%, 75%, 60%, and 50% of the media baseline's width and
-height, with uplink frame-rate limits of 30, 24, 24, 20, and 16 fps. Without valid
-history, both directions start at L1. Pixel alignment and minimum dimensions still
-apply; uplink also retains at least 500,000 pixels, so a lower tier may exceed its
-nominal dimension percentage. Downlink does not use that minimum area.
+height, with uplink frame-rate limits of 30, 24, 24, 20, and 16 fps. With automatic
+adaptation enabled, both directions start at L2 when history is missing, expired,
+or invalid. Disabling adaptation starts both directions at L1. Pixel alignment and
+minimum dimensions still apply; uplink also retains at least 200,000 pixels, so a
+lower tier may exceed its nominal dimension percentage. Downlink does not use
+that minimum area.
+Uplink encoding dimensions are multiples of four; downlink retains its existing
+dimension rules, with the final `target_size` aligned to multiples of four.
 Manual choices do not change the media baseline or model canvas, and do not
 disable adaptation when it is enabled. Only successful adjustments update the
 current level; one-hour history is updated only when adaptation is enabled.

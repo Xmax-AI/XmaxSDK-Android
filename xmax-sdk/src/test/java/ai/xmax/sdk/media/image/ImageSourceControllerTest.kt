@@ -71,10 +71,36 @@ class ImageSourceControllerTest {
         assertEquals(expected, decoded.requestedFormat)
         controller.stop()
 
-        for (size in listOf(IntSize(0, 1080), IntSize(1, 1), IntSize(2, 2), IntSize(3, 3), IntSize(640, 480), IntSize(999, 501))) {
+        for (size in listOf(IntSize(0, 1080), IntSize(1080, 0), IntSize(-1, 600))) {
             val error = runCatching { controller.prepare(DecodedImageStub(size)) }.exceptionOrNull()
             assertTrue(error is XmaxError)
             assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (error as XmaxError).code)
+        }
+    }
+
+    @Test
+    fun `small images are rendered at the upscaled media size rather than the model canvas`() = runTest {
+        for ((size, expected) in listOf(
+            IntSize(1, 1) to RealtimeVideoFormat(448, 448, 30),
+            IntSize(2, 2) to RealtimeVideoFormat(448, 448, 30),
+            IntSize(3, 3) to RealtimeVideoFormat(448, 448, 30),
+            IntSize(200, 200) to RealtimeVideoFormat(448, 448, 30),
+            IntSize(256, 480) to RealtimeVideoFormat(352, 660, 30),
+            IntSize(640, 480) to RealtimeVideoFormat(640, 480, 30),
+            IntSize(512, 960) to RealtimeVideoFormat(512, 960, 30),
+        )) {
+            val decoded = DecodedImageStub(size)
+            val controller = ImageSourceController(
+                imageManager = ImageManagerStub(decoded), mediaService = MediaService(),
+                frameListener = {}, errorListener = { throw it },
+                uriDataLoader = { byteArrayOf(1) }, outputScope = backgroundScope,
+            )
+            val (format, frame) = controller.prepare(decoded)
+            assertEquals(expected, format)
+            assertEquals(expected, decoded.requestedFormat)
+            assertEquals(expected.width, frame.format.width)
+            assertEquals(expected.height, frame.format.height)
+            controller.stop()
         }
     }
 
@@ -150,9 +176,9 @@ private class DecodedImageStub(
     override fun makeVideoFrame(videoFormat: RealtimeVideoFormat): VideoFrame {
         requestedFormat = videoFormat
         return VideoFrame(
-            format = VideoFormat(2, 2, VideoPixelFormat.RGBA),
+            format = VideoFormat(videoFormat.width, videoFormat.height, VideoPixelFormat.RGBA),
             timestampUs = 0L,
-            planes = listOf(VideoFramePlane(ByteArray(16), stride = 8)),
+            planes = listOf(VideoFramePlane(ByteArray(videoFormat.width * videoFormat.height * 4), stride = videoFormat.width * 4)),
         )
     }
 }

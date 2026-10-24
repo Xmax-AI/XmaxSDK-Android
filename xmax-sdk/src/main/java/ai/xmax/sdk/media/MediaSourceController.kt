@@ -235,13 +235,6 @@ internal class MediaSourceController(
                 metadata.height,
             )
         }
-        if (displaySize.width < 2 || displaySize.height < 2) {
-            throw XmaxError(
-                XmaxErrorCode.INVALID_CONFIGURATION,
-                "Video dimensions must be at least two pixels",
-            )
-        }
-
         val resolvedMediaSize = mediaService.resolveMediaSize(
             displaySize,
             RealtimeMediaSource.VIDEO,

@@ -15,7 +15,7 @@ import android.content.Context
 /**
  * The successfully applied model and directional levels retained for one hour.
  *
- * Records are isolated by RTC vendor, model, and direction; L1 is used without a valid record.
+ * Records are isolated by RTC vendor, model, and direction; L2 is used without a valid record.
  */
 internal class QualityHistory(
     /**
@@ -40,23 +40,23 @@ internal class QualityHistory(
     private val values = mutableMapOf<String, Entry>()
 
     /**
-     * Reads a direction's history, returning L1 if absent, expired, or invalid.
+     * Reads a direction's history, returning L2 if absent, expired, or invalid.
      *
      * @param downlink True for downlink, false for uplink.
-     * @return The valid saved level, or L1 if absent or expired.
+     * @return The valid saved level, or L2 if absent, expired, or invalid.
      */
     @Synchronized
     fun read(
         downlink: Boolean,
     ): Int {
         val key = if (downlink) "downlink" else "uplink"
-        val entry = values[key] ?: runCatching { readValue(key) }.getOrNull() ?: return QualityTiers.INITIAL_LEVEL
+        val entry = values[key] ?: runCatching { readValue(key) }.getOrNull() ?: return DEFAULT_LEVEL
         val currentTime = now()
         if (entry.level !in 1..QualityTiers.percentages.size || entry.savedAt <= 0 || currentTime < entry.savedAt) {
-            return QualityTiers.INITIAL_LEVEL
+            return DEFAULT_LEVEL
         }
 
-        return if (currentTime - entry.savedAt < EXPIRATION_MILLIS) entry.level else QualityTiers.INITIAL_LEVEL
+        return if (currentTime - entry.savedAt < EXPIRATION_MILLIS) entry.level else DEFAULT_LEVEL
     }
 
     /**
@@ -105,6 +105,11 @@ internal class QualityHistory(
     companion object {
 
         /**
+         * The adaptive quality level used without valid history.
+         */
+        private const val DEFAULT_LEVEL = 2
+
+        /**
          * The maximum history age, in milliseconds.
          */
         private const val EXPIRATION_MILLIS = 60 * 60 * 1000L
@@ -130,7 +135,7 @@ internal class QualityHistory(
                     Entry(
                         level = preferences.getInt(
                             prefix + direction,
-                            QualityTiers.INITIAL_LEVEL,
+                            DEFAULT_LEVEL,
                         ),
                         savedAt = preferences.getLong(
                             prefix + direction + ":saved_at",

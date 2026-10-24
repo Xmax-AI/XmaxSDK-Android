@@ -83,18 +83,78 @@ class MediaServiceTest {
     }
 
     @Test
-    fun `minimum media area applies after alignment and never enlarges small inputs`() {
-        val service = MediaService()
-        for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
-            for (size in listOf(IntSize(640, 480), IntSize(640, 640), IntSize(1000, 499), IntSize(999, 501))) {
-                val error = assertThrows(XmaxError::class.java) { service.resolveMediaSize(size, source) }
-                assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, error.code)
+    fun `small media is upscaled to the input minimum for every non camera source`() {
+        val cases = listOf(
+            IntSize(400, 752) to IntSize(400, 752),
+            IntSize(752, 400) to IntSize(752, 400),
+            IntSize(512, 960) to IntSize(512, 960),
+            IntSize(640, 480) to IntSize(640, 480),
+            IntSize(640, 640) to IntSize(640, 640),
+            IntSize(256, 480) to IntSize(352, 660),
+            IntSize(200, 200) to IntSize(448, 448),
+            IntSize(1, 1) to IntSize(448, 448),
+        )
+        for (model in RealtimeModel.entries) {
+            val service = MediaService(model)
+            for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
+                for ((original, expected) in cases) {
+                    val resolved = service.resolveMediaSize(original, source)
+                    assertEquals(expected, resolved)
+                    assertEquals(0, resolved.width % 4)
+                    assertEquals(0, resolved.height % 4)
+                    assertTrue(resolved.width.toLong() * resolved.height in model.minimumInputPixels.toLong()..model.maximumInputPixels.toLong())
+                    assertEquals(original.width.toLong() * resolved.height, original.height.toLong() * resolved.width)
+                }
+                assertEquals(IntSize(1000, 500), service.resolveMediaSize(IntSize(1001, 500), source))
+                assertEquals(IntSize(512, 1000), service.resolveMediaSize(IntSize(512, 1000), source))
             }
-            assertEquals(IntSize(1000, 500), service.resolveMediaSize(IntSize(1000, 500), source))
-            assertEquals(IntSize(1000, 500), service.resolveMediaSize(IntSize(1001, 500), source))
-            assertEquals(IntSize(1024, 1920), service.resolveMediaSize(IntSize(1024, 1920), source))
         }
-        assertEquals(IntSize(400, 200), service.resolveTargetSize(IntSize(1000, 500), Size(400f, 200f)))
+    }
+
+    @Test
+    fun `alignment preserves area bounds near the minimum when exact aspect cannot fit`() {
+        for (model in RealtimeModel.entries) {
+            val service = MediaService(model)
+            for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
+                for (original in listOf(IntSize(1001, 199), IntSize(999, 200), IntSize(1000, 200))) {
+                    for (size in listOf(original, IntSize(original.height, original.width))) {
+                        val resolved = service.resolveMediaSize(size, source)
+                        assertTrue(resolved.width.toLong() * resolved.height in model.minimumInputPixels.toLong()..model.maximumInputPixels.toLong())
+                        assertEquals(0, resolved.width % 4)
+                        assertEquals(0, resolved.height % 4)
+                        val ratioError = kotlin.math.abs(resolved.width.toDouble() * size.height / (resolved.height.toDouble() * size.width) - 1)
+                        assertTrue(ratioError < 0.01)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `extreme aspects and alignment boundaries remain within model area limits`() {
+        val cases = listOf(IntSize(1, 200001), IntSize(447, 448), IntSize(999, 501),
+            IntSize(1449, 1450), IntSize(65535, 65537), IntSize(Int.MAX_VALUE, 4))
+        for (model in RealtimeModel.entries) {
+            val service = MediaService(model)
+            for (original in cases) {
+                for (size in listOf(original, IntSize(original.height, original.width))) {
+                    val resolved = service.resolveMediaSize(size, RealtimeMediaSource.EXTERNAL)
+                    assertEquals(0, resolved.width % 4)
+                    assertEquals(0, resolved.height % 4)
+                    assertTrue(resolved.width.toLong() * resolved.height in model.minimumInputPixels.toLong()..model.maximumInputPixels.toLong())
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `upscaled media does not impose the input minimum on returned dimensions`() {
+        val service = MediaService()
+        val media = service.resolveMediaSize(IntSize(200, 200), RealtimeMediaSource.VIDEO)
+        val target = service.resolveTargetSize(media, Size(media.width / 2f, media.height / 2f))
+        assertEquals(IntSize(448, 448), media)
+        assertEquals(IntSize(224, 224), target)
+        assertTrue(target.width.toLong() * target.height < service.model.minimumInputPixels)
     }
 
     @Test
@@ -108,13 +168,17 @@ class MediaServiceTest {
     }
 
     @Test
-    fun `invalid or too small dimensions fail before media allocation`() {
+    fun `invalid input and sub alignment target dimensions fail before media allocation`() {
         val service = MediaService()
-        for (edge in listOf(-1, 0, 1, 2, 3)) {
+        for (edge in listOf(-1, 0)) {
             for (size in listOf(IntSize(edge, 600), IntSize(600, edge))) {
                 for (source in RealtimeMediaSource.entries) {
                     assertThrows(XmaxError::class.java) { service.resolveMediaSize(size, source) }
                 }
+            }
+        }
+        for (edge in listOf(-1, 0, 1, 2, 3)) {
+            for (size in listOf(IntSize(edge, 600), IntSize(600, edge))) {
                 assertThrows(XmaxError::class.java) { service.resolveTargetSize(size, Size(720f, 1280f)) }
             }
         }
@@ -123,6 +187,5 @@ class MediaServiceTest {
                 assertThrows(XmaxError::class.java) { service.resolveTargetSize(IntSize(720, 1280), bounds) }
             }
         }
-        assertThrows(XmaxError::class.java) { service.resolveMediaSize(IntSize(Int.MAX_VALUE, 4), RealtimeMediaSource.VIDEO) }
     }
 }

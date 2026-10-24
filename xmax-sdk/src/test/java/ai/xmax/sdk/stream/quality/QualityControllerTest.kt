@@ -29,6 +29,50 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 public class QualityControllerTest {
+
+    @Test
+    public fun `enabled adaptation starts both directions at L2 without history`() = runTest {
+        val controller = QualityController(
+            RtcManagingStub(),
+            callbackScope = this,
+            now = { testScheduler.currentTime },
+        )
+        val baseline = RealtimeVideoFormat(1024, 1920, 30)
+        val initial = controller.prepareQuality(
+            baseline,
+            isAdaptiveQualityEnabled = true,
+        )
+
+        assertEquals(2, initial.uplinkLevel)
+        assertEquals(2, initial.downlinkLevel)
+        assertEquals(RealtimeVideoFormat(896, 1680, 24), initial.uplink)
+        assertEquals(baseline, initial.baseline)
+    }
+
+    @Test
+    public fun `expired history restarts both directions at L2`() = runTest {
+        var time = 1_000L
+        val history = QualityHistory(now = { time })
+        history.write(downlink = false, level = 1)
+        history.write(downlink = true, level = 4)
+        val controller = QualityController(
+            RtcManagingStub(),
+            callbackScope = this,
+            history = history,
+            now = { testScheduler.currentTime },
+        )
+        val baseline = RealtimeVideoFormat(1024, 1920, 30)
+        val initial = controller.prepareQuality(baseline)
+        assertEquals(1, initial.uplinkLevel)
+        assertEquals(4, initial.downlinkLevel)
+
+        controller.resetQuality()
+        time += 3_600_000L
+        val reconnected = controller.prepareQuality(baseline)
+        assertEquals(2, reconnected.uplinkLevel)
+        assertEquals(2, reconnected.downlinkLevel)
+    }
+
     @Test
     public fun `disabled adaptation starts at L1 and keeps manual changes out of history`() = runTest {
         var reads = 0
@@ -256,7 +300,7 @@ public class QualityControllerTest {
         testScheduler.advanceTimeBy(1_000)
         val proposed = controller.proposeQuality(poor, 2_000)
         assertNull(proposed.uplink)
-        assertEquals(2, proposed.downlink?.to)
+        assertEquals(3, proposed.downlink?.to)
     }
 
     @Test

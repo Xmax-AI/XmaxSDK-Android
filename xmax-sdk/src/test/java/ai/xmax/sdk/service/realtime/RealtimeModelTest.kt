@@ -42,7 +42,7 @@ public class RealtimeModelTest {
             assertTrue(model.supportedVideoFormats.all { it.fps == model.defaultFrameRate })
             assertEquals(RealtimeVideoFormat(1024, 1920, 30), model.defaultCameraVideoFormat)
             assertTrue(model.defaultCameraVideoFormat in model.supportedVideoFormats)
-            assertEquals(500_000, model.minimumInputPixels)
+            assertEquals(200_000, model.minimumInputPixels)
             assertEquals(2_100_000, model.maximumInputPixels)
             assertEquals(32, model.inputSizeAlignment)
         }

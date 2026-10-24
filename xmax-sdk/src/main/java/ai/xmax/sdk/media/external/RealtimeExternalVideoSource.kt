@@ -26,7 +26,8 @@ public interface RealtimeExternalVideoSource {
 
     /**
      * The original, orientation-corrected frame dimensions and capture rate, fixed until [stop].
-     * Submitted pixels must match these dimensions; the SDK resolves and applies output resizing.
+     * Submitted pixels must match these dimensions; the SDK resizes output into the model's area limits
+     * with four-pixel alignment, enlarging small frames when necessary.
      */
     public val videoFormat: RealtimeVideoFormat
 

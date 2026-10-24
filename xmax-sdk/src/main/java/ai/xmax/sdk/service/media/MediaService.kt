@@ -62,13 +62,12 @@ internal class MediaService(
     /**
      * Resolves local media dimensions and validates camera resolution buckets.
      *
-     * Non-camera media respects pixel-area limits and four-pixel alignment without enlargement.
+     * Media is upscaled or downscaled into the model's area limits with four-pixel alignment.
      *
      * @param size The media frame dimensions, in pixels.
      * @param source The source kind; only cameras must exactly match a fixed bucket.
-     * @return Media dimensions preserving the exact aspect ratio where possible.
-     * @throws XmaxError If dimensions are invalid, a camera misses its buckets, or aligned output is below
-     * the model's minimum input area.
+     * @return Media dimensions within the area limits, preserving exact aspect ratio where possible.
+     * @throws XmaxError If dimensions are invalid or a camera misses its configured buckets.
      */
     override fun resolveMediaSize(
         size: IntSize,
@@ -97,22 +96,17 @@ internal class MediaService(
         }
 
         val pixels = size.width.toDouble() * size.height
-        val scale = minOf(
-            1.0,
-            sqrt(model.maximumInputPixels / pixels),
+        val pixelLimits = model.minimumInputPixels..model.maximumInputPixels
+        val targetPixels = pixels.coerceIn(
+            pixelLimits.first.toDouble(),
+            pixelLimits.last.toDouble(),
         )
-        val resolvedSize = alignedSize(
-            size,
-            scale,
-        )
-        if (resolvedSize.width.toLong() * resolvedSize.height < model.minimumInputPixels) {
-            throw XmaxError(
-                code = XmaxErrorCode.INVALID_CONFIGURATION,
-                message = "Media resolution must contain at least ${model.minimumInputPixels} pixels",
-            )
-        }
 
-        return resolvedSize
+        return alignedSize(
+            size,
+            scale = sqrt(targetPixels / pixels),
+            pixelLimits = pixelLimits,
+        )
     }
 
     /**
@@ -148,16 +142,18 @@ internal class MediaService(
     }
 
     /**
-     * Use integer multiples of the reduced aspect ratio for four-pixel alignment, falling back to independent
-     * downward alignment when needed.
+     * Resolves four-pixel-aligned dimensions at a uniform scale, preferring exact aspect ratio.
      *
      * @param size The original integer media dimensions.
-     * @param scale The aspect-preserving scale, no greater than 1.
-     * @return Four-pixel-aligned dimensions within the scaled bounds.
+     * @param scale The requested uniform dimension scale.
+     * @param pixelLimits Optional inclusive area bounds; null only rounds dimensions down.
+     * @return Aligned dimensions within the area limits, or the scaled bounds when limits are absent.
+     * @throws XmaxError If the scaled bounds cannot fit four by four pixels without area limits.
      */
     private fun alignedSize(
         size: IntSize,
         scale: Double,
+        pixelLimits: IntRange? = null,
     ): IntSize {
         var divisor = size.width
         var remainder = size.height
@@ -166,16 +162,42 @@ internal class MediaService(
             divisor = remainder
             remainder = next
         }
-        val alignedScale = floor(divisor * scale / 4).toInt() * 4
-        if (alignedScale >= 4) {
+
+        val ratioWidth = size.width / divisor
+        val ratioHeight = size.height / divisor
+        var alignedScale = floor(divisor * scale / 4).toInt() * 4
+        if (pixelLimits != null) {
+            val ratioPixels = ratioWidth.toDouble() * ratioHeight
+            val minimumScale = sqrt(pixelLimits.first / ratioPixels)
+            val minimumAlignedScale = ceil(minimumScale / 4).toInt() * 4
+            alignedScale = maxOf(
+                alignedScale,
+                minimumAlignedScale,
+            )
+        }
+
+        val exactWidth = ratioWidth.toDouble() * alignedScale
+        val exactHeight = ratioHeight.toDouble() * alignedScale
+        val maximumPixels = pixelLimits?.last?.toDouble() ?: Double.POSITIVE_INFINITY
+        if (alignedScale >= 4 && exactWidth * exactHeight <= maximumPixels) {
             return IntSize(
-                size.width / divisor * alignedScale,
-                size.height / divisor * alignedScale,
+                exactWidth.toInt(),
+                exactHeight.toInt(),
             )
         }
 
         val width = floor(size.width * scale / 4).toInt() * 4
         val height = floor(size.height * scale / 4).toInt() * 4
+        val alignedPixels = width.toLong() * height
+        if (pixelLimits != null && alignedPixels !in pixelLimits.first.toLong()..pixelLimits.last.toLong()) {
+            return boundedAlignedSize(
+                width = size.width * scale,
+                height = size.height * scale,
+                alignment = 4,
+                pixelLimits = pixelLimits,
+            )
+        }
+
         if (width < 4 || height < 4) {
             throw XmaxError(
                 XmaxErrorCode.INVALID_CONFIGURATION,
@@ -247,24 +269,29 @@ internal class MediaService(
         return boundedAlignedSize(
             width = size.width * scale,
             height = size.height * scale,
+            alignment = model.inputSizeAlignment,
+            pixelLimits = model.minimumInputPixels..model.maximumInputPixels,
         )
     }
 
     /**
-     * Calculates dimensions within pixel-area and model alignment constraints.
+     * Selects the closest dimensions satisfying area and alignment limits.
      *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @return The width and height satisfying the sizing constraints.
+     * @param width The scaled target width, in pixels.
+     * @param height The scaled target height, in pixels.
+     * @param alignment The required multiple for each output dimension.
+     * @param pixelLimits The inclusive output area bounds, in pixels.
+     * @return Valid dimensions with the smallest relative width and height error.
      */
     private fun boundedAlignedSize(
         width: Double,
         height: Double,
+        alignment: Int,
+        pixelLimits: IntRange,
     ): IntSize {
-        val alignment = model.inputSizeAlignment
         val unitPixels = alignment.toLong() * alignment
-        val minimumUnits = (model.minimumInputPixels.toLong() + unitPixels - 1L) / unitPixels
-        val maximumUnits = model.maximumInputPixels.toLong() / unitPixels
+        val minimumUnits = (pixelLimits.first.toLong() + unitPixels - 1L) / unitPixels
+        val maximumUnits = pixelLimits.last.toLong() / unitPixels
         var bestSize = IntSize.Zero
         var bestDistance = Double.POSITIVE_INFINITY
 

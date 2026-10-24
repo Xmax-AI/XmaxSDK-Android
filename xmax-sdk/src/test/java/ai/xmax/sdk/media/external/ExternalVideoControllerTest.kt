@@ -191,15 +191,23 @@ class ExternalVideoControllerTest {
         } finally { controller.stop(); Dispatchers.resetMain() }
     }
 
-    @Test fun `external media does not require a camera bucket but rejects undersized frames before binding`() = runTest {
+    @Test fun `external media upscales small original frames and does not require a camera bucket`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val rtc = RtcManagingStub()
-        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN), {}, {}, {})
+        val frames = mutableListOf<VideoFrame>()
+        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN), frames::add, {}, { throw it })
         try {
-            val small = Source(videoFormat = RealtimeVideoFormat(640, 480, 30))
-            try { controller.create(small); fail("Expected undersized input") } catch (_: XmaxError) { }
-            assertNull(small.sink)
-            assertTrue(rtc.calls.isEmpty())
+            val small = Source(videoFormat = RealtimeVideoFormat(200, 200, 30))
+            val resolved = RealtimeVideoFormat(448, 448, 30)
+            val local = controller.create(small)
+            assertEquals(resolved, local.videoTrack!!.videoFormat)
+            assertEquals(resolved, small.sink!!.videoFormat)
+            small.sink!!.pushVideo(ByteArray(200 * 200 * 4), 1)
+            assertEquals(448, frames.single().format.width)
+            assertEquals(448, frames.single().format.height)
+            assertEquals(1L, frames.single().timestampUs)
+            assertEquals(RealtimeVideoFormat(200, 200, 30), small.videoFormat)
+            controller.stop()
             val source = Source(videoFormat = RealtimeVideoFormat(1024, 1920, 30))
             assertEquals(source.videoFormat, controller.create(source).videoTrack!!.videoFormat)
             controller.stop()

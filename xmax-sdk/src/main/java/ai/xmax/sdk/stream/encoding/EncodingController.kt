@@ -32,12 +32,20 @@ internal class EncodingController(
      *
      * An unspecified minimum uses 500 kbps, capped by the maximum.
      *
-     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param videoFormat Four-pixel-aligned dimensions, frame rate, and uplink encoding options.
+     * @throws XmaxError If dimensions, frame rate, or bitrate bounds are invalid.
      */
     override fun configure(
         videoFormat: RealtimeVideoFormat,
     ) {
         videoFormat.validate()
+        if (videoFormat.width % 4 != 0 || videoFormat.height % 4 != 0) {
+            throw XmaxError(
+                code = XmaxErrorCode.INVALID_CONFIGURATION,
+                message = "Uplink video width and height must be multiples of 4",
+            )
+        }
+
         val minimum: Int
         val maximum: Int
         if (videoFormat.minimumBitrate != null && videoFormat.maximumBitrate != null) {

@@ -20,7 +20,7 @@ internal interface EncodingControlling {
     /**
      * Validates and applies a resolved encoder configuration.
      *
-     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param videoFormat Four-pixel-aligned dimensions, frame rate, and uplink encoding options.
      */
     fun configure(
         videoFormat: RealtimeVideoFormat,

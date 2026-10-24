@@ -26,14 +26,13 @@ public interface MediaServicing {
     /**
      * Resolves local media dimensions and validates camera resolution buckets.
      *
-     * Non-camera media respects pixel-area limits and four-pixel alignment without enlargement,
+     * Media is upscaled or downscaled into the model's area limits with four-pixel alignment,
      * preserving exact aspect ratio where possible.
      *
      * @param size The requested camera dimensions or the source's orientation-corrected pixel dimensions.
      * @param source The source kind; cameras must match configured resolution buckets.
      * @return Media dimensions satisfying area, aspect-ratio, and four-pixel alignment constraints.
-     * @throws XmaxError If dimensions are invalid, a camera misses its buckets, or aligned output is below
-     * the model's minimum input area.
+     * @throws XmaxError If dimensions are invalid or a camera misses its configured buckets.
      */
     public fun resolveMediaSize(
         size: IntSize,

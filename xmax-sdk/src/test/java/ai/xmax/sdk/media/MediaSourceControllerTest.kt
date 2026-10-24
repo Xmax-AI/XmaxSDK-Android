@@ -55,9 +55,26 @@ class MediaSourceControllerTest {
     }
 
     @Test
-    fun `video rejects invalid or sub-alignment media dimensions before playback`() {
-        for ((width, height) in listOf(0 to 1080, -1 to 1080, 1 to 1, 2 to 2, 3 to 3, 640 to 480, 999 to 501)) {
+    fun `video rejects invalid media dimensions before playback`() {
+        for ((width, height) in listOf(0 to 1080, -1 to 1080, 1080 to 0, 1080 to -1)) {
             assertThrows(XmaxError::class.java) { controller.resolveVideoFormat(metadata(width, height)) }
+        }
+    }
+
+    @Test
+    fun `small video metadata resolves to an upscaled oriented media format`() {
+        for ((input, expected) in listOf(
+            (1 to 1) to RealtimeVideoFormat(448, 448, 30),
+            (2 to 2) to RealtimeVideoFormat(448, 448, 30),
+            (3 to 3) to RealtimeVideoFormat(448, 448, 30),
+            (200 to 200) to RealtimeVideoFormat(448, 448, 30),
+            (256 to 480) to RealtimeVideoFormat(352, 660, 30),
+            (640 to 480) to RealtimeVideoFormat(640, 480, 30),
+            (512 to 960) to RealtimeVideoFormat(512, 960, 30),
+        )) {
+            assertEquals(expected, controller.resolveVideoFormat(metadata(input.first, input.second)))
+            assertEquals(expected.copy(width = expected.height, height = expected.width),
+                controller.resolveVideoFormat(metadata(input.first, input.second, VideoRotation.ROTATION_90)))
         }
     }
 
