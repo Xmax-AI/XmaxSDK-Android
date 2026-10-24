@@ -11,16 +11,16 @@
 package ai.xmax.sdk
 
 /**
- * 归一化坐标系中的二维点。
+ * A point in normalized coordinates.
  */
 public data class RealtimePoint(
     /**
-     * 媒体横向相对位置，范围为 [0, 1]。
+     * The relative horizontal media position, from 0 to 1.
      */
     public val x: Double,
 
     /**
-     * 媒体纵向相对位置，范围为 [0, 1]。
+     * The relative vertical media position, from 0 to 1.
      */
     public val y: Double,
 )

@@ -21,65 +21,73 @@ import io.agora.rtc2.video.VideoCanvas
 import io.agora.rtc2.video.VideoEncoderConfiguration
 
 /**
- * 将中性视频配置转换为声网类型；输出缓冲区仅供同步提交使用。
+ * Converts neutral video configuration to Agora types; output buffers support synchronous submission only.
  */
 internal object RtcVideoConverter {
 
     /**
-     * 本地预览随摄像头自动切换镜像：前置开启、后置关闭；上传编码单独配置。
+     * Local preview mirroring follows the camera: enabled for front and disabled for rear. Uplink mirroring
+     * is configured separately.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
-     * @return 绑定指定视图和显示模式的 RTC 视频画布。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
+     * @return An RTC canvas with the requested view and scaling mode.
      */
     fun makeLocalCanvas(
         view: View?,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ): VideoCanvas =
-        makeCanvas(view, contentMode).apply {
+        makeCanvas(
+            view,
+            contentMode,
+        ).apply {
             mirrorMode = Constants.VIDEO_MIRROR_MODE_AUTO
         }
 
     /**
-     * 创建指定视图、用户及显示模式对应的 RTC 视频画布。
+     * Creates an RTC video canvas for a view, user, and scaling mode.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
-     * @param uid RTC 分配的数字用户标识；默认值为 `0`。
-     * @return 绑定指定视图和显示模式的 RTC 视频画布。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
+     * @param uid The numeric RTC user identifier; defaults to 0.
+     * @return An RTC canvas with the requested view and scaling mode.
      */
     fun makeCanvas(
         view: View?,
         contentMode: VideoContentMode,
-        uid: Int = 0
+        uid: Int = 0,
     ): VideoCanvas =
-        VideoCanvas(view, convertRenderMode(contentMode), uid).apply {
+        VideoCanvas(
+            view,
+            convertRenderMode(contentMode),
+            uid,
+        ).apply {
             mirrorMode = Constants.VIDEO_MIRROR_MODE_DISABLED
         }
 
     /**
-     * 将 SDK 显示模式转换为 RTC 等比适配或等比裁切模式。
+     * Converts SDK fit or fill scaling to the RTC rendering mode.
      *
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
-     * @return RTC 使用的等比适配或等比裁切模式值。
+     * @param contentMode Aspect-preserving fit or fill scaling.
+     * @return The RTC aspect-fit or aspect-fill mode.
      */
     fun convertRenderMode(
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ): Int = when (contentMode) {
         VideoContentMode.FIT -> VideoCanvas.RENDER_MODE_FIT
         VideoContentMode.FILL -> VideoCanvas.RENDER_MODE_HIDDEN
     }
 
     /**
-     * 整理平面 stride；声网数组帧只接受连续布局，时间戳单位为毫秒。
+     * Packs plane strides for Agora array frames, which require contiguous pixels and millisecond timestamps.
      *
-     * @param frame 待处理、显示或提交的视频帧。
-     * @param seiData 附加视频元数据；null 表示不附加，当前 Agora 适配不使用该字段。
-     * @return 满足 RTC 输入格式要求的视频帧。
+     * @param frame The video frame to process, display, or submit.
+     * @param seiData Optional video metadata; unused by the current Agora implementation.
+     * @return A video frame matching RTC input requirements.
      */
     fun convertFrame(
         frame: VideoFrame,
-        seiData: ByteArray? = null
+        seiData: ByteArray? = null,
     ): AgoraVideoFrame {
         val width = frame.format.width
         val height = frame.format.height
@@ -90,9 +98,24 @@ internal object RtcVideoConverter {
             else -> 1
         }
         require(frame.planes.size == expected) { "Video frame requires $expected data planes" }
-        val packed = pixel in setOf(VideoPixelFormat.RGBA, VideoPixelFormat.BGRA, VideoPixelFormat.ARGB)
-        val rows = if (packed) listOf(height) else listOf(height, height / 2, height / 2).take(expected)
-        val columns = if (packed) listOf(width * 4) else if (expected == 3) listOf(width, width / 2, width / 2) else listOf(width, width)
+        val packed = pixel in setOf(
+            VideoPixelFormat.RGBA,
+            VideoPixelFormat.BGRA,
+            VideoPixelFormat.ARGB,
+        )
+        val rows = if (packed) listOf(height) else listOf(
+            height,
+            height / 2,
+            height / 2,
+        ).take(expected)
+        val columns = if (packed) listOf(width * 4) else if (expected == 3) listOf(
+            width,
+            width / 2,
+            width / 2,
+        ) else listOf(
+            width,
+            width,
+        )
         val size = rows.indices.sumOf { rows[it] * columns[it] }
         val data = if (packed && pixel != VideoPixelFormat.ARGB && frame.planes[0].stride == width * 4 && frame.planes[0].byteLength == size) {
             frame.planes[0].selectedBytesView()
@@ -105,7 +128,11 @@ internal object RtcVideoConverter {
                     require((rows[index] - 1L) * plane.stride + columns[index] <= source.remaining())
                     repeat(rows[index]) { row ->
                         source.position(row * plane.stride)
-                        source.get(output, offset, columns[index])
+                        source.get(
+                            output,
+                            offset,
+                            columns[index],
+                        )
                         offset += columns[index]
                     }
                 }
@@ -144,18 +171,22 @@ internal object RtcVideoConverter {
     }
 
     /**
-     * 前置摄像头的上行镜像与预览保持一致；后置及外部输入（position 为 null）不镜像。
+     * Front-camera uplink mirroring matches preview; rear cameras and external input with null position are
+     * not mirrored.
      *
-     * @param configuration 上行视频的尺寸、帧率、码率及编码偏好。
-     * @param cameraPosition 本地摄像头方向；null 表示外部视频输入。
-     * @return 供 RTC 引擎使用的编码参数。
+     * @param configuration Uplink dimensions, frame rate, bitrate, and encoding preference.
+     * @param cameraPosition The camera position, or null for external video input.
+     * @return The RTC encoder configuration.
      */
     fun makeEncoderConfiguration(
         configuration: VideoEncodingConfiguration,
         cameraPosition: CameraPosition? = null,
     ): VideoEncoderConfiguration =
         VideoEncoderConfiguration().apply {
-            dimensions = VideoEncoderConfiguration.VideoDimensions(configuration.width, configuration.height)
+            dimensions = VideoEncoderConfiguration.VideoDimensions(
+                configuration.width,
+                configuration.height,
+            )
             frameRate = configuration.frameRate
             bitrate = configuration.maximumBitrate
             minBitrate = configuration.minimumBitrate

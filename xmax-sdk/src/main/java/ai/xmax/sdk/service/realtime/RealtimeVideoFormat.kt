@@ -11,67 +11,69 @@
 package ai.xmax.sdk
 
 /**
- * 实时视频的编码策略偏好。
+ * The realtime video encoder's quality preference.
  */
 public enum class RealtimeVideoEncoderPreference {
 
     /**
-     * 平衡帧率和分辨率。
+     * Balances frame rate and resolution.
      */
     AUTO,
 
     /**
-     * 优先保障帧率。
+     * Prioritizes frame rate.
      */
     MAINTAIN_FRAMERATE,
 
     /**
-     * 优先保障分辨率。
+     * Prioritizes resolution.
      */
     MAINTAIN_QUALITY,
 }
 
 /**
- * 实时视频的尺寸、帧率和上行编码配置。
- * 本地图片和视频流以此描述媒体输入基准；模型生成画布独立选择，传输档位不会覆盖输入基准。
+ * Realtime video dimensions, frame rate, and uplink encoding settings.
+ * Local images and videos use this as their media baseline; the model canvas is separate and quality
+ * adaptation does not change the baseline.
  */
 public data class RealtimeVideoFormat @JvmOverloads constructor(
     /**
-     * 视频宽度，单位为像素，必须为正偶数。
+     * The width in pixels; must be positive and even.
      */
     public val width: Int,
 
     /**
-     * 视频高度，单位为像素，必须为正偶数。
+     * The height in pixels; must be positive and even.
      */
     public val height: Int,
 
     /**
-     * 视频帧率，单位为 fps，必须大于 0。
+     * The frame rate in fps; must be positive.
      */
     public val fps: Int,
 
     /**
-     * 最低上行码率，单位为 kbps；null 使用 500 且不超过最高码率，0 表示不设最低码率。
+     * The minimum uplink bitrate, in kbps; null uses 500 capped at the maximum, and 0 disables the minimum.
      */
     public val minimumBitrate: Int? = null,
 
     /**
-     * 最高上行码率，单位为 kbps；null 使用 SDK 默认值，指定时必须大于 0 且不低于最低码率。
+     * The maximum uplink bitrate, in kbps; null uses the SDK default. Explicit values must be positive and at
+     * least the minimum.
      */
     public val maximumBitrate: Int? = null,
 
     /**
-     * 上行编码策略偏好；默认流畅优先，优先保障帧率。
+     * The uplink encoding preference; defaults to prioritizing frame rate.
      */
     public val encoderPreference: RealtimeVideoEncoderPreference =
         RealtimeVideoEncoderPreference.MAINTAIN_FRAMERATE,
 ) {
 
     /**
-     * 校验尺寸、帧率和显式指定的码率范围。
+     * Validates dimensions, frame rate, and explicit bitrate bounds.
      *
-     * @throws XmaxError 尺寸、帧率或码率范围不满足约束时抛出配置错误。
+     * @throws XmaxError If dimensions, frame rate, or bitrate bounds are invalid.
      */
     public fun validate() {
         if (width <= 0 || height <= 0 || fps <= 0 || width % 2 != 0 || height % 2 != 0) {

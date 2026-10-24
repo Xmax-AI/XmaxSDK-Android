@@ -38,62 +38,62 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.sync.withLock
 
 /**
- * 统一协调本地媒体所有权以及 RTC Engine 生命周期。
+ * Coordinates local media ownership and the RTC engine lifecycle.
  */
 internal class MediaController(
     /**
-     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     * The manager for RTC capture, publication, subscription, and rendering.
      */
     private val rtcManager: RtcManaging,
 
     /**
-     * 本地相机输入控制器。
+     * The local camera controller.
      */
     private val cameraController: CameraController,
 
     /**
-     * 本地图片输入控制器。
+     * The local image controller.
      */
     private val imageController: ImageController? = null,
 
     /**
-     * 本地视频输入控制器。
+     * The local video controller.
      */
     private val videoController: VideoController? = null,
 
     /**
-     * 接入方自采集视频输入控制器。
+     * The app-provided external video controller.
      */
     private val externalController: ExternalVideoController? = null,
 
     /**
-     * 服务端读取网络视频的输入控制器。
+     * The controller for video read directly by the server.
      */
     private val networkVideoController: NetworkVideoController? = null,
 
     /**
-     * 提交触控轨迹的控制器。
+     * The controller submitting interaction trajectories.
      */
     private val interactionController: InteractionController = InteractionController(),
 ) : MediaControlling {
 
     /**
-     * 本地媒体操作与状态访问的并发保护。
+     * The mutex serializing local media operations.
      */
     private val operationMutex = Mutex()
 
     /**
-     * 保护当前媒体源状态的锁。
+     * The lock protecting active source state.
      */
     private val stateLock = Any()
 
     /**
-     * 当前媒体来源及对外提供的输入快照。
+     * The active local media source kind.
      */
     private var activeSource: LocalMediaKind? = null
 
     /**
-     * 当前媒体源提供的本地视频轨道。
+     * The track supplied by the current media source.
      */
     override val currentTrack: RealtimeVideoTrack?
         get() = when (synchronized(stateLock) { activeSource }) {
@@ -106,13 +106,13 @@ internal class MediaController(
         }
 
     /**
-     * 当前本地轨道的输入规格。
+     * The current local track's input format.
      */
     override val currentVideoFormat: RealtimeVideoFormat?
         get() = currentTrack?.videoFormat
 
     /**
-     * 当前媒体源是否包含可发布的音频。
+     * Whether the current source contains publishable audio.
      */
     override val hasAudio: Boolean
         get() = when (synchronized(stateLock) { activeSource }) {
@@ -123,7 +123,7 @@ internal class MediaController(
         }
 
     /**
-     * 当前网络视频的服务端参考配置。
+     * The server reference for the current network video.
      */
     override val networkVideoReference: RealtimeReferenceVideo?
         get() = if (synchronized(stateLock) { activeSource == LocalMediaKind.NETWORK_VIDEO }) {
@@ -131,22 +131,24 @@ internal class MediaController(
         } else null
 
     /**
-     * 网络视频生成结束时的回调。
+     * The network video generation completion callback.
      */
     override val networkVideoFinishHandler: (() -> Unit)?
         get() = networkVideoController?.onFinish
 
     /**
-     * 创建由服务端直接读取 URL 的网络视频源；仅支持 HTTP/HTTPS。
-     * 本地预览静音播放一次，不发布本地音视频；生成首帧就绪后订阅远端音频。
-     * [onFinish] 在当前任务收到服务端完成事件且首帧就绪后于主线程调用一次，
-     * 不代表远端尾帧已经显示完毕。创建源不会开始生成；资源由 [close] 统一释放。
+     * Creates a video source read directly by the server from an HTTP or HTTPS URL.
+     * The local preview plays once without sound or local publication; remote audio begins after the first
+     * generated frame is ready.
+     * [onFinish] runs once on the main thread after the current task's server completion event and
+     * first-frame readiness;
+     * it does not confirm that the last remote frame has been displayed. Creation does not start generation;
+     * [close] releases the source.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param sampleMethod 服务端读取网络视频时采用的采样方式。
-     * @param onFinish 网络视频任务完成的通知；null 表示不接收完成通知。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param sampleMethod The sampling method used when the server reads the network video.
+     * @param onFinish The completion callback for the network video task, or null to omit it.
      */
     override suspend fun createNetworkVideoStream(
         uri: Uri,
@@ -154,92 +156,108 @@ internal class MediaController(
         sampleMethod: RealtimeVideoSampleMethod,
         onFinish: (() -> Unit)?,
     ): RealtimeMediaStream = createSource(LocalMediaKind.NETWORK_VIDEO) {
-        checkNotNull(networkVideoController).create(uri, videoFormat, sampleMethod, onFinish)
+        checkNotNull(networkVideoController).create(
+            uri,
+            videoFormat,
+            sampleMethod,
+            onFinish,
+        )
     }
 
     /**
-     * 当前媒体来源及对外提供的输入快照。
+     * Whether the active media source supplies external frames.
      */
     override val isExternalVideo: Boolean
         get() = synchronized(stateLock) { activeSource == LocalMediaKind.EXTERNAL }
 
     /**
-     * 设置 RTC 摄像头预览就绪监听器，传入空值时清除。
+     * Sets the camera preview readiness listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     override fun setCameraPreviewReadyListener(
-        listener: RealtimeCameraPreviewReadyListener?
+        listener: RealtimeCameraPreviewReadyListener?,
     ) {
         cameraController.setPreviewReadyListener(listener)
     }
 
     /**
-     * 为指定生成任务启用交互轨迹提交。
+     * Enables interaction submission for a generation task.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
     override suspend fun startInteraction(
         taskId: String,
         videoFormat: RealtimeVideoFormat,
     ) {
-        interactionController.startInteraction(taskId, videoFormat)
+        interactionController.startInteraction(
+            taskId,
+            videoFormat,
+        )
     }
 
     /**
-     * 停止当前任务的交互轨迹提交并丢弃未发送的数据。
+     * Stops interaction submission and discards pending trajectories.
      */
     override suspend fun stopInteraction() {
         interactionController.stopInteraction()
     }
 
     /**
-     * 提交当前显示画面对应的触控轨迹。
+     * Submits a trajectory for the currently displayed image.
      *
-     * @param frame 当前触控轨迹及显示画面尺寸。
+     * @param frame The current trajectory and displayed image dimensions.
      */
     override fun submitInteraction(
-        frame: InteractionFrame
+        frame: InteractionFrame,
     ) {
         interactionController.submitInteraction(frame)
     }
 
     /**
-     * 创建并启动相机输入；接入方须先取得所需权限，输入尺寸会按模型规则调整。
-     * 麦克风默认关闭；启用后在连接时开始采集、断开时停止，不进行本地回放。
+     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
+     * follow the model's constraints.
+     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
+     * disconnection without local playback.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param position 需要使用的前置或后置摄像头。
-     * @param useMicrophone 是否启用麦克风；启用前须由应用取得录音权限。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param position The front or rear camera to use.
+     * @param useMicrophone Whether to use the microphone; your app must obtain recording permission first.
      */
     override suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
         position: CameraPosition,
         useMicrophone: Boolean,
     ): RealtimeMediaStream = createSource(LocalMediaKind.CAMERA) {
-        cameraController.createLocalCameraStream(videoFormat, position, useMicrophone)
+        cameraController.createLocalCameraStream(
+            videoFormat,
+            position,
+            useMicrophone,
+        )
     }
 
     /**
-     * 更新摄像头规格，保留媒体所有权和当前轨道。
+     * Updates camera settings while retaining source ownership and the active track.
      *
-     * @param videoFormat 模型支持的尺寸、采集帧率与编码配置。
+     * @param videoFormat Model-supported dimensions, capture frame rate, and encoding settings.
      */
     override suspend fun updateCameraFormat(
         videoFormat: RealtimeVideoFormat,
     ) {
         operationMutex.withLock {
             if (synchronized(stateLock) { activeSource } != LocalMediaKind.CAMERA) {
-                throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Camera preview is not started")
+                throw XmaxError(
+                    XmaxErrorCode.INVALID_CONFIGURATION,
+                    "Camera preview is not started",
+                )
             }
             cameraController.updateVideoFormat(videoFormat)
         }
     }
 
     /**
-     * 启动当前相机源的麦克风采集。
+     * Starts microphone capture for the current camera source.
      */
     override fun startMicrophoneCapture() {
         if (synchronized(stateLock) { activeSource } == LocalMediaKind.CAMERA) {
@@ -248,7 +266,7 @@ internal class MediaController(
     }
 
     /**
-     * 停止当前相机源的麦克风采集。
+     * Stops microphone capture for the current camera source.
      */
     override fun stopMicrophoneCapture() {
         if (synchronized(stateLock) { activeSource } == LocalMediaKind.CAMERA) {
@@ -257,12 +275,12 @@ internal class MediaController(
     }
 
     /**
-     * 解码图片字节并创建保持媒体比例、持续输出图片帧的本地流。
-     * 使用方向校正后的图片尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率。
-     * 模型生成画布独立选择，服务端等比适配并裁去补边后输出。
+     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
+     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The model canvas is selected separately; the server fits the image and removes padding from output.
      *
-     * @param imageData 可解码的图片文件字节，不是裸像素数据。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param imageData Encoded image file bytes, not raw pixels.
      */
     override suspend fun createLocalImageStream(
         imageData: ByteArray,
@@ -271,11 +289,11 @@ internal class MediaController(
     }
 
     /**
-     * 从 Bitmap 创建保持媒体比例的本地图片流。
-     * 使用 Bitmap 尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率，模型生成画布独立选择。
+     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
+     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
+     * rate and a separately selected model canvas.
      *
-     * @param bitmap 待处理或显示的 Android 图片。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param bitmap The Android image to process or display.
      */
     override suspend fun createLocalImageStream(
         bitmap: Bitmap,
@@ -284,12 +302,12 @@ internal class MediaController(
     }
 
     /**
-     * 从可读取的 URI 创建本地图片流；读取权限由接入方保证。
-     * 使用方向校正后的图片尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率。
-     * 模型生成画布独立选择，服务端等比适配并裁去补边后输出。
+     * Creates a local image stream from a readable URI; your app owns read permissions.
+     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The model canvas is selected separately; the server fits the image and removes padding from output.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
      */
     override suspend fun createLocalImageStream(
         uri: Uri,
@@ -298,38 +316,39 @@ internal class MediaController(
     }
 
     /**
-     * 停止当前相机输入并释放其资源；当前源不是相机时不执行释放。
+     * Stops and releases the current camera source; does nothing for other source types.
      */
     override suspend fun stopLocalCameraStream() {
         stopSource(LocalMediaKind.CAMERA)
     }
 
     /**
-     * 停止当前图片流并释放其资源；当前源不是图片时不执行释放。
+     * Stops and releases the current image source; does nothing for other source types.
      */
     override suspend fun stopLocalImageStream() {
         stopSource(LocalMediaKind.IMAGE)
     }
 
     /**
-     * 当前媒体来源及对外提供的输入快照。
+     * The active local media source kind.
      */
     override val isLocalVideo: Boolean
         get() = synchronized(stateLock) { activeSource == LocalMediaKind.VIDEO }
 
     /**
-     * 当前媒体源是否为本地图片。
+     * Whether the active source is a local image.
      */
     override val isLocalImage: Boolean
         get() = synchronized(stateLock) { activeSource == LocalMediaKind.IMAGE }
 
     /**
-     * 从 URI 创建本地视频流；存在音轨时同时提供视频文件的音频输入。
-     * 使用方向校正后的素材尺寸（受模型面积上限约束并按 4 对齐）和模型默认帧率。
-     * SDK 单独选择生成画布，服务端等比适配并裁边输出。
+     * Creates a local video stream from a URI, including its audio track when present.
+     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
+     * output.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
      */
     override suspend fun createLocalVideoStream(
         uri: Uri,
@@ -338,32 +357,39 @@ internal class MediaController(
     }
 
     /**
-     * 绑定接入方自行采集、解码或处理的视频源；SDK 不负责摄像头或播放器的启停和释放。
-     * 默认仅视频，音频和 SDK 容器内的本地预览由 source 按需提供。
-     * 未指定 videoFormat 时使用源视频尺寸和模型默认帧率；最终尺寸按模型规则校验、对齐。
-     * 外部源须按 sink.videoFormat 输出帧。
+     * Binds video collected, decoded, or processed by your app; your app owns camera or player startup,
+     * shutdown, and release.
+     * Video is provided by default; the source may optionally supply audio and a preview inside the SDK
+     * container.
+     * When videoFormat is absent, uses source dimensions and the model's default frame rate, subject to model
+     * validation and alignment.
+     * The external source must deliver frames matching sink.videoFormat.
      *
-     * @param source 接入方负责启停及释放的外部音视频源。
-     * @param videoFormat 媒体输入的尺寸、帧率及可选上行编码配置；null 表示使用媒体解析结果或来源默认值。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param source The external media source whose lifecycle your app owns.
+     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
+     * source or parsed media defaults.
      */
     override suspend fun createExternalVideoStream(
         source: RealtimeExternalVideoSource,
         videoFormat: RealtimeVideoFormat?,
     ): RealtimeMediaStream =
-        createSource(LocalMediaKind.EXTERNAL) { checkNotNull(externalController).create(source, videoFormat) }
+        createSource(LocalMediaKind.EXTERNAL) { checkNotNull(externalController).create(
+            source,
+            videoFormat,
+        ) }
 
     /**
-     * 解绑外部输入，停止前须断开生成连接；不关闭接入方的摄像头或播放器。
+     * Unbinds external input after disconnection without closing your app's camera or player.
      */
     override suspend fun stopExternalVideoStream() { stopSource(LocalMediaKind.EXTERNAL) }
 
     /**
-     * 切流不销毁引擎；失败时保留媒体类型，供后续重试或完整清理正确回收资源。
+     * Replacement retains the engine and source kind on failure so retries or final cleanup can still release
+     * the correct resources.
      *
-     * @param videoFormat 媒体输入的尺寸、帧率及可选上行编码配置；null 表示使用媒体解析结果或来源默认值。
-     * @param targetSource 创建替换用外部视频源的挂起函数。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
+     * source or parsed media defaults.
+     * @param targetSource The suspending callback preparing and returning the replacement source.
      */
     override suspend fun replaceExternalVideoStream(
         videoFormat: RealtimeVideoFormat?,
@@ -374,23 +400,27 @@ internal class MediaController(
         controller.stop()
         val source = targetSource()
         currentCoroutineContext().ensureActive()
-        controller.create(source, videoFormat)
+        controller.create(
+            source,
+            videoFormat,
+        )
     }
 
     /**
-     * 停止当前视频流并释放解码与预览资源；当前源不是视频时不执行释放。
+     * Stops the current video source and releases decoding and preview resources; does nothing for other
+     * source types.
      */
     override suspend fun stopLocalVideoStream() {
         stopSource(LocalMediaKind.VIDEO)
     }
 
     /**
-     * 设置本地预览是否静音，不改变保存的音量值。
+     * Mutes or unmutes local preview without changing its stored volume.
      *
-     * @param muted 是否静音。
+     * @param muted Whether audio is muted.
      */
     override suspend fun setLocalAudioPreviewMuted(
-        muted: Boolean
+        muted: Boolean,
     ) {
         if (synchronized(stateLock) { activeSource } == LocalMediaKind.EXTERNAL) {
             externalController?.setAudio(muted = muted)
@@ -401,21 +431,19 @@ internal class MediaController(
     }
 
     /**
-     * 设置当前本地媒体的预览音量，范围为 0 到 1，不影响提交给 RTC 的音频数据。
+     * Sets local preview volume from 0 to 1 without changing audio submitted to RTC.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     override suspend fun setLocalAudioVolume(
-        volume: Float
+        volume: Float,
     ) {
         videoController?.setLocalAudioVolume(volume)
         externalController?.setAudio(volume = volume)
     }
 
     /**
-     * 切换当前相机输入的方向，并更新本地轨道信息。
-     *
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * Switches the active camera and updates local track metadata.
      */
     override suspend fun switchCamera(): RealtimeMediaStream = operationMutex.withLock {
         if (synchronized(stateLock) { activeSource } != LocalMediaKind.CAMERA) {
@@ -428,7 +456,7 @@ internal class MediaController(
     }
 
     /**
-     * 停止当前本地媒体源并释放其资源。
+     * Stops and releases the current local media source.
      */
     override suspend fun stopLocalStream() = operationMutex.withLock {
         synchronized(stateLock) { activeSource }?.let { stopSourceLocked(it) }
@@ -436,22 +464,21 @@ internal class MediaController(
     }
 
     /**
-     * 判断媒体流是否由当前控制器创建并持有。
+     * Checks whether this controller created and still owns the stream.
      *
-     * @param stream 当前本地媒体或远端结果媒体流。
-     * @return 当前控制器持有该媒体流时为 true。
+     * @param stream The local input or remote result stream.
+     * @return True if the controller owns the stream.
      */
     override fun owns(
-        stream: RealtimeMediaStream
+        stream: RealtimeMediaStream,
     ): Boolean =
         stream.videoTrack != null && stream.videoTrack === currentTrack
 
     /**
-     * 创建指定类型的本地媒体源并记录其归属。
+     * Creates a local source of the requested kind and records its ownership.
      *
-     * @param kind 本次操作或媒体源的类型。
-     * @param create 创建本地媒体流的挂起函数。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param kind The operation or media source kind.
+     * @param create The suspending function creating the local stream.
      */
     private suspend fun createSource(
         kind: LocalMediaKind,
@@ -468,8 +495,11 @@ internal class MediaController(
             create().also {
                 synchronized(stateLock) { activeSource = kind }
             }
-        } catch (error: Throwable) {
-            cleanupAfterFailure(error,
+        } catch (
+            error: Throwable,
+        ) {
+            cleanupAfterFailure(
+                error,
                 { stopController(kind) },
                 { rtcManager.destroy() },
                 { synchronized(stateLock) { activeSource = null } },
@@ -479,23 +509,23 @@ internal class MediaController(
     }
 
     /**
-     * 停止指定类型的本地媒体源；当前源类型不符时不执行。
+     * Stops a source only if its kind matches the current input.
      *
-     * @param kind 本次操作或媒体源的类型。
+     * @param kind The operation or media source kind.
      */
     private suspend fun stopSource(
-        kind: LocalMediaKind
+        kind: LocalMediaKind,
     ) = operationMutex.withLock {
         if (synchronized(stateLock) { activeSource } == kind) stopSourceLocked(kind)
     }
 
     /**
-     * 释放指定类型的当前媒体源及关联轨道。
+     * Releases the active source and tracks of the requested kind.
      *
-     * @param kind 本次操作或媒体源的类型。
+     * @param kind The operation or media source kind.
      */
     private suspend fun stopSourceLocked(
-        kind: LocalMediaKind
+        kind: LocalMediaKind,
     ) {
         cleanupResources(
             { stopController(kind) },
@@ -505,12 +535,12 @@ internal class MediaController(
     }
 
     /**
-     * 释放指定媒体类型对应的控制器资源。
+     * Releases the controller for a media source kind.
      *
-     * @param kind 本次操作或媒体源的类型。
+     * @param kind The operation or media source kind.
      */
     private suspend fun stopController(
-        kind: LocalMediaKind
+        kind: LocalMediaKind,
     ) {
         when (kind) {
             LocalMediaKind.CAMERA -> cameraController.stopLocalCameraStream()
@@ -522,9 +552,9 @@ internal class MediaController(
     }
 
     /**
-     * 取得图片控制器，未配置时报告不支持该输入的错误。
+     * Returns the image controller or reports unsupported input if absent.
      *
-     * @return 已配置的图片输入控制器。
+     * @return The configured image controller.
      */
     private fun requiredImageController(): ImageController = imageController ?: throw XmaxError(
         XmaxErrorCode.INTERNAL_ERROR,
@@ -532,9 +562,9 @@ internal class MediaController(
     )
 
     /**
-     * 取得视频控制器，未配置时报告不支持该输入的错误。
+     * Returns the video controller or reports unsupported input if absent.
      *
-     * @return 已配置的视频输入控制器。
+     * @return The configured video controller.
      */
     private fun requiredVideoController(): VideoController = videoController ?: throw XmaxError(
         XmaxErrorCode.INTERNAL_ERROR,
@@ -542,32 +572,32 @@ internal class MediaController(
     )
 
     /**
-     * 当前管理器所持有的本地媒体输入类型。
+     * The kind of local input owned by this manager.
      */
     private enum class LocalMediaKind {
 
         /**
-         * 由服务端直接读取的网络视频输入。
+         * A network video read directly by the server.
          */
         NETWORK_VIDEO,
 
         /**
-         * 由接入方提供帧的外部媒体输入。
+         * External frames supplied by your app.
          */
         EXTERNAL,
 
         /**
-         * 设备摄像头输入。
+         * The device camera.
          */
         CAMERA,
 
         /**
-         * 静态图片输入。
+         * A still image.
          */
         IMAGE,
 
         /**
-         * 本地视频输入。
+         * A local video.
          */
         VIDEO,
     }

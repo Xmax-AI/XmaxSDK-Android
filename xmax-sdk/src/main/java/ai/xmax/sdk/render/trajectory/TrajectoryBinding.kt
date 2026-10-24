@@ -17,44 +17,44 @@ import android.os.Handler
 import android.os.Looper
 
 /**
- * 将渲染层触摸输入转交给媒体交互层。
+ * Forwards rendering-layer touch input to media interaction.
  */
 internal class TrajectoryBinding(
     /**
-     * 接收触控轨迹帧的回调。
+     * The interaction frame callback.
      */
     private val interactionListener: (InteractionFrame) -> Unit,
 
     /**
-     * 处理后的本地媒体尺寸，作为固定的交互坐标基准。
+     * The fixed, resolved local media dimensions for interaction coordinates.
      */
     private val resolvedMediaSize: IntSize,
 ) {
 
     /**
-     * 轨迹绑定状态的并发保护。
+     * The lock protecting trajectory bindings.
      */
     private val stateLock = Any()
 
     /**
-     * 交互覆盖层及视频坐标换算配置。
+     * The current interaction overlay.
      */
     private var overlayView: TrajectoryOverlayView? = null
 
     /**
-     * 轨迹映射所使用的视频缩放与裁剪方式。
+     * The scaling mode used to map trajectory coordinates.
      */
     private var contentMode = VideoContentMode.FILL
 
     /**
-     * 将轨迹绑定接入指定交互覆盖层。
+     * Attaches trajectory input to an interaction overlay.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     fun attach(
         view: TrajectoryOverlayView,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ) {
         synchronized(stateLock) {
             if (overlayView !== view) overlayView?.clearBinding(this)
@@ -67,12 +67,12 @@ internal class TrajectoryBinding(
     }
 
     /**
-     * 解除指定覆盖层的轨迹绑定。
+     * Detaches trajectory input from an overlay.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
+     * @param view The view to bind or unbind.
      */
     fun detach(
-        view: TrajectoryOverlayView
+        view: TrajectoryOverlayView,
     ) {
         val shouldDetach = synchronized(stateLock) {
             if (overlayView !== view) false else {
@@ -84,7 +84,7 @@ internal class TrajectoryBinding(
     }
 
     /**
-     * 取消当前轨迹绑定并清除视图交互。
+     * Cancels the trajectory binding and clears view interaction.
      */
     fun invalidate() {
         synchronized(stateLock) {
@@ -93,12 +93,12 @@ internal class TrajectoryBinding(
     }
 
     /**
-     * 更新交互坐标换算所需的显示配置并通知当前覆盖层。
+     * Updates coordinate mapping configuration and notifies the active overlay.
      *
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     fun update(
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ) {
         synchronized(stateLock) {
             this.contentMode = contentMode
@@ -107,23 +107,23 @@ internal class TrajectoryBinding(
     }
 
     /**
-     * 向当前轨迹监听器提交触控帧。
+     * Submits a touch frame to the current trajectory listener.
      *
-     * @param frame 当前触控轨迹及显示画面尺寸。
+     * @param frame The current trajectory and displayed image dimensions.
      */
     fun submit(
-        frame: InteractionFrame
+        frame: InteractionFrame,
     ) {
         interactionListener(frame)
     }
 
     /**
-     * 在主线程对当前轨迹视图执行更新。
+     * Updates the current trajectory view on the main thread.
      *
-     * @param action 需要执行的操作。
+     * @param action The operation to perform.
      */
     private inline fun TrajectoryOverlayView.runOnMain(
-        crossinline action: TrajectoryOverlayView.() -> Unit
+        crossinline action: TrajectoryOverlayView.() -> Unit,
     ) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             action()
@@ -133,12 +133,12 @@ internal class TrajectoryBinding(
     }
 
     /**
-     * 轨迹视图更新的主线程调度入口。
+     * The main-thread trajectory view dispatcher.
      */
     private companion object {
 
         /**
-         * 将轨迹绑定更新投递到主线程的调度器。
+         * The handler posting trajectory updates to the main thread.
          */
         val MAIN_HANDLER = Handler(Looper.getMainLooper())
     }

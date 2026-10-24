@@ -11,12 +11,12 @@
 package ai.xmax.sdk
 
 /**
- * 提供当前 Android SDK 构建的版本信息。
+ * Build information for the Android SDK.
  */
 public object XmaxSdk {
 
     /**
-     * 当前 SDK 构建的语义化版本号。
+     * The semantic version of this SDK build.
      */
     @JvmField
     public val VERSION: String = BuildConfig.XMAX_SDK_VERSION

@@ -13,69 +13,70 @@ package ai.xmax.sdk.foundation.rtc
 import ai.xmax.sdk.RealtimeVideoFrame
 
 /**
- * 单轮远端接收：首帧通知切到主线程，像素访问仅限 RTC 当前回调栈。
+ * A remote frame subscription with main-thread first-frame notifications; pixels are accessible only within
+ * the RTC callback.
  */
 internal fun interface RtcRemoteVideoSink {
 
     /**
-     * 通知订阅的视频流已到达首帧及其尺寸。
+     * Reports the first subscribed frame and its dimensions.
      *
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
      */
     fun onFirstFrame(
         width: Int,
-        height: Int
+        height: Int,
     )
 
     /**
-     * 接收当前订阅的视频帧。
+     * Receives a frame from the subscribed video stream.
      *
-     * @param frame 待处理、显示或提交的视频帧。
+     * @param frame The video frame to process, display, or submit.
      */
     fun onFrame(
-        frame: RtcRemoteVideoFrame
+        frame: RtcRemoteVideoFrame,
     ) {}
 
     /**
-     * 报告当前媒体或 RTC 操作发生的错误。
+     * Reports a failure in the current media or RTC operation.
      *
-     * @param error 本次操作失败的异常或 SDK 错误。
+     * @param error The operation failure or SDK error.
      */
     fun onError(
-        error: ai.xmax.sdk.XmaxError
+        error: ai.xmax.sdk.XmaxError,
     ) {}
 }
 
 /**
- * 借用原生帧；跨线程或超出 onFrame 生命周期前必须调用 copy。
+ * A borrowed native frame; call copy before crossing threads or returning from onFrame.
  */
 internal interface RtcRemoteVideoFrame {
 
     /**
-     * 原始帧尺寸，单位为像素。
+     * The original frame dimensions, in pixels.
      */
     val width: Int
 
     /**
-     * 原始视频帧高度，单位为像素。
+     * The original frame height, in pixels.
      */
     val height: Int
 
     /**
-     * 应用旋转后的显示尺寸，单位为像素。
+     * The rotated display dimensions, in pixels.
      */
     val displayWidth: Int get() = width
 
     /**
-     * 用于展示的画面高度，单位为像素。
+     * The displayed frame height, in pixels.
      */
     val displayHeight: Int get() = height
 
     /**
-     * 复制远端帧像素及元数据，使调用方可在回调结束后继续使用。
+     * Copies remote pixels and metadata so callers can retain the frame after the callback returns.
      *
-     * @return 像素数据可由调用方独立持有的远端视频帧。
+     * @return A remote frame with independently owned pixels.
      */
     fun copy(): RealtimeVideoFrame
 }

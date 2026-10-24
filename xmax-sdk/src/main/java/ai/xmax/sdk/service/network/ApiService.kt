@@ -24,41 +24,41 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * 负责发送 Xmax API 请求并统一处理响应和错误。
+ * Sends Xmax API requests and normalizes responses and errors.
  *
- * @param apiKey 开放平台签发的 API Key；不得写入日志或对外展示。
+ * @param apiKey The API key issued by the developer platform; do not log or expose it.
  */
 internal class ApiService(
     apiKey: String,
 
     /**
-     * API 服务的基础地址。
+     * The API base URL.
      */
     private val baseUrl: String,
 
     /**
-     * 网络请求超时时间，单位为毫秒；默认值为 `DEFAULT_TIMEOUT_MS`。
+     * The request timeout in milliseconds; defaults to `DEFAULT_TIMEOUT_MS`.
      */
     private val timeoutMs: Int = DEFAULT_TIMEOUT_MS,
 
     /**
-     * 发送 HTTP 请求并返回原始响应的组件。
+     * The transport sending HTTP requests and returning raw responses.
      */
     private val transport: ApiTransport = UrlConnectionApiTransport(),
 ) : ApiServicing {
 
     /**
-     * API 请求的鉴权信息。
+     * The API authentication credentials.
      */
     private val apiKey: String = apiKey.trim()
 
     /**
-     * 发送请求并返回统一响应中的业务数据。
+     * Sends a request and returns business data from the response envelope.
      *
-     * @param method HTTP 请求方法。
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
-     * @return 供当前业务使用的 JSON 数据。
+     * @param method The HTTP method.
+     * @param path The request path relative to the API base URL.
+     * @param body The optional JSON request body; null sends no body.
+     * @return JSON for the current operation.
      */
     override suspend fun request(
         method: ApiMethod,
@@ -87,28 +87,51 @@ internal class ApiService(
 
         val response = try {
             transport.execute(request)
-        } catch (error: XmaxError) {
-            ApiLogger.logFailure(method, path, error, durationMs(startedAt))
+        } catch (
+            error: XmaxError,
+        ) {
+            ApiLogger.logFailure(
+                method,
+                path,
+                error,
+                durationMs(startedAt),
+            )
             throw error
-        } catch (error: CancellationException) {
+        } catch (
+            error: CancellationException,
+        ) {
             throw error
-        } catch (error: IOException) {
+        } catch (
+            error: IOException,
+        ) {
             currentCoroutineContext().ensureActive()
             val resolvedError = XmaxError(
                 code = XmaxErrorCode.NETWORK_ERROR,
                 message = "HTTP request failed: ${ErrorMessageFormatter.format(error)}",
                 cause = error,
             )
-            ApiLogger.logFailure(method, path, resolvedError, durationMs(startedAt))
+            ApiLogger.logFailure(
+                method,
+                path,
+                resolvedError,
+                durationMs(startedAt),
+            )
             throw resolvedError
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             currentCoroutineContext().ensureActive()
             val resolvedError = XmaxError(
                 code = XmaxErrorCode.NETWORK_ERROR,
                 message = "HTTP request failed: ${ErrorMessageFormatter.format(error)}",
                 cause = error,
             )
-            ApiLogger.logFailure(method, path, resolvedError, durationMs(startedAt))
+            ApiLogger.logFailure(
+                method,
+                path,
+                resolvedError,
+                durationMs(startedAt),
+            )
             throw resolvedError
         }
 
@@ -124,7 +147,9 @@ internal class ApiService(
                     successful = true,
                 )
             }
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             ApiLogger.logResponse(
                 method = method,
                 path = path,
@@ -138,7 +163,7 @@ internal class ApiService(
     }
 
     /**
-     * 校验 API 鉴权信息、基础地址和超时配置。
+     * Validates API credentials, the base URL, and request timeout.
      */
     private fun validateConfiguration() {
         if (apiKey.isEmpty()) {
@@ -149,7 +174,10 @@ internal class ApiService(
         }
 
         val uri = parseBaseUri()
-        if (!uri.scheme.equals("https", ignoreCase = true) ||
+        if (!uri.scheme.equals(
+            "https",
+            ignoreCase = true,
+        ) ||
             uri.host.isNullOrBlank() ||
             timeoutMs <= 0
         ) {
@@ -158,13 +186,13 @@ internal class ApiService(
     }
 
     /**
-     * 将相对请求路径解析为同源 API 地址，拒绝越界路径。
+     * Resolves a relative path to a same-origin API URL, rejecting paths outside the base.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @return 可用于网络请求的 URL。
+     * @param path The request path relative to the API base URL.
+     * @return The URL used for the network request.
      */
     private fun resolveUrl(
-        path: String
+        path: String,
     ): URL {
         val normalizedPath = path.trim()
         if (normalizedPath.isEmpty() ||
@@ -182,45 +210,59 @@ internal class ApiService(
         }
         val resolved = try {
             URI(base + relativePath)
-        } catch (error: Exception) {
+        } catch (
+            error: Exception,
+        ) {
             throw invalidPathError(error)
         }
         val baseUri = parseBaseUri()
-        if (!resolved.scheme.equals(baseUri.scheme, ignoreCase = true) ||
-            !resolved.host.equals(baseUri.host, ignoreCase = true)
+        if (!resolved.scheme.equals(
+            baseUri.scheme,
+            ignoreCase = true,
+        ) ||
+            !resolved.host.equals(
+                baseUri.host,
+                ignoreCase = true,
+            )
         ) {
             throw invalidPathError()
         }
         return try {
             resolved.toURL()
-        } catch (error: Exception) {
+        } catch (
+            error: Exception,
+        ) {
             throw invalidPathError(error)
         }
     }
 
     /**
-     * 解析并校验 API 基础地址。
+     * Parses and validates the API base URL.
      *
-     * @return 解析并校验后的基础 URI。
+     * @return The validated base URI.
      */
     private fun parseBaseUri(): URI = try {
         URI(baseUrl.trim())
-    } catch (error: Exception) {
+    } catch (
+        error: Exception,
+    ) {
         throw invalidConfigurationError(error)
     }
 
     /**
-     * 解析 API 响应封装并将服务端失败转换为 SDK 错误。
+     * Decodes the API response envelope and converts server failures to SDK errors.
      *
-     * @param response 包含状态、响应头及正文的 HTTP 响应。
-     * @return 供当前业务使用的 JSON 数据。
+     * @param response The HTTP status, headers, and body.
+     * @return JSON for the current operation.
      */
     private fun parseEnvelope(
-        response: ApiHttpResponse
+        response: ApiHttpResponse,
     ): JSONObject {
         val envelope = try {
             JSONObject(response.body.toString(Charsets.UTF_8))
-        } catch (error: JSONException) {
+        } catch (
+            error: JSONException,
+        ) {
             throw XmaxError(
                 code = XmaxErrorCode.API_ERROR,
                 message = "Server returned invalid JSON",
@@ -249,13 +291,12 @@ internal class ApiService(
     }
 
     /**
-     * 创建用于报告 API 客户端配置无效的错误。
+     * Creates an invalid API configuration error.
      *
-     * @param cause 触发当前错误的底层异常。
-     * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+     * @param cause The underlying exception that caused this error.
      */
     private fun invalidConfigurationError(
-        cause: Throwable? = null
+        cause: Throwable? = null,
     ): XmaxError = XmaxError(
         code = XmaxErrorCode.INVALID_CONFIGURATION,
         message = "API service configuration is invalid",
@@ -263,13 +304,12 @@ internal class ApiService(
     )
 
     /**
-     * 创建用于报告 API 请求路径无效的错误。
+     * Creates an invalid API path error.
      *
-     * @param cause 触发当前错误的底层异常。
-     * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+     * @param cause The underlying exception that caused this error.
      */
     private fun invalidPathError(
-        cause: Throwable? = null
+        cause: Throwable? = null,
     ): XmaxError = XmaxError(
         code = XmaxErrorCode.INVALID_CONFIGURATION,
         message = "API request path is invalid",
@@ -277,23 +317,23 @@ internal class ApiService(
     )
 
     /**
-     * 计算从指定单调时钟起点至当前的毫秒耗时。
+     * Computes elapsed milliseconds from a monotonic start timestamp.
      *
-     * @param startedAt 操作开始时的单调时钟纳秒数。
-     * @return 从起点到当前的毫秒耗时。
+     * @param startedAt The monotonic operation start time, in nanoseconds.
+     * @return The elapsed time, in milliseconds.
      */
     private fun durationMs(
-        startedAt: Long
+        startedAt: Long,
     ): Long =
         (System.nanoTime() - startedAt) / 1_000_000L
 
     /**
-     * API 请求的默认超时配置。
+     * The default API timeout configuration.
      */
     private companion object {
 
         /**
-         * API 请求的默认超时时长，单位为毫秒。
+         * The default request timeout, in milliseconds.
          */
         const val DEFAULT_TIMEOUT_MS = 15_000
     }

@@ -16,48 +16,48 @@ import ai.xmax.sdk.XmaxErrorCode
 import org.json.JSONObject
 
 /**
- * Xmax API 支持的 HTTP 请求方法。
+ * HTTP methods supported by the Xmax API.
  */
 internal enum class ApiMethod(
     /**
-     * 协议传输使用的字符串值。
+     * The protocol string value.
      */
-    internal val wireValue: String
+    internal val wireValue: String,
 ) {
 
     /**
-     * 读取服务端资源的 HTTP 方法。
+     * Reads a server resource.
      */
     GET("GET"),
 
     /**
-     * 提交业务请求的 HTTP 方法。
+     * Submits a business request.
      */
     POST("POST"),
 
     /**
-     * 更新服务端资源的 HTTP 方法。
+     * Updates a server resource.
      */
     PUT("PUT"),
 
     /**
-     * 删除服务端资源的 HTTP 方法。
+     * Deletes a server resource.
      */
     DELETE("DELETE"),
 }
 
 /**
- * 定义 Xmax API 的基础请求能力。
+ * The basic Xmax API request capabilities.
  */
 internal interface ApiServicing {
 
     /**
-     * 发送请求并返回统一响应中的业务数据。
+     * Sends a request and returns business data from the response envelope.
      *
-     * @param method HTTP 请求方法。
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
-     * @return 供当前业务使用的 JSON 数据。
+     * @param method The HTTP method.
+     * @param path The request path relative to the API base URL.
+     * @param body The optional JSON request body; null sends no body.
+     * @return JSON for the current operation.
      */
     suspend fun request(
         method: ApiMethod,
@@ -66,13 +66,13 @@ internal interface ApiServicing {
     ): JSONObject
 
     /**
-     * 发送请求并将业务数据转换为指定内部模型。
+     * Sends a request and decodes business data into an internal model.
      *
-     * @param method HTTP 请求方法。
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
-     * @param decode 将响应业务 JSON 转换为目标类型的函数。
-     * @return 由调用方解析函数生成的业务响应。
+     * @param method The HTTP method.
+     * @param path The request path relative to the API base URL.
+     * @param body The optional JSON request body; null sends no body.
+     * @param decode Converts response JSON to the requested type.
+     * @return The business response produced by the decoder.
      */
     suspend fun <Response> request(
         method: ApiMethod,
@@ -80,12 +80,20 @@ internal interface ApiServicing {
         body: JSONObject? = null,
         decode: (JSONObject) -> Response,
     ): Response {
-        val payload = request(method, path, body)
+        val payload = request(
+            method,
+            path,
+            body,
+        )
         return try {
             decode(payload)
-        } catch (error: XmaxError) {
+        } catch (
+            error: XmaxError,
+        ) {
             throw error
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             throw XmaxError(
                 code = XmaxErrorCode.API_ERROR,
                 message = "Server returned invalid response data: ${ErrorMessageFormatter.format(error)}",
@@ -95,120 +103,158 @@ internal interface ApiServicing {
     }
 
     /**
-     * 发送 GET 请求并返回响应业务数据。
+     * Sends GET and returns response business data.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @return 供当前业务使用的 JSON 数据。
+     * @param path The request path relative to the API base URL.
+     * @return JSON for the current operation.
      */
     suspend fun get(
-        path: String
-    ): JSONObject = request(ApiMethod.GET, path)
+        path: String,
+    ): JSONObject = request(
+        ApiMethod.GET,
+        path,
+    )
 
     /**
-     * 发送 GET 请求并返回响应业务数据。
+     * Sends GET and returns response business data.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param decode 将响应业务 JSON 转换为目标类型的函数。
-     * @return 由调用方解析函数生成的业务响应。
+     * @param path The request path relative to the API base URL.
+     * @param decode Converts response JSON to the requested type.
+     * @return The business response produced by the decoder.
      */
     suspend fun <Response> get(
         path: String,
         decode: (JSONObject) -> Response,
-    ): Response = request(ApiMethod.GET, path, decode = decode)
+    ): Response = request(
+        ApiMethod.GET,
+        path,
+        decode = decode,
+    )
 
     /**
-     * 发送 POST 请求并返回响应业务数据。
+     * Sends POST and returns response business data.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @return 供当前业务使用的 JSON 数据。
-     */
-    suspend fun post(
-        path: String
-    ): JSONObject = request(ApiMethod.POST, path)
-
-    /**
-     * 发送 POST 请求并返回响应业务数据。
-     *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
-     * @return 供当前业务使用的 JSON 数据。
+     * @param path The request path relative to the API base URL.
+     * @return JSON for the current operation.
      */
     suspend fun post(
         path: String,
-        body: JSONObject
-    ): JSONObject =
-        request(ApiMethod.POST, path, body)
+    ): JSONObject = request(
+        ApiMethod.POST,
+        path,
+    )
 
     /**
-     * 发送 POST 请求并返回响应业务数据。
+     * Sends POST and returns response business data.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
-     * @param decode 将响应业务 JSON 转换为目标类型的函数。
-     * @return 由调用方解析函数生成的业务响应。
+     * @param path The request path relative to the API base URL.
+     * @param body The optional JSON request body; null sends no body.
+     * @return JSON for the current operation.
+     */
+    suspend fun post(
+        path: String,
+        body: JSONObject,
+    ): JSONObject =
+        request(
+            ApiMethod.POST,
+            path,
+            body,
+        )
+
+    /**
+     * Sends POST and returns response business data.
+     *
+     * @param path The request path relative to the API base URL.
+     * @param body The optional JSON request body; null sends no body.
+     * @param decode Converts response JSON to the requested type.
+     * @return The business response produced by the decoder.
      */
     suspend fun <Response> post(
         path: String,
         body: JSONObject? = null,
         decode: (JSONObject) -> Response,
-    ): Response = request(ApiMethod.POST, path, body, decode)
+    ): Response = request(
+        ApiMethod.POST,
+        path,
+        body,
+        decode,
+    )
 
     /**
-     * 发送 PUT 请求并返回响应业务数据。
+     * Sends PUT and returns response business data.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @return 供当前业务使用的 JSON 数据。
-     */
-    suspend fun put(
-        path: String
-    ): JSONObject = request(ApiMethod.PUT, path)
-
-    /**
-     * 发送 PUT 请求并返回响应业务数据。
-     *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
-     * @return 供当前业务使用的 JSON 数据。
+     * @param path The request path relative to the API base URL.
+     * @return JSON for the current operation.
      */
     suspend fun put(
         path: String,
-        body: JSONObject
-    ): JSONObject =
-        request(ApiMethod.PUT, path, body)
+    ): JSONObject = request(
+        ApiMethod.PUT,
+        path,
+    )
 
     /**
-     * 发送 PUT 请求并返回响应业务数据。
+     * Sends PUT and returns response business data.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param body 可选的 JSON 请求正文；null 表示没有请求正文。
-     * @param decode 将响应业务 JSON 转换为目标类型的函数。
-     * @return 由调用方解析函数生成的业务响应。
+     * @param path The request path relative to the API base URL.
+     * @param body The optional JSON request body; null sends no body.
+     * @return JSON for the current operation.
+     */
+    suspend fun put(
+        path: String,
+        body: JSONObject,
+    ): JSONObject =
+        request(
+            ApiMethod.PUT,
+            path,
+            body,
+        )
+
+    /**
+     * Sends PUT and returns response business data.
+     *
+     * @param path The request path relative to the API base URL.
+     * @param body The optional JSON request body; null sends no body.
+     * @param decode Converts response JSON to the requested type.
+     * @return The business response produced by the decoder.
      */
     suspend fun <Response> put(
         path: String,
         body: JSONObject? = null,
         decode: (JSONObject) -> Response,
-    ): Response = request(ApiMethod.PUT, path, body, decode)
+    ): Response = request(
+        ApiMethod.PUT,
+        path,
+        body,
+        decode,
+    )
 
     /**
-     * 发送 DELETE 请求并返回响应业务数据。
+     * Sends DELETE and returns response business data.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @return 供当前业务使用的 JSON 数据。
+     * @param path The request path relative to the API base URL.
+     * @return JSON for the current operation.
      */
     suspend fun delete(
-        path: String
-    ): JSONObject = request(ApiMethod.DELETE, path)
+        path: String,
+    ): JSONObject = request(
+        ApiMethod.DELETE,
+        path,
+    )
 
     /**
-     * 发送 DELETE 请求并返回响应业务数据。
+     * Sends DELETE and returns response business data.
      *
-     * @param path 相对于 API 基础地址的请求路径。
-     * @param decode 将响应业务 JSON 转换为目标类型的函数。
-     * @return 由调用方解析函数生成的业务响应。
+     * @param path The request path relative to the API base URL.
+     * @param decode Converts response JSON to the requested type.
+     * @return The business response produced by the decoder.
      */
     suspend fun <Response> delete(
         path: String,
         decode: (JSONObject) -> Response,
-    ): Response = request(ApiMethod.DELETE, path, decode = decode)
+    ): Response = request(
+        ApiMethod.DELETE,
+        path,
+        decode = decode,
+    )
 }

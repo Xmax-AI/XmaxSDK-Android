@@ -11,26 +11,26 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * 接收 RTC 媒体和数据信令事件。
+ * Receives RTC media and data signaling events.
  */
 internal interface RtcEventListener {
 
     /**
-     * 报告无法继续使用的 RTC 房间故障；正常自动重连不触发该通知。
+     * Reports an unusable RTC room; normal automatic reconnection does not trigger this callback.
      *
-     * @param roomId RTC 房间标识。
-     * @param error 本次操作失败的异常或 SDK 错误。
+     * @param roomId The RTC room identifier.
+     * @param error The operation failure or SDK error.
      */
     fun onRoomTerminated(
         roomId: String,
-        error: ai.xmax.sdk.XmaxError
+        error: ai.xmax.sdk.XmaxError,
     ) = Unit
 
     /**
-     * 处理指定房间内远端用户的视频发布状态变化，避免旧房间事件串入新连接。
+     * Handles remote publication changes only for the current room, excluding stale room events.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param published 远端视频是否处于发布状态。
+     * @param stream The remote stream identified by room and user.
+     * @param published Whether the remote video is published.
      */
     fun onRemoteVideoPublished(
         stream: RemoteStream,
@@ -38,21 +38,21 @@ internal interface RtcEventListener {
     )
 
     /**
-     * 接收房间内远端用户的结构化任务通知。
+     * Receives structured task notifications from remote room users.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param message 待发送或记录的消息文本。
+     * @param stream The remote stream identified by room and user.
+     * @param message The message to send or log.
      */
     fun onUserMessageReceived(
         stream: RemoteStream,
-        message: String
+        message: String,
     ) = Unit
 
     /**
-     * 处理远端视频流携带的 SEI 消息。
+     * Handles SEI carried by remote video.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param message 待发送或记录的消息文本。
+     * @param stream The remote stream identified by room and user.
+     * @param message The message to send or log.
      */
     fun onSeiMessageReceived(
         stream: RemoteStream,

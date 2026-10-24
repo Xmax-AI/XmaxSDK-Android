@@ -11,116 +11,117 @@
 package ai.xmax.sdk
 
 /**
- * 上行视频的实际发送统计；不可用指标为 null，不使用配置值代替实际值。
+ * Measured uplink video statistics; unavailable metrics are null rather than substituted configuration
+ * values.
  */
 public data class UplinkVideoStatistics(
     /**
-     * 实际编码宽度，单位为像素。
+     * The actual encoded width, in pixels.
      */
     public val width: Int? = null,
 
     /**
-     * 实际编码高度，单位为像素。
+     * The actual encoded height, in pixels.
      */
     public val height: Int? = null,
 
     /**
-     * 实际采集帧率，单位为 fps。
+     * The actual capture frame rate, in fps.
      */
     public val captureFrameRate: Int? = null,
 
     /**
-     * 实际编码帧率，单位为 fps。
+     * The actual encoding frame rate, in fps.
      */
     public val encodeFrameRate: Int? = null,
 
     /**
-     * 实际发送帧率，单位为 fps。
+     * The actual transmission frame rate, in fps.
      */
     public val sendFrameRate: Int? = null,
 
     /**
-     * 实际发送码率，单位为 kbps。
+     * The actual transmitted bitrate, in kbps.
      */
     public val bitrateKbps: Int? = null,
 
     /**
-     * 本端到 RTC 云端的上行视频丢包率，单位为 %。
+     * Uplink video packet loss from this device to the RTC cloud, in percent.
      */
     public val packetLossPercent: Int? = null,
 )
 
 /**
- * 一路下行主视频流的实际接收统计；不可用指标为 null。
+ * Measured statistics for one primary downlink video stream; unavailable metrics are null.
  */
 public data class DownlinkVideoStatistics(
     /**
-     * 远端用户标识，与视频轨道使用同一标识。
+     * The remote user identifier shared with the video track.
      */
     public val userId: String,
 
     /**
-     * 接收视频宽度，单位为像素。
+     * The received width, in pixels.
      */
     public val width: Int? = null,
 
     /**
-     * 接收视频高度，单位为像素。
+     * The received height, in pixels.
      */
     public val height: Int? = null,
 
     /**
-     * 实际解码帧率，单位为 fps。
+     * The actual decoding frame rate, in fps.
      */
     public val decodeFrameRate: Int? = null,
 
     /**
-     * 实际渲染帧率，单位为 fps。
+     * The actual rendering frame rate, in fps.
      */
     public val renderFrameRate: Int? = null,
 
     /**
-     * 实际接收码率，单位为 kbps。
+     * The actual received bitrate, in kbps.
      */
     public val bitrateKbps: Int? = null,
 
     /**
-     * 下行视频丢包率，单位为 %。
+     * Downlink video packet loss, in percent.
      */
     public val packetLossPercent: Int? = null,
 
     /**
-     * RTC 媒体端到端延迟估算值，单位为 ms；不代表完整 AI 生成耗时。
+     * The RTC media end-to-end delay estimate, in milliseconds; excludes the full AI generation pipeline.
      */
     public val endToEndDelayMs: Int? = null,
 )
 
 /**
- * 主线程接收上行统计；null 表示未发布或连接已清理。
+ * Receives uplink statistics on the main thread; null indicates no publication or a cleared connection.
  */
 public fun interface UplinkVideoStatisticsListener {
 
     /**
-     * 接收上行视频统计快照。
+     * Receives an uplink video statistics snapshot.
      *
-     * @param statistics 当前统计快照；空值含义见 [UplinkVideoStatisticsListener]。
+     * @param statistics The current snapshot; see [UplinkVideoStatisticsListener] for null semantics.
      */
     public fun onStatistics(
-        statistics: UplinkVideoStatistics?
+        statistics: UplinkVideoStatistics?,
     )
 }
 
 /**
- * 主线程接收下行结果流统计；null 表示当前结果流无统计或已清理。
+ * Receives downlink result statistics on the main thread; null indicates unavailable or cleared statistics.
  */
 public fun interface DownlinkVideoStatisticsListener {
 
     /**
-     * 接收下行视频统计快照。
+     * Receives a downlink video statistics snapshot.
      *
-     * @param statistics 当前统计快照；空值含义见 [DownlinkVideoStatisticsListener]。
+     * @param statistics The current snapshot; see [DownlinkVideoStatisticsListener] for null semantics.
      */
     public fun onStatistics(
-        statistics: DownlinkVideoStatistics?
+        statistics: DownlinkVideoStatistics?,
     )
 }

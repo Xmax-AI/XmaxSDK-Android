@@ -19,54 +19,62 @@ import android.widget.FrameLayout
 import androidx.annotation.MainThread
 
 /**
- * 实时生成画面容器。主线程设置轨道；本地预览持续挂载，远端首帧显示后自动淡入。
- * 将 [remoteTrack] 设为 null，或 SDK 停止远端渲染时，立即回到本地预览。
- * 此 View 不启动或停止媒体流。
+ * A realtime video container whose tracks must be set on the main thread; keeps local preview attached until
+ * remote video fades in.
+ * Clearing [remoteTrack] or stopping SDK remote rendering immediately restores local preview.
+ * This view does not start or stop media streams.
  *
- * @param context Android 上下文；视图应使用具备当前界面主题的 Context。
- * @param attrs 从 XML 布局读取的视图属性；代码创建视图时可省略。
- * @param defStyleAttr 应用于视图的默认样式属性资源标识。
+ * @param context The Android context; views should use the current UI theme's context.
+ * @param attrs The XML view attributes; optional for programmatic construction.
+ * @param defStyleAttr The default style attribute resource.
  */
 @MainThread
 public class XmaxRealtimeVideoView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
-) : FrameLayout(context, attrs, defStyleAttr) {
+) : FrameLayout(
+    context,
+    attrs,
+    defStyleAttr,
+) {
 
     /**
-     * 本地和远端视频的显示容器。
+     * The local preview video container.
      */
     private val localVideoView = XmaxVideoView(context).apply {
         isInteractionEnabled = false
     }
 
     /**
-     * 展示生成结果的下行视频视图。
+     * The downlink view displaying generation results.
      */
     private val remoteVideoView = XmaxVideoView(context).apply {
         isInteractionEnabled = false
     }
 
     /**
-     * 当前显示来源与切换代次。
+     * Whether remote video is currently visible.
      */
     private var isRemoteDisplayed = false
 
     /**
-     * 本地预览与生成结果切换的显示版本。
+     * The display revision for preview-to-result transitions.
      */
     private var presentationVersion = 0L
 
     /**
-     * 接入方提供的预览视图与本地、远端轨道。
+     * The optional app-owned local preview view.
      *
-     * 由接入方持有的本地预览。设置后不再绑定 localTrack 的渲染窗口，
-     * 会话重建不移除该视图；远端首帧就绪后仍使用相同的淡入逻辑。
-     * 视图必须没有父容器，或已是当前容器的直接子视图。
+     * An app-owned local preview that replaces localTrack's rendering surface.
+     * Session recreation retains this view, and remote first-frame readiness uses the same fade-in
+     * transition.
+     * The view must have no parent or already be a direct child of this container.
      */
     public var localPreviewView: View? = null
-        set(value) {
+        set(
+            value,
+        ) {
             if (field === value) return
             require(value !== this && (value?.parent == null || value.parent === this))
             field?.let(::removeView)
@@ -74,26 +82,37 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
             localVideoView.track = localTrack.takeIf { value == null }
             localVideoView.visibility = if (value == null) View.VISIBLE else View.GONE
             if (value != null && value.parent == null) {
-                addView(value, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+                addView(
+                    value,
+                    LayoutParams(
+                        LayoutParams.MATCH_PARENT,
+                        LayoutParams.MATCH_PARENT,
+                    ),
+                )
             }
             showLocalPreview()
         }
 
     /**
-     * 本地输入轨道；远端画面显示期间仍保留本地预览。
+     * The local input track, whose preview stays attached while remote video is visible.
      */
     public var localTrack: RealtimeVideoTrack? = null
-        set(value) {
+        set(
+            value,
+        ) {
             if (field === value) return
             field = value
             localVideoView.track = value.takeIf { localPreviewView == null }
         }
 
     /**
-     * 远端生成轨道；替换后等待新轨道首帧，清空后立即显示本地预览。
+     * The remote generation track; replacements await a new first frame, and null immediately restores
+     * preview.
      */
     public var remoteTrack: RealtimeVideoTrack? = null
-        set(value) {
+        set(
+            value,
+        ) {
             if (field === value) return
             field = value
             showLocalPreview()
@@ -101,12 +120,14 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
         }
 
     /**
-     * 视频布局和触控轨迹显示配置。
+     * The aspect-preserving scaling mode for video.
      *
-     * 同时应用于本地和远端画面。
+     * Applies to both local and remote video.
      */
     public var videoContentMode: VideoContentMode = VideoContentMode.FILL
-        set(value) {
+        set(
+            value,
+        ) {
             if (field == value) return
             field = value
             showLocalPreview()
@@ -115,29 +136,46 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
         }
 
     /**
-     * 仅在远端画面显示后允许轨迹交互，本地预览始终不接收轨迹。
+     * Enables trajectories only after remote video becomes visible; local preview never receives trajectory
+     * input.
      */
     public var isInteractionEnabled: Boolean = true
-        set(value) {
+        set(
+            value,
+        ) {
             field = value
             remoteVideoView.isInteractionEnabled = value && isRemoteDisplayed
         }
 
     /**
-     * 远端轨迹视觉效果；null 使用 SDK 内置效果。
+     * The remote trajectory effect, or null for the built-in renderer.
      */
     public var trajectoryRenderer: TrajectoryEffectRendering?
         get() = remoteVideoView.trajectoryRenderer
-        set(value) {
+        set(
+            value,
+        ) {
             remoteVideoView.trajectoryRenderer = value
         }
 
     init {
         setBackgroundColor(Color.BLACK)
         clipChildren = true
-        // 等待结果时保持远端渲染器挂载在本地预览下方，以持续接收视频帧。
-        addView(remoteVideoView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        addView(localVideoView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        // Keep remote rendering mounted below preview while awaiting results so frames continue to arrive.
+        addView(
+            remoteVideoView,
+            LayoutParams(
+                LayoutParams.MATCH_PARENT,
+                LayoutParams.MATCH_PARENT,
+            ),
+        )
+        addView(
+            localVideoView,
+            LayoutParams(
+                LayoutParams.MATCH_PARENT,
+                LayoutParams.MATCH_PARENT,
+            ),
+        )
         remoteVideoView.frameInvalidationHandler = { invalidatedTrack ->
             if (remoteTrack === invalidatedTrack) {
                 showLocalPreview()
@@ -147,7 +185,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
     }
 
     /**
-     * 在视图进入窗口后恢复显示所需的绑定。
+     * Restores display bindings when the view attaches to a window.
      */
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -155,7 +193,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
     }
 
     /**
-     * 在视图离开窗口后解除绑定并停止显示回调。
+     * Unbinds and stops display callbacks when the view leaves its window.
      */
     override fun onDetachedFromWindow() {
         showLocalPreview()
@@ -163,7 +201,7 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
     }
 
     /**
-     * 切回本地预览画面并隐藏远端生成结果。
+     * Restores local preview and hides the generated result.
      */
     private fun showLocalPreview() {
         val version = ++presentationVersion
@@ -190,12 +228,12 @@ public class XmaxRealtimeVideoView @JvmOverloads constructor(
     }
 
     /**
-     * 生成结果切换到前台显示时的动画配置。
+     * The generated-video transition settings.
      */
     private companion object {
 
         /**
-         * 生成画面淡入动画的时长，单位为毫秒。
+         * The generated-video fade-in duration, in milliseconds.
          */
         const val REMOTE_FADE_DURATION_MS = 300L
     }

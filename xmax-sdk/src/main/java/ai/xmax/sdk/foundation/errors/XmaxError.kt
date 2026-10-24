@@ -13,130 +13,137 @@ package ai.xmax.sdk
 import kotlinx.coroutines.CancellationException
 
 /**
- * SDK 向接入方暴露的统一错误码。
+ * The SDK's public error codes.
  */
 public enum class XmaxErrorCode {
 
     /**
-     * API Key 缺失或不符合本地校验要求。
+     * The API key is missing or fails local validation.
      */
     INVALID_API_KEY,
 
     /**
-     * 配置参数或调用状态无效。
+     * The configuration or invocation state is invalid.
      */
     INVALID_CONFIGURATION,
 
     /**
-     * 无法归类的 SDK 内部错误。
+     * An otherwise unclassified SDK failure.
      */
     INTERNAL_ERROR,
 
     /**
-     * 网络连接或数据传输失败。
+     * A network connection or transfer failure.
      */
     NETWORK_ERROR,
 
     /**
-     * 服务端 API 返回失败。
+     * A failed server API response.
      */
     API_ERROR,
 
     /**
-     * 实时会话创建、续期或状态异常。
+     * A realtime session creation, renewal, or state failure.
      */
     SESSION_ERROR,
 
     /**
-     * RTC 引擎、房间或媒体操作失败。
+     * An RTC engine, room, or media operation failure.
      */
     RTC_ERROR,
 
     /**
-     * 媒体读取、解码或处理失败。
+     * A media reading, decoding, or processing failure.
      */
     MEDIA_ERROR,
 
     /**
-     * 应用尚未取得相机权限。
+     * Your app has not obtained camera permission.
      */
     CAMERA_PERMISSION_DENIED,
 
     /**
-     * 应用尚未取得录音权限。
+     * Your app has not obtained recording permission.
      */
     MICROPHONE_PERMISSION_DENIED,
 
     /**
-     * 媒体上传失败。
+     * A media upload failure.
      */
     UPLOAD_ERROR,
 
     /**
-     * 媒体下载失败。
+     * A media download failure.
      */
     DOWNLOAD_ERROR,
 
     /**
-     * 图片未通过服务端内容安全检查。
+     * The image failed the server's content safety check.
      */
     UNSAFE_IMAGE,
 
     /**
-     * 操作已取消。
+     * The operation was cancelled.
      */
     CANCELLED,
 
     /**
-     * 操作未在允许的时间内完成。
+     * The operation exceeded its allowed time.
      */
     TIMEOUT,
 }
 
 /**
- * SDK 统一错误；实时资源的清理范围由当前操作决定，不属于错误本身。
+ * An SDK failure; the active operation determines cleanup scope independently of the error.
  *
- * @param message 待发送或记录的消息文本。
- * @param cause 触发当前错误的底层异常。
+ * @param message The message to send or log.
+ * @param cause The underlying exception that caused this error.
  */
 public class XmaxError(
     /**
-     * 用于区分错误类别的 SDK 错误码。
+     * The SDK error category.
      */
     public val code: XmaxErrorCode,
 
     message: String,
 
     /**
-     * 服务端返回的业务错误码；null 表示未提供。
+     * The server business error code, or null if absent.
      */
     public val apiCode: Int? = null,
 
     /**
-     * HTTP 响应状态码；null 表示尚无有效响应。
+     * The HTTP status code, or null without a valid response.
      */
     public val httpStatus: Int? = null,
 
     cause: Throwable? = null,
-) : Exception(message, cause) {
+) : Exception(
+    message,
+    cause,
+) {
 
     /**
-     * 将底层异常转换为统一的 SDK 错误。
+     * Converts an underlying exception into an SDK error.
      */
     public companion object {
 
         /**
-         * 已有错误原样保留；协程取消继续传播，不转换成业务故障。
+         * Existing SDK errors are retained; coroutine cancellation propagates without becoming a business
+         * failure.
          *
-         * @param error 本次操作失败的异常或 SDK 错误。
-         * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+         * @param error The operation failure or SDK error.
          */
         public fun from(
-            error: Throwable
+            error: Throwable,
         ): XmaxError = when (error) {
             is CancellationException -> throw error
             is XmaxError -> error
-            else -> XmaxError(XmaxErrorCode.INTERNAL_ERROR, ErrorMessageFormatter.format(error), cause = error)
+            else -> XmaxError(
+                XmaxErrorCode.INTERNAL_ERROR,
+                ErrorMessageFormatter.format(error),
+                cause = error,
+            )
         }
     }
 }

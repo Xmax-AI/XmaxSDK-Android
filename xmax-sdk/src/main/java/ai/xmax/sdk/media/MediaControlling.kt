@@ -23,46 +23,48 @@ import android.graphics.Bitmap
 import android.net.Uri
 
 /**
- * 定义媒体层向 Core 暴露的本地媒体能力。
+ * The local media capabilities exposed to Core.
  */
 internal interface MediaControlling : InteractionControlling {
 
     /**
-     * 当前媒体轨道、规格、音轨及来源信息。
+     * The active media track.
      */
     val currentTrack: RealtimeVideoTrack?
 
     /**
-     * 当前本地视频轨道的输入规格。
+     * The current local video input format.
      */
     val currentVideoFormat: RealtimeVideoFormat?
 
     /**
-     * 当前媒体源是否包含可发布的音频。
+     * Whether the current source contains publishable audio.
      */
     val hasAudio: Boolean
 
     /**
-     * 交由服务端读取的网络视频配置。
+     * The network video configuration read by the server.
      */
     val networkVideoReference: RealtimeReferenceVideo?
 
     /**
-     * 网络视频生成结束时的回调。
+     * The network video generation completion callback.
      */
     val networkVideoFinishHandler: (() -> Unit)?
 
     /**
-     * 创建由服务端直接读取 URL 的网络视频源；仅支持 HTTP/HTTPS。
-     * 本地预览静音播放一次，不发布本地音视频；生成首帧就绪后订阅远端音频。
-     * [onFinish] 在当前任务收到服务端完成事件且首帧就绪后于主线程调用一次，
-     * 不代表远端尾帧已经显示完毕。创建源不会开始生成；资源由 [close] 统一释放。
+     * Creates a video source read directly by the server from an HTTP or HTTPS URL.
+     * The local preview plays once without sound or local publication; remote audio begins after the first
+     * generated frame is ready.
+     * [onFinish] runs once on the main thread after the current task's server completion event and
+     * first-frame readiness;
+     * it does not confirm that the last remote frame has been displayed. Creation does not start generation;
+     * [close] releases the source.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param sampleMethod 服务端读取网络视频时采用的采样方式。
-     * @param onFinish 网络视频任务完成的通知；null 表示不接收完成通知。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param sampleMethod The sampling method used when the server reads the network video.
+     * @param onFinish The completion callback for the network video task, or null to omit it.
      */
     suspend fun createNetworkVideoStream(
         uri: Uri,
@@ -72,37 +74,39 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * 当前媒体轨道、规格、音轨及来源信息。
+     * Whether the active media source supplies external frames.
      */
     val isExternalVideo: Boolean
 
     /**
-     * 当前是否为本地解码后通过 RTC 上传的视频文件。
+     * Whether local video is decoded and uploaded through RTC.
      */
     val isLocalVideo: Boolean get() = false
 
     /**
-     * 当前是否为持续通过 RTC 上传图片帧的本地图片。
+     * Whether a local image repeatedly supplies frames to RTC.
      */
     val isLocalImage: Boolean get() = false
 
     /**
-     * 设置 RTC 摄像头预览就绪监听器，传入空值时清除。
+     * Sets the camera preview readiness listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setCameraPreviewReadyListener(
-        listener: RealtimeCameraPreviewReadyListener?
+        listener: RealtimeCameraPreviewReadyListener?,
     )
 
     /**
-     * 创建并启动相机输入；接入方须先取得所需权限，输入尺寸会按模型规则调整。
-     * 麦克风默认关闭；启用后在连接时开始采集、断开时停止，不进行本地回放。
+     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
+     * follow the model's constraints.
+     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
+     * disconnection without local playback.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param position 需要使用的前置或后置摄像头。
-     * @param useMicrophone 是否启用麦克风；启用前须由应用取得录音权限；默认值为 `false`。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param position The front or rear camera to use.
+     * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
+     * false.
      */
     suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
@@ -111,90 +115,94 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * 更新当前摄像头规格，保留原轨道和预览绑定。
+     * Updates the camera format while retaining its track and preview binding.
      *
-     * @param videoFormat 模型支持的尺寸、采集帧率与编码配置。
+     * @param videoFormat Model-supported dimensions, capture frame rate, and encoding settings.
      */
     suspend fun updateCameraFormat(
         videoFormat: RealtimeVideoFormat,
     )
 
     /**
-     * 启动当前相机源的麦克风采集。
+     * Starts microphone capture for the current camera source.
      */
     fun startMicrophoneCapture()
 
     /**
-     * 停止当前相机源的麦克风采集。
+     * Stops microphone capture for the current camera source.
      */
     fun stopMicrophoneCapture()
 
     /**
-     * 停止当前相机输入并释放其资源；当前源不是相机时不执行释放。
+     * Stops and releases the current camera source; does nothing for other source types.
      */
     suspend fun stopLocalCameraStream()
 
     /**
-     * 解码图片字节并创建保持媒体比例、持续输出图片帧的本地流。
-     * 使用方向校正后的图片尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率。
-     * 模型生成画布独立选择，服务端等比适配并裁去补边后输出。
+     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
+     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The model canvas is selected separately; the server fits the image and removes padding from output.
      *
-     * @param imageData 可解码的图片文件字节，不是裸像素数据。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param imageData Encoded image file bytes, not raw pixels.
      */
     suspend fun createLocalImageStream(
         imageData: ByteArray,
     ): RealtimeMediaStream
 
     /**
-     * 从 Bitmap 创建保持媒体比例的本地图片流。
-     * 使用 Bitmap 尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率，模型生成画布独立选择。
+     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
+     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
+     * rate and a separately selected model canvas.
      *
-     * @param bitmap 待处理或显示的 Android 图片。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param bitmap The Android image to process or display.
      */
     suspend fun createLocalImageStream(
         bitmap: Bitmap,
     ): RealtimeMediaStream
 
     /**
-     * 从可读取的 URI 创建本地图片流；读取权限由接入方保证。
-     * 使用方向校正后的图片尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率。
-     * 模型生成画布独立选择，服务端等比适配并裁去补边后输出。
+     * Creates a local image stream from a readable URI; your app owns read permissions.
+     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The model canvas is selected separately; the server fits the image and removes padding from output.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
      */
     suspend fun createLocalImageStream(
         uri: Uri,
     ): RealtimeMediaStream
 
     /**
-     * 停止当前图片流并释放其资源；当前源不是图片时不执行释放。
+     * Stops and releases the current image source; does nothing for other source types.
      */
     suspend fun stopLocalImageStream()
 
     /**
-     * 从 URI 创建本地视频流；存在音轨时同时提供视频文件的音频输入。
-     * 使用方向校正后的素材尺寸（受模型面积上限约束并按 4 对齐）和模型默认帧率。
-     * SDK 单独选择生成画布，服务端等比适配并裁边输出。
+     * Creates a local video stream from a URI, including its audio track when present.
+     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
+     * output.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
      */
     suspend fun createLocalVideoStream(
         uri: Uri,
     ): RealtimeMediaStream
 
     /**
-     * 绑定接入方自行采集、解码或处理的视频源；SDK 不负责摄像头或播放器的启停和释放。
-     * 默认仅视频，音频和 SDK 容器内的本地预览由 source 按需提供。
-     * 未指定 videoFormat 时使用源视频尺寸和模型默认帧率；最终尺寸按模型规则校验、对齐。
-     * 外部源须按 sink.videoFormat 输出帧。
+     * Binds video collected, decoded, or processed by your app; your app owns camera or player startup,
+     * shutdown, and release.
+     * Video is provided by default; the source may optionally supply audio and a preview inside the SDK
+     * container.
+     * When videoFormat is absent, uses source dimensions and the model's default frame rate, subject to model
+     * validation and alignment.
+     * The external source must deliver frames matching sink.videoFormat.
      *
-     * @param source 接入方负责启停及释放的外部音视频源。
-     * @param videoFormat 媒体输入的尺寸、帧率及可选上行编码配置；null 表示使用媒体解析结果或来源默认值。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param source The external media source whose lifecycle your app owns.
+     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
+     * source or parsed media defaults.
      */
     suspend fun createExternalVideoStream(
         source: RealtimeExternalVideoSource,
@@ -202,16 +210,17 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * 解绑外部输入，停止前须断开生成连接；不关闭接入方的摄像头或播放器。
+     * Unbinds external input after disconnection without closing your app's camera or player.
      */
     suspend fun stopExternalVideoStream()
 
     /**
-     * 只替换外部输入，保留引擎；准备回调执行前已解绑旧供帧入口。
+     * Replaces external input without destroying the engine; old frame delivery is detached before source
+     * preparation.
      *
-     * @param videoFormat 媒体输入的尺寸、帧率及可选上行编码配置；null 表示使用媒体解析结果或来源默认值。
-     * @param targetSource 创建替换用外部视频源的挂起函数。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
+     * source or parsed media defaults.
+     * @param targetSource The suspending callback preparing and returning the replacement source.
      */
     suspend fun replaceExternalVideoStream(
         videoFormat: RealtimeVideoFormat?,
@@ -219,47 +228,46 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * 停止当前视频流并释放解码与预览资源；当前源不是视频时不执行释放。
+     * Stops the current video source and releases decoding and preview resources; does nothing for other
+     * source types.
      */
     suspend fun stopLocalVideoStream()
 
     /**
-     * 设置本地预览是否静音，不改变保存的音量值。
+     * Mutes or unmutes local preview without changing its stored volume.
      *
-     * @param muted 是否静音。
+     * @param muted Whether audio is muted.
      */
     suspend fun setLocalAudioPreviewMuted(
-        muted: Boolean
+        muted: Boolean,
     )
 
     /**
-     * 设置当前本地媒体的预览音量，范围为 0 到 1，不影响提交给 RTC 的音频数据。
+     * Sets local preview volume from 0 to 1 without changing audio submitted to RTC.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     suspend fun setLocalAudioVolume(
-        volume: Float
+        volume: Float,
     )
 
     /**
-     * 切换当前相机输入的方向，并更新本地轨道信息。
-     *
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * Switches the active camera and updates local track metadata.
      */
     suspend fun switchCamera(): RealtimeMediaStream
 
     /**
-     * 停止当前本地媒体源并释放其资源。
+     * Stops and releases the current local media source.
      */
     suspend fun stopLocalStream()
 
     /**
-     * 判断媒体流是否由当前控制器创建并持有。
+     * Checks whether this controller created and still owns the stream.
      *
-     * @param stream 当前本地媒体或远端结果媒体流。
-     * @return 当前控制器持有该媒体流时为 true。
+     * @param stream The local input or remote result stream.
+     * @return True if the controller owns the stream.
      */
     fun owns(
-        stream: RealtimeMediaStream
+        stream: RealtimeMediaStream,
     ): Boolean
 }

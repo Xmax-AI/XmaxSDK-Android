@@ -21,56 +21,57 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * 监听器版本与生成身份共同隔离旧帧；慢消费者最多保留一张待派发帧，避免无界积压。
+ * Listener revisions and generation identity reject stale frames; slow consumers retain at most one pending
+ * frame.
  *
- * @param dispatcher 执行后台操作的协程调度器。
+ * @param dispatcher The background operation dispatcher.
  */
 internal class RealtimeVideoFrameDispatcher(
     dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
 ) {
 
     /**
-     * 远端视频帧的后台派发作用域。
+     * The scope delivering remote video frames in the background.
      */
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     /**
-     * 帧监听与任务状态的并发保护。
+     * The lock protecting frame listener and task identity.
      */
     private val lock = Any()
 
     /**
-     * 当前监听器、生成归属及最新待派发帧。
+     * The current frame listener.
      */
     private var listener: RealtimeVideoFrameListener? = null
 
     /**
-     * 当前远端生成结果的标识。
+     * The current generation result identifier.
      */
     private var generation: Any? = null
 
     /**
-     * 帧分发版本，用于丢弃过期的投递任务。
+     * The delivery revision used to discard stale tasks.
      */
     private var version = 0L
 
     /**
-     * 等待投递的最新远端视频帧。
+     * The latest remote frame awaiting delivery.
      */
     private var pending: Pending? = null
 
     /**
-     * 是否正在向监听器投递视频帧。
+     * Whether a frame is being delivered to the listener.
      */
     private var draining = false
 
     /**
-     * 替换远端视频帧监听器并丢弃旧监听器的待处理帧。
+     * Replaces the remote frame listener and discards frames pending for its predecessor.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setListener(
-        listener: RealtimeVideoFrameListener?
+        listener: RealtimeVideoFrameListener?,
     ) = synchronized(lock) {
         this.listener = listener
         version++
@@ -78,12 +79,12 @@ internal class RealtimeVideoFrameDispatcher(
     }
 
     /**
-     * 设置允许派发帧的当前生成标识。
+     * Sets the generation identifier permitted to deliver frames.
      *
-     * @param generation 用于识别当前生成请求或事件归属的标识。
+     * @param generation The identifier associating events with the current request.
      */
     fun setGeneration(
-        generation: Any?
+        generation: Any?,
     ) = synchronized(lock) {
         this.generation = generation
         version++
@@ -91,31 +92,34 @@ internal class RealtimeVideoFrameDispatcher(
     }
 
     /**
-     * 仅为当前生成任务派发远端视频帧。
+     * Delivers frames only for the current generation task.
      *
-     * @param generation 用于识别当前生成请求或事件归属的标识。
-     * @param frame 待处理、显示或提交的视频帧。
+     * @param generation The identifier associating events with the current request.
+     * @param frame The video frame to process, display, or submit.
      */
     fun dispatch(
         generation: Any,
-        frame: RtcRemoteVideoFrame
+        frame: RtcRemoteVideoFrame,
     ) {
         val version = synchronized(lock) {
             if (this.generation !== generation || listener == null) return
             version
         }
-        // 无监听器时不复制；借用的原生像素只在当前 RTC 回调内访问。
+        // Do not copy pixels without a listener; borrowed native pixels are accessible only inside the RTC callback.
         val copy = frame.copy()
         val launch = synchronized(lock) {
             if (this.version != version || this.generation !== generation || listener == null) return
-            pending = Pending(version, copy)
+            pending = Pending(
+                version,
+                copy,
+            )
             if (draining) false else { draining = true; true }
         }
         if (launch) scope.launch { drain() }
     }
 
     /**
-     * 将当前生成的最新待处理帧交给监听器，跳过失效任务的帧。
+     * Delivers the latest pending frame for the active task, skipping stale tasks.
      */
     private fun drain() {
         while (true) {
@@ -128,8 +132,10 @@ internal class RealtimeVideoFrameDispatcher(
             }
             try {
                 delivery.second?.onFrame(delivery.first)
-            } catch (error: Throwable) {
-                // 接入方回调异常仅记录诊断，不能中断渲染或触发 SDK 致命错误通知。
+            } catch (
+                error: Throwable,
+            ) {
+                // App callback failures produce diagnostics without interrupting rendering or reporting fatal SDK failure.
                 XmaxLogger.render.warn(
                     message = { "Remote video frame listener failed: ${error.message}" },
                 )
@@ -138,17 +144,17 @@ internal class RealtimeVideoFrameDispatcher(
     }
 
     /**
-     * 保存待派发视频帧及其所属生成代次。
+     * A pending video frame and its generation revision.
      */
     private data class Pending(
         /**
-         * 用于识别当前任务或回调归属的版本号。
+         * The revision identifying the owning task or callback.
          */
         val version: Long,
 
         /**
-         * 待处理、显示或提交的视频帧。
+         * The video frame to process, display, or submit.
          */
-        val frame: RealtimeVideoFrame
+        val frame: RealtimeVideoFrame,
     )
 }

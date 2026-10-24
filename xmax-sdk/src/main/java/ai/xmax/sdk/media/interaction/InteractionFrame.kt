@@ -15,21 +15,21 @@ import android.graphics.PointF
 import android.util.SizeF
 
 /**
- * 一次从渲染视口采集到的交互输入。
+ * Interaction input captured from a rendering viewport.
  */
 internal data class InteractionFrame(
     /**
-     * 渲染视口中的触控点集合，单位为像素。
+     * Touch points in viewport coordinates, in pixels.
      */
     val points: List<PointF>,
 
     /**
-     * 预览视图的尺寸，单位为像素。
+     * The preview viewport dimensions, in pixels.
      */
     val viewportSize: SizeF,
 
     /**
-     * 视频等比适配或等比裁切的显示方式。
+     * Aspect-preserving fit or fill scaling.
      */
     val contentMode: VideoContentMode,
 )

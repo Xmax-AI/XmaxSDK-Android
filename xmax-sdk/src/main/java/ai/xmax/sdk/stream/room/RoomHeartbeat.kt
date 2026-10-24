@@ -26,59 +26,62 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancelAndJoin
 
 /**
- * 周期发送 RTC 房间心跳并隔离已经停止的旧周期。
+ * Sends periodic room heartbeats while rejecting events from stopped lifecycles.
  */
 internal class RoomHeartbeat(
     /**
-     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     * The manager for RTC capture, publication, subscription, and rendering.
      */
     private val rtcManager: RtcManaging,
 
     /**
-     * 等待下一轮心跳的挂起函数。
+     * The suspending function waiting for the next heartbeat.
      */
     private val sleeper: suspend () -> Unit = { delay(10_000L) },
 
     /**
-     * 执行后台任务的协程作用域。
+     * The scope for background tasks.
      */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
 
     /**
-     * 房间心跳任务的并发保护。
+     * The lock protecting room heartbeat ownership.
      */
     private val taskLock = Any()
 
     /**
-     * 当前心跳周期及执行任务。
+     * The current heartbeat lifecycle context.
      */
     private val cycle = AtomicLong(0L)
 
     /**
-     * 定时发送房间心跳的协程。
+     * The coroutine periodically sending room heartbeats.
      */
     private var heartbeatTask: Job? = null
 
     /**
-     * 启动当前用户的房间心跳，替换此前的心跳任务。
+     * Starts a user's room heartbeat, replacing its predecessor.
      *
-     * @param userId 房间中的业务用户标识。
+     * @param userId The room's business user identifier.
      */
     fun start(
-        userId: String
+        userId: String,
     ) {
         synchronized(taskLock) {
             val version = cycle.incrementAndGet()
             heartbeatTask?.cancel()
             heartbeatTask = scope.launch {
-                run(version, userId)
+                run(
+                    version,
+                    userId,
+                )
             }
         }
     }
 
     /**
-     * 停止房间心跳并等待已启动的心跳协程退出。
+     * Stops room heartbeats and waits for the running coroutine to exit.
      */
     suspend fun stop() {
         val job = synchronized(taskLock) {
@@ -89,10 +92,10 @@ internal class RoomHeartbeat(
     }
 
     /**
-     * 在心跳周期仍有效期间向房间发送心跳信令。
+     * Sends room heartbeats only while the lifecycle remains active.
      *
-     * @param version 用于识别当前任务或回调归属的版本号。
-     * @param userId 房间中的业务用户标识。
+     * @param version The revision identifying the owning task or callback.
+     * @param userId The room's business user identifier.
      */
     private suspend fun run(
         version: Long,
@@ -104,14 +107,21 @@ internal class RoomHeartbeat(
                 currentCoroutineContext().ensureActive()
                 if (cycle.get() != version) return
                 rtcManager.sendRoomMessage(RoomEvent.heartbeat(userId))
-            } catch (_: CancellationException) {
+            } catch (
+                _: CancellationException,
+            ) {
                 return
-            } catch (error: Throwable) {
+            } catch (
+                error: Throwable,
+            ) {
                 if (cycle.get() != version) return
                 XmaxLogger.room.error(
                     message = {
                         "发送 RTC 房间心跳失败 (Failed to Send RTC Room Heartbeat)\n" +
-                            "└─ ${XmaxLogger.localized("原因：", "Reason: ")}${ErrorMessageFormatter.format(error)}"
+                            "└─ ${XmaxLogger.localized(
+                                "原因：",
+                                "Reason: ",
+                            )}${ErrorMessageFormatter.format(error)}"
                     },
                 )
             }

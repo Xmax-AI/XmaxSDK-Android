@@ -17,27 +17,27 @@ import android.media.AudioManager
 import android.media.AudioTrack
 
 /**
- * 播放视频文件解码出的 48 kHz 单声道 PCM 本地预览。
+ * Plays decoded 48 kHz mono PCM for local video preview.
  */
 internal class LocalAudioPreviewPlayer {
 
     /**
-     * 本地 PCM 播放资源。
+     * The local PCM playback resources.
      */
     private var audioTrack: AudioTrack? = null
 
     /**
-     * 本地预览的静音与音量配置。
+     * The local preview mute state.
      */
     private var muted = false
 
     /**
-     * 本地音频预览音量，范围为 0 到 1。
+     * The local audio preview volume, from 0 to 1.
      */
     private var volume = DEFAULT_VOLUME
 
     /**
-     * 启动用于本地预览的音频播放队列。
+     * Starts the local preview audio queue.
      */
     @Synchronized
     fun start() {
@@ -57,7 +57,10 @@ internal class LocalAudioPreviewPlayer {
                 .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                 .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                 .build(),
-            maxOf(minimumBufferSize, AudioFrame.samplesPerFrame * Short.SIZE_BYTES * 4),
+            maxOf(
+                minimumBufferSize,
+                AudioFrame.samplesPerFrame * Short.SIZE_BYTES * 4,
+            ),
             AudioTrack.MODE_STREAM,
             AudioManager.AUDIO_SESSION_ID_GENERATE,
         )
@@ -71,46 +74,54 @@ internal class LocalAudioPreviewPlayer {
     }
 
     /**
-     * 将 PCM 音频帧加入本地预览播放队列。
+     * Queues a PCM frame for local preview playback.
      *
-     * @param frame 待播放或提交的 PCM 音频帧。
+     * @param frame The PCM audio frame to play or submit.
      */
     @Synchronized
     fun enqueue(
-        frame: AudioFrame
+        frame: AudioFrame,
     ) {
         val data = frame.dataBytes()
-        audioTrack?.write(data, 0, data.size, AudioTrack.WRITE_NON_BLOCKING)
+        audioTrack?.write(
+            data,
+            0,
+            data.size,
+            AudioTrack.WRITE_NON_BLOCKING,
+        )
     }
 
     /**
-     * 设置本地音频预览是否静音。
+     * Mutes or unmutes local audio preview.
      *
-     * @param muted 是否静音。
+     * @param muted Whether audio is muted.
      */
     @Synchronized
     fun setMuted(
-        muted: Boolean
+        muted: Boolean,
     ) {
         this.muted = muted
         audioTrack?.setVolume(if (muted) 0f else volume)
     }
 
     /**
-     * 设置本地音频预览音量。
+     * Sets local audio preview volume.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     @Synchronized
     fun setVolume(
-        volume: Float
+        volume: Float,
     ) {
-        this.volume = volume.coerceIn(0f, 1f)
+        this.volume = volume.coerceIn(
+            0f,
+            1f,
+        )
         audioTrack?.setVolume(if (muted) 0f else this.volume)
     }
 
     /**
-     * 停止本地音频预览并释放音频输出资源。
+     * Stops local audio preview and releases audio output resources.
      */
     @Synchronized
     fun stop() {
@@ -123,12 +134,12 @@ internal class LocalAudioPreviewPlayer {
     }
 
     /**
-     * 本地音频预览的默认配置。
+     * The default local preview audio configuration.
      */
     private companion object {
 
         /**
-         * 本地音频预览的默认音量，范围为 0 到 1。
+         * The default local preview volume, from 0 to 1.
          */
         const val DEFAULT_VOLUME = 0.45f
     }

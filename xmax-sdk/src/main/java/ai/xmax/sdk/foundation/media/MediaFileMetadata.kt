@@ -13,31 +13,31 @@ package ai.xmax.sdk.foundation.media
 import ai.xmax.sdk.VideoRotation
 
 /**
- * 本地媒体文件中视频、音频和时间线所需的元数据。
+ * Video, audio, and timeline metadata for a local media file.
  */
 internal data class MediaFileMetadata(
     /**
-     * 画面宽度，单位为像素。
+     * The frame width, in pixels.
      */
     val width: Int,
 
     /**
-     * 画面高度，单位为像素。
+     * The frame height, in pixels.
      */
     val height: Int,
 
     /**
-     * 应用到源画面的旋转方向。
+     * The rotation applied to the source image.
      */
     val rotation: VideoRotation,
 
     /**
-     * 媒体持续时间，单位为微秒。
+     * The media duration, in microseconds.
      */
     val durationUs: Long,
 
     /**
-     * 输入媒体是否包含可用音频。
+     * Whether the input provides audio.
      */
     val hasAudio: Boolean,
 )

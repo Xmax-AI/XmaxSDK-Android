@@ -11,37 +11,37 @@
 package ai.xmax.sdk
 
 /**
- * 服务端读取参考视频时的采样方式。
+ * The sampling method for server-read reference video.
  */
 public enum class RealtimeVideoSampleMethod(
     /**
-     * 需要规范化、校验或显示的文本。
+     * The string representation used for configuration or display.
      */
-    internal val value: String
+    internal val value: String,
 ) {
 
     /**
-     * 按时间间隔采样网络视频。
+     * Samples network video at time intervals.
      */
     TIME("time"),
 
     /**
-     * 按帧率采样网络视频。
+     * Samples network video by frame rate.
      */
     FPS("fps"),
 }
 
 /**
- * 可由服务端直接访问的参考视频。
+ * A reference video directly accessible to the server.
  */
 public data class RealtimeReferenceVideo(
     /**
-     * 相对于 API 基础地址的请求路径。
+     * The video URL directly accessible to the generation server.
      */
     public val path: String,
 
     /**
-     * 服务端读取网络视频时采用的采样方式；默认值为 `RealtimeVideoSampleMethod.TIME`。
+     * The server video sampling method; defaults to `RealtimeVideoSampleMethod.TIME`.
      */
     public val sampleMethod: RealtimeVideoSampleMethod = RealtimeVideoSampleMethod.TIME,
 )

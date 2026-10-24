@@ -15,10 +15,10 @@ import android.os.SystemClock
 import kotlin.math.ceil
 
 /**
- * 为同一文件的音频和视频提供统一的循环播放时钟。
+ * A shared looped-playback clock for a file's audio and video.
  *
- * @param mediaDurationUs 一轮媒体播放的时长，单位为微秒。
- * @param nowNanoseconds 当前单调时钟时间，单位为纳秒。
+ * @param mediaDurationUs The duration of one playback loop, in microseconds.
+ * @param nowNanoseconds The current monotonic timestamp, in nanoseconds.
  */
 internal class MediaPlaybackTimeline(
     mediaDurationUs: Long,
@@ -26,17 +26,17 @@ internal class MediaPlaybackTimeline(
 ) {
 
     /**
-     * 单轮媒体的采样数量、持续时间及播放起点。
+     * The sample count of one media loop.
      */
     val cycleSampleCount: Int
 
     /**
-     * 一次循环播放的时长，单位为纳秒。
+     * The duration of one playback loop, in nanoseconds.
      */
     val cycleDurationNanoseconds: Long
 
     /**
-     * 播放时间线的单调时钟起点，单位为纳秒。
+     * The monotonic playback origin, in nanoseconds.
      */
     private val anchorNanoseconds: Long
 
@@ -48,8 +48,11 @@ internal class MediaPlaybackTimeline(
         val packetCount = ceil(
             rawSampleCount.toDouble() / AudioFrame.samplesPerFrame,
         ).toLong()
-        val alignedSamples = maxOf(AudioFrame.samplesPerFrame.toLong(), packetCount *
-            AudioFrame.samplesPerFrame)
+        val alignedSamples = maxOf(
+            AudioFrame.samplesPerFrame.toLong(),
+            packetCount *
+                AudioFrame.samplesPerFrame,
+        )
         require(alignedSamples <= Int.MAX_VALUE) { "Media duration is too long" }
         cycleSampleCount = alignedSamples.toInt()
         cycleDurationNanoseconds = alignedSamples * NANOSECONDS_PER_SECOND /
@@ -58,56 +61,56 @@ internal class MediaPlaybackTimeline(
     }
 
     /**
-     * 计算指定循环内媒体时间点对应的播放时刻。
+     * Resolves the playback deadline for a position within a loop.
      *
-     * @param loopIndex 从零开始的媒体循环次数。
-     * @param mediaOffsetUs 本轮媒体内的时间偏移，单位为微秒。
-     * @return 对应帧应提交时的单调时钟纳秒数。
+     * @param loopIndex The zero-based playback loop number.
+     * @param mediaOffsetUs The position within this loop, in microseconds.
+     * @return The frame submission deadline on the monotonic nanosecond clock.
      */
     fun target(
         loopIndex: Int,
-        mediaOffsetUs: Long
+        mediaOffsetUs: Long,
     ): Long =
         anchorNanoseconds + cycleDurationNanoseconds * loopIndex +
             mediaOffsetUs.coerceAtLeast(0L) * NANOSECONDS_PER_MICROSECOND
 
     /**
-     * 计算指定循环内媒体时间点对应的播放时刻。
+     * Resolves the playback deadline for a position within a loop.
      *
-     * @param loopIndex 从零开始的媒体循环次数。
-     * @param sampleOffset 音频包在媒体时间线中的起始采样位置。
-     * @return 对应帧应提交时的单调时钟纳秒数。
+     * @param loopIndex The zero-based playback loop number.
+     * @param sampleOffset The packet's starting sample position on the media timeline.
+     * @return The frame submission deadline on the monotonic nanosecond clock.
      */
     fun target(
         loopIndex: Int,
-        sampleOffset: Int
+        sampleOffset: Int,
     ): Long = target(
         loopIndex,
         sampleOffset.toLong() * MICROSECONDS_PER_SECOND / AudioFrame.sampleRate,
     )
 
     /**
-     * 循环播放的起始缓冲与时间单位换算常量。
+     * Playback startup buffering and time conversion constants.
      */
     private companion object {
 
         /**
-         * 播放起点预留的缓冲时长，单位为纳秒。
+         * The startup buffering interval, in nanoseconds.
          */
         const val START_DELAY_NANOSECONDS = 100_000_000L
 
         /**
-         * 微秒换算为纳秒的倍率。
+         * The number of nanoseconds per microsecond.
          */
         const val NANOSECONDS_PER_MICROSECOND = 1_000L
 
         /**
-         * 秒换算为纳秒的倍率。
+         * The number of nanoseconds per second.
          */
         const val NANOSECONDS_PER_SECOND = 1_000_000_000L
 
         /**
-         * 秒换算为微秒的倍率。
+         * The number of microseconds per second.
          */
         const val MICROSECONDS_PER_SECOND = 1_000_000L
     }

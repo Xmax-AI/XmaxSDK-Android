@@ -23,19 +23,19 @@ import android.media.Image
 import java.nio.ByteBuffer
 
 /**
- * 将 Android 解码器的灵活 YUV 420 输出转换为 RTC 可直接消费的紧凑 I420 帧。
+ * Converts flexible Android YUV420 decoder output to compact I420 for RTC.
  */
 internal object Yuv420VideoFrameConverter {
 
     /**
-     * 按目标尺寸和方向将解码图像转换为 I420 视频帧。
+     * Converts a decoded image to I420 with the requested dimensions and rotation.
      *
-     * @param image Android 解码器输出的图像。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
-     * @param rotation 应用到源画面的旋转方向。
-     * @param timestampUs 帧的单调时间戳，单位为微秒。
-     * @return 按目标像素格式、尺寸和方向生成的视频帧。
+     * @param image The Android decoder image.
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
+     * @param rotation The rotation applied to the source image.
+     * @param timestampUs The monotonic frame timestamp, in microseconds.
+     * @return A frame with the requested pixel format, dimensions, and orientation.
      */
     fun convert(
         image: Image,
@@ -73,14 +73,14 @@ internal object Yuv420VideoFrameConverter {
     }
 
     /**
-     * 按目标尺寸和方向将解码图像转换为 I420 视频帧。
+     * Converts a decoded image to I420 with the requested dimensions and rotation.
      *
-     * @param source 源图像的尺寸、裁剪区域及像素平面。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
-     * @param rotation 应用到源画面的旋转方向。
-     * @param timestampUs 帧的单调时间戳，单位为微秒。
-     * @return 按目标像素格式、尺寸和方向生成的视频帧。
+     * @param source The source dimensions, crop region, and pixel planes.
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
+     * @param rotation The rotation applied to the source image.
+     * @param timestampUs The monotonic frame timestamp, in microseconds.
+     * @return A frame with the requested pixel format, dimensions, and orientation.
      */
     internal fun convert(
         source: Source,
@@ -89,7 +89,11 @@ internal object Yuv420VideoFrameConverter {
         rotation: VideoRotation,
         timestampUs: Long,
     ): VideoFrame {
-        validate(source, outputWidth, outputHeight)
+        validate(
+            source,
+            outputWidth,
+            outputHeight,
+        )
         val y = ByteArray(outputWidth * outputHeight)
         val chromaWidth = outputWidth / CHROMA_SUBSAMPLING
         val chromaHeight = outputHeight / CHROMA_SUBSAMPLING
@@ -106,8 +110,17 @@ internal object Yuv420VideoFrameConverter {
             v = v,
         )
         if (!convertedNatively) {
-            val mapping = SourceMapping(source, outputWidth, outputHeight, rotation)
-            copyLuma(source.planes[Y_PLANE], mapping, y)
+            val mapping = SourceMapping(
+                source,
+                outputWidth,
+                outputHeight,
+                rotation,
+            )
+            copyLuma(
+                source.planes[Y_PLANE],
+                mapping,
+                y,
+            )
             copyChroma(
                 uPlane = source.planes[U_PLANE],
                 vPlane = source.planes[V_PLANE],
@@ -120,24 +133,40 @@ internal object Yuv420VideoFrameConverter {
         }
 
         return VideoFrame(
-            format = VideoFormat(outputWidth, outputHeight, VideoPixelFormat.I420),
+            format = VideoFormat(
+                outputWidth,
+                outputHeight,
+                VideoPixelFormat.I420,
+            ),
             timestampUs = timestampUs,
             planes = listOf(
-                VideoFramePlane(y, stride = outputWidth, copyData = false),
-                VideoFramePlane(u, stride = chromaWidth, copyData = false),
-                VideoFramePlane(v, stride = chromaWidth, copyData = false),
+                VideoFramePlane(
+                    y,
+                    stride = outputWidth,
+                    copyData = false,
+                ),
+                VideoFramePlane(
+                    u,
+                    stride = chromaWidth,
+                    copyData = false,
+                ),
+                VideoFramePlane(
+                    v,
+                    stride = chromaWidth,
+                    copyData = false,
+                ),
             ),
         )
     }
 
     /**
-     * 将视频帧转换为用于本地预览的 Bitmap，不改变上行视频帧。
+     * Converts a frame to a local preview Bitmap without changing uplink pixels.
      *
-     * @param frame 待处理、显示或提交的视频帧。
-     * @return 用于本地显示的图片。
+     * @param frame The video frame to process, display, or submit.
+     * @return An image for local display.
      */
     fun makePreviewBitmap(
-        frame: VideoFrame
+        frame: VideoFrame,
     ): Bitmap {
         if (frame.format.pixelFormat != VideoPixelFormat.I420 || frame.planes.size != PLANE_COUNT) {
             throw IllegalArgumentException("Decoded video preview requires an I420 frame")
@@ -165,7 +194,12 @@ internal object Yuv420VideoFrameConverter {
                 pixels = pixels,
             )
         ) {
-            return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+            return Bitmap.createBitmap(
+                pixels,
+                width,
+                height,
+                Bitmap.Config.ARGB_8888,
+            )
         }
 
         var outputOffset = 0
@@ -192,15 +226,20 @@ internal object Yuv420VideoFrameConverter {
                 outputOffset += 1
             }
         }
-        return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+        return Bitmap.createBitmap(
+            pixels,
+            width,
+            height,
+            Bitmap.Config.ARGB_8888,
+        )
     }
 
     /**
-     * 按输出坐标映射复制 Y 亮度平面。
+     * Copies the Y luma plane using output-to-source coordinates.
      *
-     * @param plane 待读取的像素平面。
-     * @param mapping 输出坐标到源图像坐标的映射。
-     * @param output 接收转换结果的字节数组。
+     * @param plane The pixel plane to read.
+     * @param mapping The output-to-source coordinate mapping.
+     * @param output The output byte array.
      */
     private fun copyLuma(
         plane: Plane,
@@ -212,24 +251,33 @@ internal object Yuv420VideoFrameConverter {
             val displayY = mapping.targetYs[targetY]
             for (targetX in mapping.targetXs.indices) {
                 val displayX = mapping.targetXs[targetX]
-                val sourceX = mapping.sourceX(displayX, displayY)
-                val sourceY = mapping.sourceY(displayX, displayY)
-                output[outputOffset] = plane.sample(sourceX, sourceY)
+                val sourceX = mapping.sourceX(
+                    displayX,
+                    displayY,
+                )
+                val sourceY = mapping.sourceY(
+                    displayX,
+                    displayY,
+                )
+                output[outputOffset] = plane.sample(
+                    sourceX,
+                    sourceY,
+                )
                 outputOffset += 1
             }
         }
     }
 
     /**
-     * 按输出坐标映射复制 U、V 色度平面。
+     * Copies U and V chroma using output-to-source coordinates.
      *
-     * @param uPlane 源图像的 U 色度平面。
-     * @param vPlane 源图像的 V 色度平面。
-     * @param mapping 输出坐标到源图像坐标的映射。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
-     * @param u U 像素平面数据。
-     * @param v V 像素平面数据。
+     * @param uPlane The source U chroma plane.
+     * @param vPlane The source V chroma plane.
+     * @param mapping The output-to-source coordinate mapping.
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
+     * @param u The U pixel plane.
+     * @param v The V pixel plane.
      */
     private fun copyChroma(
         uPlane: Plane,
@@ -247,26 +295,38 @@ internal object Yuv420VideoFrameConverter {
             for (targetX in 0 until outputWidth / CHROMA_SUBSAMPLING) {
                 val lumaX = (targetX * CHROMA_SUBSAMPLING + 1).coerceAtMost(outputWidth - 1)
                 val displayX = mapping.targetXs[lumaX]
-                val sourceX = mapping.sourceX(displayX, displayY) / CHROMA_SUBSAMPLING
-                val sourceY = mapping.sourceY(displayX, displayY) / CHROMA_SUBSAMPLING
-                u[outputOffset] = uPlane.sample(sourceX, sourceY)
-                v[outputOffset] = vPlane.sample(sourceX, sourceY)
+                val sourceX = mapping.sourceX(
+                    displayX,
+                    displayY,
+                ) / CHROMA_SUBSAMPLING
+                val sourceY = mapping.sourceY(
+                    displayX,
+                    displayY,
+                ) / CHROMA_SUBSAMPLING
+                u[outputOffset] = uPlane.sample(
+                    sourceX,
+                    sourceY,
+                )
+                v[outputOffset] = vPlane.sample(
+                    sourceX,
+                    sourceY,
+                )
                 outputOffset += 1
             }
         }
     }
 
     /**
-     * 校验图像平面、裁剪范围及输出尺寸是否满足 YUV420 转换要求。
+     * Validates planes, crop bounds, and output dimensions for YUV420 conversion.
      *
-     * @param source 源图像的尺寸、裁剪区域及像素平面。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
+     * @param source The source dimensions, crop region, and pixel planes.
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
      */
     private fun validate(
         source: Source,
         outputWidth: Int,
-        outputHeight: Int
+        outputHeight: Int,
     ) {
         if (source.width <= 0 || source.height <= 0 ||
             source.cropWidth <= 0 || source.cropHeight <= 0 ||
@@ -283,107 +343,111 @@ internal object Yuv420VideoFrameConverter {
     }
 
     /**
-     * 将颜色通道值限制在 0 到 255 之间。
+     * Clamps a color channel to 0 through 255.
      *
-     * @param value 需要限制到有效范围的颜色通道值。
-     * @return 位于 0 到 255 范围内的颜色通道值。
+     * @param value The color channel value to clamp.
+     * @return A color channel value from 0 to 255.
      */
     private fun clampColor(
-        value: Int
-    ): Int = value.coerceIn(0, 255)
+        value: Int,
+    ): Int = value.coerceIn(
+        0,
+        255,
+    )
 
     /**
-     * 描述 YUV420 源图像尺寸、有效裁剪区及像素平面。
+     * A YUV420 source image with dimensions, crop region, and pixel planes.
      */
     internal data class Source(
         /**
-         * 画面宽度，单位为像素。
+         * The frame width, in pixels.
          */
         val width: Int,
 
         /**
-         * 画面高度，单位为像素。
+         * The frame height, in pixels.
          */
         val height: Int,
 
         /**
-         * 裁剪区域左边界，单位为像素。
+         * The left crop edge, in pixels.
          */
         val cropLeft: Int,
 
         /**
-         * 裁剪区域上边界，单位为像素。
+         * The top crop edge, in pixels.
          */
         val cropTop: Int,
 
         /**
-         * 裁剪区域宽度，单位为像素。
+         * The crop width, in pixels.
          */
         val cropWidth: Int,
 
         /**
-         * 裁剪区域高度，单位为像素。
+         * The crop height, in pixels.
          */
         val cropHeight: Int,
 
         /**
-         * 按像素格式顺序排列的像素平面。
+         * The pixel planes in format order.
          */
         val planes: List<Plane>,
     )
 
     /**
-     * 描述像素平面的缓冲区及行、像素步长。
+     * A pixel plane buffer with row and pixel strides.
      */
     internal data class Plane(
         /**
-         * 包含待处理数据的字节缓冲区。
+         * The buffer containing data to process.
          */
         val buffer: ByteBuffer,
 
         /**
-         * 相邻行起点的字节距离。
+         * The row stride, in bytes.
          */
         val rowStride: Int,
 
         /**
-         * 同一行相邻像素的字节距离。
+         * The pixel stride within each row, in bytes.
          */
         val pixelStride: Int,
 
         /**
-         * 像素平面有效数据的起始字节偏移。
+         * The valid data's starting byte offset.
          */
         val baseOffset: Int = buffer.position(),
     ) {
+
         init {
             require(rowStride > 0 && pixelStride > 0 && baseOffset >= 0)
         }
 
         /**
-         * 读取指定坐标的像素平面样本。
+         * Reads a plane sample at the requested coordinates.
          *
-         * @param x 画面横坐标，单位为像素。
-         * @param y 画面纵坐标，单位为像素。
-         * @return 指定位置的像素样本。
+         * @param x The horizontal image coordinate, in pixels.
+         * @param y The vertical image coordinate, in pixels.
+         * @return The pixel sample at the requested position.
          */
         fun sample(
             x: Int,
-            y: Int
+            y: Int,
         ): Byte = buffer.get(
             baseOffset + y * rowStride + x * pixelStride,
         )
     }
 
     /**
-     * 将旋转缩放后的输出像素位置映射到源图像坐标。
+     * Maps rotated and scaled output pixels to source image coordinates.
      *
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
      */
     private class SourceMapping(
         /**
-         * 源图像的尺寸、裁剪区域及像素平面。
+         * The source dimensions, crop region, and pixel planes.
          */
         private val source: Source,
 
@@ -391,28 +455,28 @@ internal object Yuv420VideoFrameConverter {
         outputHeight: Int,
 
         /**
-         * 应用到源画面的旋转方向。
+         * The rotation applied to the source image.
          */
         private val rotation: VideoRotation,
     ) {
 
         /**
-         * 源图像应用旋转后的显示尺寸。
+         * The source display dimensions after rotation.
          */
         private val displayWidth: Int
 
         /**
-         * 应用旋转后的源画面高度，单位为像素。
+         * The source height after rotation, in pixels.
          */
         private val displayHeight: Int
 
         /**
-         * 输出像素对应的源图像坐标表。
+         * The source coordinates corresponding to output pixel columns.
          */
         val targetXs: IntArray
 
         /**
-         * 目标各行对应的源画面纵坐标。
+         * The source coordinates corresponding to output pixel rows.
          */
         val targetYs: IntArray
 
@@ -431,24 +495,30 @@ internal object Yuv420VideoFrameConverter {
             val displayTop = (displayHeight - visibleHeight) / 2.0
             targetXs = IntArray(outputWidth) { targetX ->
                 (displayLeft + (targetX + 0.5) / scale)
-                    .toInt().coerceIn(0, displayWidth - 1)
+                    .toInt().coerceIn(
+                        0,
+                        displayWidth - 1,
+                    )
             }
             targetYs = IntArray(outputHeight) { targetY ->
                 (displayTop + (targetY + 0.5) / scale)
-                    .toInt().coerceIn(0, displayHeight - 1)
+                    .toInt().coerceIn(
+                        0,
+                        displayHeight - 1,
+                    )
             }
         }
 
         /**
-         * 将输出画面坐标转换为源图像的横坐标。
+         * Maps output coordinates to a source horizontal coordinate.
          *
-         * @param displayX 输出画面横坐标，单位为像素。
-         * @param displayY 输出画面纵坐标，单位为像素。
-         * @return 映射后的源图像横坐标，单位为像素。
+         * @param displayX The horizontal output coordinate, in pixels.
+         * @param displayY The vertical output coordinate, in pixels.
+         * @return The mapped source horizontal coordinate, in pixels.
          */
         fun sourceX(
             displayX: Int,
-            displayY: Int
+            displayY: Int,
         ): Int = source.cropLeft + when (rotation) {
             VideoRotation.ROTATION_0 -> displayX
             VideoRotation.ROTATION_90 -> displayY
@@ -457,15 +527,15 @@ internal object Yuv420VideoFrameConverter {
         }
 
         /**
-         * 将输出画面坐标转换为源图像的纵坐标。
+         * Maps output coordinates to a source vertical coordinate.
          *
-         * @param displayX 输出画面横坐标，单位为像素。
-         * @param displayY 输出画面纵坐标，单位为像素。
-         * @return 映射后的源图像纵坐标，单位为像素。
+         * @param displayX The horizontal output coordinate, in pixels.
+         * @param displayY The vertical output coordinate, in pixels.
+         * @return The mapped source vertical coordinate, in pixels.
          */
         fun sourceY(
             displayX: Int,
-            displayY: Int
+            displayY: Int,
         ): Int = source.cropTop + when (rotation) {
             VideoRotation.ROTATION_0 -> displayY
             VideoRotation.ROTATION_90 -> source.cropHeight - 1 - displayX
@@ -475,85 +545,84 @@ internal object Yuv420VideoFrameConverter {
     }
 
     /**
-     * 创建包含媒体处理原因的 SDK 错误。
+     * Creates a media error with the processing failure description.
      *
-     * @param message 待发送或记录的消息文本。
-     * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+     * @param message The message to send or log.
      */
     private fun mediaError(
-        message: String
+        message: String,
     ): XmaxError = XmaxError(
         code = XmaxErrorCode.MEDIA_ERROR,
         message = message,
     )
 
     /**
-     * 像素转换所需的格式常量与颜色系数。
+     * Pixel format constants and color conversion coefficients.
      */
     private const val PLANE_COUNT = 3
 
     /**
-     * 亮度平面在输入图像中的索引。
+     * The source luma plane index.
      */
     private const val Y_PLANE = 0
 
     /**
-     * U 色度平面在输入图像中的索引。
+     * The source U chroma plane index.
      */
     private const val U_PLANE = 1
 
     /**
-     * V 色度平面在输入图像中的索引。
+     * The source V chroma plane index.
      */
     private const val V_PLANE = 2
 
     /**
-     * YUV 420 色度相对亮度的采样间隔。
+     * The chroma subsampling interval relative to YUV420 luma.
      */
     private const val CHROMA_SUBSAMPLING = 2
 
     /**
-     * 有限范围 YUV 的亮度偏移量。
+     * The limited-range YUV luma offset.
      */
     private const val LUMA_OFFSET = 16
 
     /**
-     * 色度转换为有符号数时的零点偏移量。
+     * The offset converting unsigned chroma to signed values.
      */
     private const val CHROMA_OFFSET = 128
 
     /**
-     * 亮度转换为 RGB 时的定点乘数。
+     * The fixed-point luma-to-RGB multiplier.
      */
     private const val YUV_LUMA_MULTIPLIER = 298
 
     /**
-     * V 分量对红色通道的定点权重。
+     * The fixed-point V contribution to red.
      */
     private const val YUV_RED_V = 409
 
     /**
-     * U 分量对绿色通道的定点权重。
+     * The fixed-point U contribution to green.
      */
     private const val YUV_GREEN_U = 100
 
     /**
-     * V 分量对绿色通道的定点权重。
+     * The fixed-point V contribution to green.
      */
     private const val YUV_GREEN_V = 208
 
     /**
-     * U 分量对蓝色通道的定点权重。
+     * The fixed-point U contribution to blue.
      */
     private const val YUV_BLUE_U = 516
 
     /**
-     * 定点颜色换算时的舍入偏移量。
+     * The fixed-point color rounding offset.
      */
     private const val ROUNDING = 128
 
     /**
-     * 不透明 ARGB 像素的 Alpha 位掩码。
+     * The alpha mask for opaque ARGB pixels.
      */
     private const val OPAQUE_ALPHA = -0x1000000
 }

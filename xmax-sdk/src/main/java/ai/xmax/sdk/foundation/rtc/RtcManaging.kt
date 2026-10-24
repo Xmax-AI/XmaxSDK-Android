@@ -18,34 +18,34 @@ import ai.xmax.sdk.VideoContentMode
 import android.view.View
 
 /**
- * 定义 RTC 引擎生命周期和房间连接能力。
+ * The RTC engine lifecycle and room connection capabilities.
  */
 internal interface RtcManaging {
 
     /**
-     * 初始化 RTC 引擎。重复调用不会重复获取引擎。
+     * Initializes the RTC engine without acquiring another lease on repeated calls.
      */
     suspend fun initialize()
 
     /**
-     * 离开房间并销毁 RTC 引擎。重复调用安全。
+     * Leaves the room and destroys the RTC engine; repeated calls are safe.
      */
     suspend fun destroy()
 
     /**
-     * 应用主视频流编码配置。
+     * Applies encoding settings to the primary video stream.
      *
-     * @param configuration 上行视频的尺寸、帧率、码率及编码偏好。
+     * @param configuration Uplink dimensions, frame rate, bitrate, and encoding preference.
      */
     fun configureVideoEncoding(
-        configuration: VideoEncodingConfiguration
+        configuration: VideoEncodingConfiguration,
     )
 
     /**
-     * 推送一帧外部视频数据及其可选 SEI。
+     * Submits one external video frame with optional SEI metadata.
      *
-     * @param frame 待处理、显示或提交的视频帧。
-     * @param seiData 附加视频元数据；null 表示不附加，当前 Agora 适配不使用该字段。
+     * @param frame The video frame to process, display, or submit.
+     * @param seiData Optional video metadata; unused by the current Agora implementation.
      */
     fun pushExternalVideoFrame(
         frame: VideoFrame,
@@ -53,45 +53,45 @@ internal interface RtcManaging {
     )
 
     /**
-     * 推送一帧 10 ms PCM 外部音频数据。
+     * Submits one external 10 ms PCM audio frame.
      *
-     * @param frame 待播放或提交的 PCM 音频帧。
+     * @param frame The PCM audio frame to play or submit.
      */
     fun pushExternalAudioFrame(
-        frame: AudioFrame
+        frame: AudioFrame,
     )
 
     /**
-     * 将主视频切换为 RTC 外部帧输入。
+     * Selects external frames as the primary video source.
      */
     fun useExternalVideoSource()
 
     /**
-     * 将主音频切换为 RTC 外部 PCM 输入。
+     * Selects external PCM as the primary audio source.
      */
     fun startExternalAudioSource()
 
     /**
-     * 停止 RTC 外部音频输入。
+     * Stops RTC external audio input.
      */
     fun stopExternalAudioSource()
 
     /**
-     * 切换到 RTC 内部音频源并启动麦克风采集。
+     * Selects internal RTC audio input and starts microphone capture.
      */
     fun startAudioCapture()
 
     /**
-     * 停止 RTC 内部麦克风采集。
+     * Stops internal RTC microphone capture.
      */
     fun stopAudioCapture()
 
     /**
-     * 按指定格式启动 RTC 内部摄像头采集。
+     * Starts internal RTC camera capture with the requested format.
      *
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
-     * @param frameRate 视频帧率，单位为 fps。
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
+     * @param frameRate The video frame rate, in fps.
      */
     fun startVideoCapture(
         width: Int,
@@ -100,11 +100,11 @@ internal interface RtcManaging {
     )
 
     /**
-     * 更新摄像头采集规格，保留镜头和本地预览绑定。
+     * Updates camera capture while retaining the lens and local preview binding.
      *
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
-     * @param frameRate 采集帧率，单位为 fps。
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
+     * @param frameRate The capture frame rate, in fps.
      */
     fun updateVideoCaptureFormat(
         width: Int,
@@ -113,24 +113,24 @@ internal interface RtcManaging {
     )
 
     /**
-     * 停止 RTC 内部摄像头采集。
+     * Stops internal RTC camera capture.
      */
     fun stopVideoCapture()
 
     /**
-     * 切换 RTC 内部采集使用的摄像头。
+     * Switches the camera used by internal RTC capture.
      *
-     * @param position 需要使用的前置或后置摄像头。
+     * @param position The front or rear camera to use.
      */
     fun switchCamera(
-        position: CameraPosition
+        position: CameraPosition,
     )
 
     /**
-     * 将本地视频绑定到渲染视图。
+     * Binds local video to a rendering view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     fun bindLocalVideo(
         view: View,
@@ -138,16 +138,16 @@ internal interface RtcManaging {
     )
 
     /**
-     * 解除本地视频与渲染视图的绑定。
+     * Unbinds the local rendering view.
      */
     fun unbindLocalVideo()
 
     /**
-     * 将指定远端视频流绑定到渲染视图。
+     * Binds a remote stream to its rendering view.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param stream The remote stream identified by room and user.
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     fun bindRemoteVideo(
         stream: RemoteStream,
@@ -156,53 +156,53 @@ internal interface RtcManaging {
     )
 
     /**
-     * 解除指定远端视频流的渲染绑定。
+     * Unbinds a remote stream's rendering view.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
+     * @param stream The remote stream identified by room and user.
      */
     fun unbindRemoteVideo(
-        stream: RemoteStream
+        stream: RemoteStream,
     )
 
     /**
-     * 加入 RTC 房间，并等待服务端确认加入成功。
+     * Joins an RTC room and waits for join confirmation.
      *
-     * @param configuration 房间标识、用户账号、App ID 和进房 Token。
+     * @param configuration The room, user account, App ID, and room token.
      */
     suspend fun joinRoom(
-        configuration: RoomJoinConfiguration
+        configuration: RoomJoinConfiguration,
     )
 
     /**
-     * 离开当前或正在加入的 RTC 房间。重复调用安全。
+     * Leaves the active or pending room; repeated calls are safe.
      */
     suspend fun leaveRoom()
 
     /**
-     * 发布本地视频流。
+     * Publishes local video.
      */
     fun publishLocalVideo()
 
     /**
-     * 停止发布本地视频流。没有活动房间时安全返回。
+     * Unpublishes local video, safely returning if no room is active.
      */
     fun unpublishLocalVideo()
 
     /**
-     * 发布本地音频流。
+     * Publishes local audio.
      */
     fun publishLocalAudio()
 
     /**
-     * 停止发布本地音频流。没有活动房间时安全返回。
+     * Unpublishes local audio, safely returning if no room is active.
      */
     fun unpublishLocalAudio()
 
     /**
-     * 更新远端视频流订阅状态。
+     * Updates remote video subscription.
      *
-     * @param userId 房间中的业务用户标识。
-     * @param subscribe true 订阅媒体，false 取消订阅。
+     * @param userId The room's business user identifier.
+     * @param subscribe True to subscribe, false to unsubscribe.
      */
     fun subscribeRemoteVideo(
         userId: String,
@@ -210,10 +210,10 @@ internal interface RtcManaging {
     )
 
     /**
-     * 更新远端音频流订阅状态。
+     * Updates remote audio subscription.
      *
-     * @param userId 房间中的业务用户标识。
-     * @param subscribe true 订阅媒体，false 取消订阅。
+     * @param userId The room's business user identifier.
+     * @param subscribe True to subscribe, false to unsubscribe.
      */
     fun subscribeRemoteAudio(
         userId: String,
@@ -221,10 +221,10 @@ internal interface RtcManaging {
     )
 
     /**
-     * 设置指定远端用户的音频播放音量。
+     * Sets playback volume for a remote user's audio.
      *
-     * @param volume 远端音频播放音量，范围为 0 到 100。
-     * @param userId 房间中的业务用户标识。
+     * @param volume The remote volume, from 0 to 100.
+     * @param userId The room's business user identifier.
      */
     fun setRemoteAudioVolume(
         volume: Int,
@@ -232,53 +232,55 @@ internal interface RtcManaging {
     )
 
     /**
-     * 向当前 RTC 房间发送消息。
+     * Sends a message to the current RTC room.
      *
-     * @param message 待发送或记录的消息文本。
-     * @param replacingPendingMessage 合并键；同键且尚未发送的信令仅保留最新内容。
+     * @param message The message to send or log.
+     * @param replacingPendingMessage The coalescing key; retains only the latest unsent message for the same
+     * key.
      */
     fun sendRoomMessage(
         message: String,
-        replacingPendingMessage: String? = null
+        replacingPendingMessage: String? = null,
     )
 
     /**
-     * 丢弃尚未开始发送的可合并信令。
+     * Discards coalescible signals that have not started sending.
      *
-     * @param key 要清理的合并键；null 表示清理全部可合并信令。
+     * @param key The coalescing key to discard, or null for all coalescible signals.
      */
     fun discardPendingMessages(
-        key: String? = null
+        key: String? = null,
     )
 
     /**
-     * 不阻塞主线程地等待已经入队的房间信令提交完成。
+     * Waits for queued room signals to be submitted without blocking the main thread.
      */
     suspend fun awaitPendingMessages() = Unit
 
     /**
-     * 设置 RTC 事件监听器，传入空值时清除。
+     * Sets the RTC event listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setEventListener(
-        listener: RtcEventListener?
+        listener: RtcEventListener?,
     )
 
     /**
-     * 设置 RTC 摄像头预览就绪监听器，传入空值时清除。
+     * Sets the camera preview readiness listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setCameraPreviewReadyListener(
-        listener: RealtimeCameraPreviewReadyListener?
+        listener: RealtimeCameraPreviewReadyListener?,
     )
 
     /**
-     * 为当前生成注册持续帧接收器；清除时同时停止该接收器的远端渲染。
+     * Registers continuous remote frames for the current generation; clearing it also stops the receiver's
+     * remote rendering.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param stream The remote stream identified by room and user.
+     * @param listener The event listener, or null to unregister it.
      */
     fun setRemoteVideoFrameListener(
         stream: RemoteStream,
@@ -286,11 +288,11 @@ internal interface RtcManaging {
     )
 
     /**
-     * 设置 RTC 质量事件监听器，传入空值时清除。
+     * Sets the RTC quality listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setQualityListener(
-        listener: RtcQualityListener?
+        listener: RtcQualityListener?,
     )
 }

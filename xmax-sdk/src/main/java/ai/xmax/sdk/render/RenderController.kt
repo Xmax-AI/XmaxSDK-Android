@@ -42,70 +42,72 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 
 /**
- * 每轮生成使用同一条后处理帧链路提供首帧门控、持续显示和接入方帧回调。
+ * Uses one remote frame path per generation for first-frame readiness, continuous display, and app frame
+ * callbacks.
  */
 internal class RenderController(
     /**
-     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     * The manager for RTC capture, publication, subscription, and rendering.
      */
     private val rtcManager: RtcManaging,
 
     /**
-     * 等待远端首帧可显示的最大时长，单位为毫秒；默认值为 `REMOTE_FRAME_READY_TIMEOUT_MILLIS`。
+     * The remote frame readiness timeout in milliseconds; defaults to `REMOTE_FRAME_READY_TIMEOUT_MILLIS`.
      */
     private val remoteFrameReadyTimeoutMillis: Long = REMOTE_FRAME_READY_TIMEOUT_MILLIS,
 
     /**
-     * 执行视图绑定和显示更新的协程调度器；默认值为 `Dispatchers.Main.immediate`。
+     * The dispatcher for view binding and display updates; defaults to `Dispatchers.Main.immediate`.
      */
     private val renderDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 
     /**
-     * 远端视频帧的派发组件。
+     * The remote video frame dispatcher.
      */
     private val frameDispatcher: RealtimeVideoFrameDispatcher = RealtimeVideoFrameDispatcher(),
 
     /**
-     * 接收媒体错误的回调。
+     * The media failure callback.
      */
     private val errorListener: (XmaxError) -> Unit = {},
 ) : RenderControlling {
 
     /**
-     * 远端渲染状态的并发保护。
+     * The mutex protecting remote rendering state.
      *
-     * 串行保护轨道注册、画布绑定和释放；等待首帧时不持锁。
+     * Serializes track registration, canvas binding, and release without holding the lock while awaiting a
+     * frame.
      */
     private val operationLock = ReentrantLock()
 
     /**
-     * 当前结果流及视图、轨道绑定。
+     * The active result stream and its rendering state.
      */
     private var generation: RemoteGeneration? = null
 
     /**
-     * 当前下行视频视图的弱引用。
+     * A weak reference to the current downlink video view.
      */
     private var remoteView: WeakReference<XmaxVideoView>? = null
 
     /**
-     * 下行视频的等比缩放与裁剪方式。
+     * The downlink video's aspect-fit or aspect-fill mode.
      */
     private var remoteContentMode = VideoContentMode.FILL
 
     /**
-     * 当前下行视频轨道。
+     * The active downlink video track.
      */
     private var remoteTrack: RealtimeVideoTrack? = null
 
     /**
-     * 设置当前订阅的远端流；null 表示解除远端流绑定。
+     * Sets the subscribed remote stream; null unbinds it.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
+     * @param stream The remote stream identified by room and user.
      */
     @MainThread
     override fun setRemoteStream(
-        stream: RemoteStream?
+        stream: RemoteStream?,
     ) = operationLock.withLock {
         val previous = generation
         val next = stream?.let(::RemoteGeneration)
@@ -116,71 +118,91 @@ internal class RenderController(
         try {
             if (previous != null) {
                 val failure = runCatching {
-                    rtcManager.setRemoteVideoFrameListener(previous.stream, null)
+                    rtcManager.setRemoteVideoFrameListener(
+                        previous.stream,
+                        null,
+                    )
                 }.exceptionOrNull()
                 try {
                     rtcManager.unbindRemoteVideo(previous.stream)
-                } catch (error: Throwable) {
+                } catch (
+                    error: Throwable,
+                ) {
                     if (failure == null) throw error
                     if (failure !== error) failure.addSuppressed(error)
                 }
                 failure?.let { throw it }
             }
             if (next != null) {
-                // 目标机器人发布确认后注册本轮帧监听；同一流也不能复用上一轮首帧标记。
-                rtcManager.setRemoteVideoFrameListener(next.stream, object : RtcRemoteVideoSink {
+                // Register frames after the target publisher is confirmed; never reuse the previous task's first-frame flag, even for the same stream.
+                rtcManager.setRemoteVideoFrameListener(
+                    next.stream,
+                    object : RtcRemoteVideoSink {
 
-                    /**
-                     * 通知订阅的视频流已到达首帧及其尺寸。
-                     *
-                     * @param width 画面宽度，单位为像素。
-                     * @param height 画面高度，单位为像素。
-                     */
-                    override fun onFirstFrame(
-                        width: Int,
-                        height: Int
-                    ) = handleRemoteVideoFrame(next, width, height)
+                        /**
+                         * Reports the first subscribed frame and its dimensions.
+                         *
+                         * @param width The frame width, in pixels.
+                         * @param height The frame height, in pixels.
+                         */
+                        override fun onFirstFrame(
+                            width: Int,
+                            height: Int,
+                        ) = handleRemoteVideoFrame(
+                            next,
+                            width,
+                            height,
+                        )
 
-                    /**
-                     * 接收当前订阅的视频帧。
-                     *
-                     * @param frame 待处理、显示或提交的视频帧。
-                     */
-                    override fun onFrame(
-                        frame: RtcRemoteVideoFrame
-                    ) {
-                        operationLock.withLock {
-                            if (generation === next) updateDisplayedFormat(frame.displayWidth, frame.displayHeight)
+                        /**
+                         * Receives a frame from the subscribed video stream.
+                         *
+                         * @param frame The video frame to process, display, or submit.
+                         */
+                        override fun onFrame(
+                            frame: RtcRemoteVideoFrame,
+                        ) {
+                            operationLock.withLock {
+                                if (generation === next) updateDisplayedFormat(
+                                    frame.displayWidth,
+                                    frame.displayHeight,
+                                )
+                            }
+                            frameDispatcher.dispatch(
+                                next,
+                                frame,
+                            )
                         }
-                        frameDispatcher.dispatch(next, frame)
-                    }
 
-                    /**
-                     * 报告当前媒体或 RTC 操作发生的错误。
-                     *
-                     * @param error 本次操作失败的异常或 SDK 错误。
-                     */
-                    override fun onError(
-                        error: XmaxError
-                    ): Unit = operationLock.withLock {
-                        if (generation !== next) return
-                        frameDispatcher.setGeneration(null)
-                        if (!next.ready.completeExceptionally(error)) errorListener(error)
-                    }
-                })
+                        /**
+                         * Reports a failure in the current media or RTC operation.
+                         *
+                         * @param error The operation failure or SDK error.
+                         */
+                        override fun onError(
+                            error: XmaxError,
+                        ): Unit = operationLock.withLock {
+                            if (generation !== next) return
+                            frameDispatcher.setGeneration(null)
+                            if (!next.ready.completeExceptionally(error)) errorListener(error)
+                        }
+                    },
+                )
             }
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             next?.ready?.completeExceptionally(error)
             throw error
         }
     }
 
     /**
-     * 为远端轨道注册视频显示和交互轨迹能力。
+     * Registers remote video display and trajectory capabilities for a track.
      *
-     * @param track 需要显示或绑定的视频轨道。
-     * @param resolvedMediaSize 处理后的本地媒体尺寸，用于固定轨迹交互坐标基准。
-     * @param interactionListener 接收触控轨迹帧的回调。
+     * @param track The video track to display or bind.
+     * @param resolvedMediaSize The fixed, resolved local media dimensions used for interaction coordinates.
+     * @param interactionListener The interaction frame callback.
      */
     override fun registerRemoteTrack(
         track: RealtimeVideoTrack,
@@ -195,11 +217,17 @@ internal class RenderController(
                 detachHandler = ::detachRemoteVideo,
             ),
         )
-        TrajectoryRegistry.register(track, TrajectoryBinding(interactionListener, resolvedMediaSize))
+        TrajectoryRegistry.register(
+            track,
+            TrajectoryBinding(
+                interactionListener,
+                resolvedMediaSize,
+            ),
+        )
     }
 
     /**
-     * 等待当前远端流首帧可显示，超时或流失效时抛出异常。
+     * Waits for a displayable remote frame, throwing if the stream expires or the wait times out.
      */
     override suspend fun waitUntilRemoteFrameReady() {
         val current = operationLock.withLock { generation } ?: throw XmaxError(
@@ -208,7 +236,9 @@ internal class RenderController(
         )
         try {
             withTimeout(remoteFrameReadyTimeoutMillis) { current.ready.await() }
-        } catch (error: TimeoutCancellationException) {
+        } catch (
+            error: TimeoutCancellationException,
+        ) {
             currentCoroutineContext().ensureActive()
             throw XmaxError(
                 code = XmaxErrorCode.TIMEOUT,
@@ -219,14 +249,14 @@ internal class RenderController(
     }
 
     /**
-     * 注销指定远端轨道并清理相关显示资源。
+     * Unregisters a remote track and releases its display resources.
      *
-     * @param track 需要显示或绑定的视频轨道。
+     * @param track The video track to display or bind.
      */
     override suspend fun resetRemoteTrack(
-        track: RealtimeVideoTrack?
+        track: RealtimeVideoTrack?,
     ) = withContext(NonCancellable + renderDispatcher) {
-        // 在渲染线程执行释放，避免与界面绑定操作互相等待。
+        // Release on the rendering dispatcher to avoid mutual waits with UI binding.
         operationLock.withLock {
             track?.let(VideoRenderRegistry::unregister)
             track?.let(TrajectoryRegistry::unregister)
@@ -241,30 +271,33 @@ internal class RenderController(
     }
 
     /**
-     * 将远端视频绑定到指定预览视图。
+     * Binds remote video to a preview view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     private fun attachRemoteVideo(
         view: XmaxVideoView,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ): Unit = operationLock.withLock {
         remoteView = WeakReference(view)
         remoteContentMode = contentMode
         view.invalidateVideoPresentation()
         generation?.takeIf { it.isReady }?.let { current ->
-            bindRemoteView(current, view)
+            bindRemoteView(
+                current,
+                view,
+            )
         }
     }
 
     /**
-     * 解除指定视图的远端视频绑定。
+     * Unbinds remote video from a view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
+     * @param view The view to bind or unbind.
      */
     private fun detachRemoteVideo(
-        view: XmaxVideoView
+        view: XmaxVideoView,
     ): Unit = operationLock.withLock {
         if (remoteView?.get() !== view) return
         view.invalidateVideoPresentation()
@@ -273,94 +306,109 @@ internal class RenderController(
     }
 
     /**
-     * 报告当前订阅流的首帧尺寸，忽略失效的订阅。
+     * Reports first-frame dimensions only for a valid current subscription.
      *
-     * @param current 当前有效的远端生成显示状态。
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
+     * @param current The active remote generation display state.
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
      */
     private fun handleRemoteVideoFrame(
         current: RemoteGeneration,
         width: Int,
-        height: Int
+        height: Int,
     ): Unit = operationLock.withLock {
         if (generation !== current || current.ready.isCompleted || width <= 0 || height <= 0) return
         try {
-            updateDisplayedFormat(width, height)
+            updateDisplayedFormat(
+                width,
+                height,
+            )
             remoteView?.get()?.let { view ->
-                bindRemoteView(current, view)
+                bindRemoteView(
+                    current,
+                    view,
+                )
             }
             current.isReady = true
             current.ready.complete(Unit)
-        } catch (error: Throwable) {
-            // 通过生成启动调用返回原生渲染配置错误，并按连接故障清理资源。
+        } catch (
+            error: Throwable,
+        ) {
+            // Returns native renderer configuration failures through startup and cleans up connection resources.
             current.ready.completeExceptionally(error)
         }
         Unit
     }
 
     /**
-     * 将当前生成结果绑定到远端视频视图。
+     * Binds the current generation result to the remote video view.
      *
-     * @param current 当前有效的远端生成显示状态。
-     * @param view 需要绑定或解除绑定的显示视图。
+     * @param current The active remote generation display state.
+     * @param view The view to bind or unbind.
      */
     private fun bindRemoteView(
         current: RemoteGeneration,
-        view: XmaxVideoView
+        view: XmaxVideoView,
     ) {
-        // 同一轨道启动新任务时重新绑定显示资源，并重新等待该任务的首帧。
+        // Rebind display resources and await a fresh first frame when a new task reuses the track.
         view.prepareRtcVideoRendering()
-        rtcManager.bindRemoteVideo(current.stream, view.rtcRenderView, remoteContentMode)
+        rtcManager.bindRemoteVideo(
+            current.stream,
+            view.rtcRenderView,
+            remoteContentMode,
+        )
     }
 
     /**
-     * 以实际接收画面尺寸更新视频轨道的显示规格。
+     * Updates remote track metadata from actual received dimensions.
      *
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
      */
     private fun updateDisplayedFormat(
         width: Int,
-        height: Int
+        height: Int,
     ) {
         if (width <= 0 || height <= 0) return
         val track = remoteTrack ?: return
         val previous = track.videoFormat ?: return
         if (previous.width == width && previous.height == height) return
 
-        val format = previous.copy(width = width, height = height)
+        val format = previous.copy(
+            width = width,
+            height = height,
+        )
         track.updateVideoFormat(format)
     }
 
     /**
-     * 保存当前远端生成的首帧等待状态和视图绑定。
+     * The first-frame waiter and view binding for the current remote generation.
      */
     private class RemoteGeneration(
         /**
-         * 由房间和用户标识确定的远端媒体流。
+         * The remote stream identified by room and user.
          */
-        val stream: RemoteStream
+        val stream: RemoteStream,
     ) {
 
         /**
-         * 当前结果流的首帧等待与就绪状态。
+         * The current result stream's first-frame waiter.
          */
         val ready = CompletableDeferred<Unit>()
 
         /**
-         * 当前生成画面是否已就绪。
+         * Whether the current generated image is ready.
          */
         var isReady = false
     }
 
     /**
-     * 生成结果首帧显示的等待限制。
+     * The first-frame display timeout configuration.
      */
     private companion object {
 
         /**
-         * 等待生成画面就绪的超时时长，单位为毫秒。
+         * The generated-frame readiness timeout, in milliseconds.
          */
         const val REMOTE_FRAME_READY_TIMEOUT_MILLIS = 10_000L
     }

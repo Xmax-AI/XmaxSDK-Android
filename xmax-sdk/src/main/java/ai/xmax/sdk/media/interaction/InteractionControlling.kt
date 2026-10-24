@@ -13,32 +13,32 @@ package ai.xmax.sdk.media.interaction
 import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
- * 管理生成任务期间的轨迹交互输入。
+ * The trajectory input lifecycle of a generation task.
  */
 internal interface InteractionControlling {
 
     /**
-     * 为指定生成任务启用交互轨迹提交。
+     * Enables interaction submission for a generation task.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
     suspend fun startInteraction(
         taskId: String,
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     )
 
     /**
-     * 停止当前任务的交互轨迹提交并丢弃未发送的数据。
+     * Stops interaction submission and discards pending trajectories.
      */
     suspend fun stopInteraction()
 
     /**
-     * 提交当前显示画面对应的触控轨迹。
+     * Submits a trajectory for the currently displayed image.
      *
-     * @param frame 当前触控轨迹及显示画面尺寸。
+     * @param frame The current trajectory and displayed image dimensions.
      */
     fun submitInteraction(
-        frame: InteractionFrame
+        frame: InteractionFrame,
     )
 }

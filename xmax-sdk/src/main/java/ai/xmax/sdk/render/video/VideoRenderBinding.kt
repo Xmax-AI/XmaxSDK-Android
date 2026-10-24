@@ -16,73 +16,79 @@ import ai.xmax.sdk.XmaxVideoView
 import java.lang.ref.WeakReference
 
 /**
- * 将实时视频轨道绑定到具体 Android 渲染视图。
+ * Binds realtime tracks to Android rendering views.
  */
 internal class VideoRenderBinding(
     /**
-     * 将轨道绑定到视图并应用显示模式的函数。
+     * The function binding a track to a view and scaling mode.
      */
     private val attachHandler: (XmaxVideoView, VideoContentMode) -> Unit,
 
     /**
-     * 解除轨道视图绑定的函数。
+     * The function detaching a track's view.
      */
     private val detachHandler: (XmaxVideoView) -> Unit,
 ) {
 
     /**
-     * 轨道与显示组件的绑定记录。
+     * Bindings between tracks and display components.
      */
     private var attachedView: WeakReference<XmaxVideoView>? = null
 
     /**
-     * 创建 VideoRenderBinding，并配置其依赖和运行参数。
+     * Creates a video rendering binding.
      *
-     * @param imageFrame 用于本地预览的图片帧。
+     * @param imageFrame The image frame used for local preview.
      */
     constructor(
-        imageFrame: VideoFrame
+        imageFrame: VideoFrame,
     ) : this(
         attachHandler = { view, contentMode ->
-            view.displayImageFrame(imageFrame, contentMode)
+            view.displayImageFrame(
+                imageFrame,
+                contentMode,
+            )
         },
         detachHandler = XmaxVideoView::clearImageFrame,
     )
 
     /**
-     * 将视频轨道绑定到指定预览视图。
+     * Binds a track to a preview view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     @Synchronized
     fun attach(
         view: XmaxVideoView,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ) {
         val previousView = attachedView?.get()
         if (previousView != null && previousView !== view) {
             detachHandler(previousView)
             attachedView = null
         }
-        attachHandler(view, contentMode)
+        attachHandler(
+            view,
+            contentMode,
+        )
         attachedView = WeakReference(view)
     }
 
     /**
-     * 解除视频轨道与指定视图的绑定。
+     * Unbinds a track from a view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
+     * @param view The view to bind or unbind.
      */
     @Synchronized
     fun detach(
-        view: XmaxVideoView
+        view: XmaxVideoView,
     ) {
         if (attachedView?.get() === view) detach()
     }
 
     /**
-     * 解除视频轨道与指定视图的绑定。
+     * Unbinds a track from a view.
      */
     @Synchronized
     fun detach() {

@@ -11,37 +11,38 @@
 package ai.xmax.sdk
 
 /**
- * 实时传输档位；L1 质量最高，L5 最节省带宽，与网络质量评级无关。
+ * A transmission quality tier, from highest-quality L1 to lowest-bandwidth L5, independent of network quality
+ * ratings.
  */
 public enum class RealtimeQualityLevel(
     /**
-     * 档位编号，范围为 1 到 5。
+     * The tier number, from 1 to 5.
      */
     public val rawValue: Int,
 ) {
 
     /**
-     * 保留媒体基准尺寸。
+     * Retains the media baseline dimensions.
      */
     L1(1),
 
     /**
-     * 目标宽高为媒体基准的 80%。
+     * Targets 80% of the media baseline width and height.
      */
     L2(2),
 
     /**
-     * 目标宽高为媒体基准的 65%。
+     * Targets 65% of the media baseline width and height.
      */
     L3(3),
 
     /**
-     * 目标宽高为媒体基准的 50%。
+     * Targets 50% of the media baseline width and height.
      */
     L4(4),
 
     /**
-     * 与 L4 使用相同尺寸，并进一步降低上行帧率。
+     * Uses L4 dimensions with a lower uplink frame-rate limit.
      */
     L5(5),
 }

@@ -11,18 +11,18 @@
 package ai.xmax.sdk
 
 /**
- * 生成稳定且不为空的错误描述。
+ * Produces stable, nonempty error descriptions.
  */
 internal object ErrorMessageFormatter {
 
     /**
-     * 生成适合向接入方展示或记录的错误描述。
+     * Formats an error for display or diagnostics.
      *
-     * @param error 本次操作失败的异常或 SDK 错误。
-     * @return 包含异常原因的可读文本。
+     * @param error The operation failure or SDK error.
+     * @return Readable text including the error cause.
      */
     fun format(
-        error: Throwable
+        error: Throwable,
     ): String = error.message
         ?.trim()
         ?.takeIf(String::isNotEmpty)

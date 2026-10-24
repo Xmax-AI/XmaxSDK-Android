@@ -11,53 +11,56 @@
 package ai.xmax.sdk
 
 /**
- * SDK 客户端配置；API Key 在构造时去除首尾空白，实际校验由调用方或服务入口执行。
+ * SDK client configuration.
  *
- * @param apiKey 开放平台签发的 API Key；不得写入日志或对外展示。
+ * @param apiKey The API key issued by the developer platform; do not log or expose it.
  */
 public class XmaxConfiguration @JvmOverloads constructor(
     apiKey: String,
 
     /**
-     * SDK 输出的日志类型；默认关闭。创建客户端时会更新 SDK 共享日志器的配置。
+     * Enabled log categories; disabled by default. Creating a client updates the shared logger.
      */
     public val loggerOptions: XmaxLoggerOption = XmaxLoggerOption.none,
 ) {
 
     /**
-     * 服务环境配置与公开快照。
+     * The service environment selected for this client.
      */
     private var configuredEnvironment: XmaxEnvironment = XmaxEnvironment.CHINA
 
     /**
-     * SDK 连接的服务环境；默认使用国内环境。
+     * The SDK service environment; defaults to China.
      */
     public val environment: XmaxEnvironment
         get() = configuredEnvironment
 
     /**
-     * 调用 Xmax 服务使用的 API Key。
+     * The API key used to access Xmax services.
      */
     public val apiKey: String = apiKey.trim()
 
     /**
-     * 创建包含 API Key、服务环境和日志选项的客户端配置。
+     * Creates a client configuration.
      *
-     * @param apiKey 开放平台签发的 API Key；不得写入日志或对外展示。
-     * @param environment 业务服务环境，同时决定日志语言。
-     * @param loggerOptions 允许输出的 SDK 日志类别；默认值为 `XmaxLoggerOption.none`。
+     * @param apiKey The API key issued by the developer platform; do not log or expose it.
+     * @param environment The service environment, which also selects the log language.
+     * @param loggerOptions Enabled SDK log categories; defaults to `XmaxLoggerOption.none`.
      */
     @JvmOverloads
     public constructor(
         apiKey: String,
         environment: XmaxEnvironment,
         loggerOptions: XmaxLoggerOption = XmaxLoggerOption.none,
-    ) : this(apiKey, loggerOptions) {
+    ) : this(
+        apiKey,
+        loggerOptions,
+    ) {
         configuredEnvironment = environment
     }
 
     /**
-     * 检查 API Key 是否为空；此处不向服务端验证凭据有效性。
+     * Rejects an empty API key without validating credentials with the server.
      */
     public fun validate() {
         if (apiKey.isEmpty()) {
@@ -69,9 +72,7 @@ public class XmaxConfiguration @JvmOverloads constructor(
     }
 
     /**
-     * 返回隐藏 API Key 的配置描述，可用于安全的诊断输出。
-     *
-     * @return 适合日志或诊断显示的对象描述。
+     * Returns a configuration description with the API key redacted.
      */
     override fun toString(): String =
         "XmaxConfiguration(apiKey=***, environment=$environment, loggerOptions=${loggerOptions.rawValue})"

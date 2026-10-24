@@ -32,61 +32,71 @@ import ai.xmax.sdk.foundation.rtc.RtcEngineManager
 import org.json.JSONObject
 
 /**
- * 管理实时生成会话的创建、心跳维持和关闭。
+ * Creates, maintains heartbeats for, and closes realtime sessions.
  */
 internal class RealtimeSessionService(
     /**
-     * 发起服务端 API 请求的客户端。
+     * The server API client.
      */
     private val apiService: ApiServicing,
 
     /**
-     * 控制会话心跳间隔的挂起组件；默认值为 `RealtimeHeartbeatSleeper.live`。
+     * The suspending heartbeat interval controller; defaults to `RealtimeHeartbeatSleeper.live`.
      */
     private val heartbeatSleeper: RealtimeHeartbeatSleeper = RealtimeHeartbeatSleeper.live,
 
     /**
-     * 执行会话心跳的协程作用域。
+     * The scope running session heartbeats.
      */
     private val heartbeatScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : RealtimeSessionServicing {
 
     /**
-     * 会话心跳的并发保护。
+     * The lock protecting session heartbeat ownership.
      */
     private val heartbeatLock = Any()
 
     /**
-     * 当前心跳周期及执行任务。
+     * The current heartbeat lifecycle context.
      */
     private val heartbeatVersion = AtomicLong(0L)
 
     /**
-     * 定期维持服务端会话的心跳协程。
+     * The coroutine renewing the server session periodically.
      */
     private var heartbeatJob: Job? = null
 
     /**
-     * 创建实时会话并返回 RTC 连接信息。
+     * Creates a realtime session and returns its RTC connection details.
      *
-     * @param model 用于确定服务端能力、地址及输入规格的模型。
-     * @return 服务端会话标识、状态及可用的 RTC 连接信息。
+     * @param model The model defining server capabilities and input constraints.
+     * @return The server session identifier, state, and available RTC connection details.
      */
     override suspend fun createSession(
-        model: RealtimeModel
+        model: RealtimeModel,
     ): RealtimeSession {
         val payload = apiService.post(
             path = "/session",
-            body = JSONObject().put("model", model.id),
+            body = JSONObject().put(
+                "model",
+                model.id,
+            ),
         )
         try {
-            return makeSession(payload, requiresConnection = true).also(::ensureSessionActive)
-        } catch (error: Throwable) {
+            return makeSession(
+                payload,
+                requiresConnection = true,
+            ).also(::ensureSessionActive)
+        } catch (
+            error: Throwable,
+        ) {
             payload.nonEmptyString("sessionUid")?.let { id ->
                 withContext(NonCancellable) {
                     try {
                         withTimeout(5_000L) { closeSession(id) }
-                    } catch (cleanup: Throwable) {
+                    } catch (
+                        cleanup: Throwable,
+                    ) {
                         if (cleanup !== error) error.addSuppressed(cleanup)
                     }
                 }
@@ -96,10 +106,10 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * 启动指定会话的周期心跳。
+     * Starts periodic heartbeats for a session.
      *
-     * @param sessionId 服务端会话标识。
-     * @param onFailure 会话续期失败时接收会话标识和错误的回调。
+     * @param sessionId The server session identifier.
+     * @param onFailure Receives the session identifier and error when renewal fails.
      */
     override fun startHeartbeat(
         sessionId: String,
@@ -121,7 +131,7 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * 停止当前心跳；已经失效的迟到结果不会再触发失败回调。
+     * Stops the heartbeat, preventing invalidated late results from reporting failures.
      */
     override suspend fun stopHeartbeat() {
         val job = synchronized(heartbeatLock) {
@@ -132,23 +142,23 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * 关闭指定实时会话。
+     * Closes a realtime session.
      *
-     * @param sessionId 服务端会话标识。
+     * @param sessionId The server session identifier.
      */
     override suspend fun closeSession(
-        sessionId: String
+        sessionId: String,
     ) {
         apiService.delete("/session/$sessionId")
     }
 
     /**
-     * 在当前会话有效期间持续续期，失败时通知会话故障。
+     * Renews the active session periodically, reporting a session failure if renewal fails.
      *
-     * @param context 本轮会话心跳的标识和失败通知。
+     * @param context The heartbeat lifecycle identity and failure callback.
      */
     private suspend fun runHeartbeat(
-        context: HeartbeatContext
+        context: HeartbeatContext,
     ) {
         while (isCurrent(context.version)) {
             try {
@@ -159,36 +169,46 @@ internal class RealtimeSessionService(
                 val session = heartbeatSession(context.sessionId)
                 if (!isCurrent(context.version)) return
                 ensureSessionActive(session)
-            } catch (error: CancellationException) {
+            } catch (
+                error: CancellationException,
+            ) {
                 throw error
-            } catch (error: Throwable) {
+            } catch (
+                error: Throwable,
+            ) {
                 if (!invalidate(context.version)) return
-                context.onFailure(context.sessionId, XmaxError.from(error))
+                context.onFailure(
+                    context.sessionId,
+                    XmaxError.from(error),
+                )
                 return
             }
         }
     }
 
     /**
-     * 向服务端续期指定会话并返回最新会话信息。
+     * Renews a server session and returns its updated metadata.
      *
-     * @param sessionId 服务端会话标识。
-     * @return 服务端会话标识、状态及可用的 RTC 连接信息。
+     * @param sessionId The server session identifier.
+     * @return The server session identifier, state, and available RTC connection details.
      */
     private suspend fun heartbeatSession(
-        sessionId: String
+        sessionId: String,
     ): RealtimeSession =
         apiService.put("/session/$sessionId/heartbeat") { payload ->
-            makeSession(payload, requiresConnection = false)
+            makeSession(
+                payload,
+                requiresConnection = false,
+            )
         }
 
     /**
-     * 确认服务端会话仍处于可用状态，否则抛出会话错误。
+     * Checks that the server session remains usable, throwing a session error otherwise.
      *
-     * @param session 服务端会话及其连接信息。
+     * @param session The server session and connection details.
      */
     private fun ensureSessionActive(
-        session: RealtimeSession
+        session: RealtimeSession,
     ) {
         val status = session.status ?: return
         if (status == ACTIVE_STATUS) return
@@ -199,11 +219,11 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * 解析服务端会话数据，并按需校验 RTC 连接信息。
+     * Parses server session data and optionally validates connection details.
      *
-     * @param payload 待解析的服务端业务 JSON 数据。
-     * @param requiresConnection 是否要求响应必须包含完整的 RTC 连接信息。
-     * @return 服务端会话标识、状态及可用的 RTC 连接信息。
+     * @param payload The server business JSON to decode.
+     * @param requiresConnection Whether complete RTC connection details are required.
+     * @return The server session identifier, state, and available RTC connection details.
      */
     private fun makeSession(
         payload: JSONObject,
@@ -232,10 +252,10 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * 从模型扩展信息中解析 RTC 进房配置。
+     * Parses RTC join configuration from model extension data.
      *
-     * @param modelExtra 包含 RTC 进房信息的模型扩展数据。
-     * @return 完整的 RTC 连接信息；扩展字段不可用时为 null。
+     * @param modelExtra The model extension containing RTC join details.
+     * @return Complete RTC connection details, or null when extension fields are unavailable.
      */
     private fun makeConnection(
         modelExtra: Any?,
@@ -244,7 +264,9 @@ internal class RealtimeSessionService(
             is JSONObject -> modelExtra
             is String -> try {
                 JSONObject(modelExtra)
-            } catch (_: Exception) {
+            } catch (
+                _: Exception,
+            ) {
                 return null
             }
             else -> return null
@@ -265,86 +287,89 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * 读取非空字符串字段；缺失或空白时返回 null。
+     * Reads a nonblank string, returning null if missing or blank.
      *
-     * @param key JSON 对象中的字段名称。
-     * @return 字段的非空字符串值；缺失或空白时为 null。
+     * @param key The JSON field name.
+     * @return The nonblank field value, or null if missing or blank.
      */
     private fun JSONObject.nonEmptyString(
-        key: String
+        key: String,
     ): String? =
         (opt(key) as? String)?.trim()?.takeIf(String::isNotEmpty)
 
     /**
-     * 判断心跳结果是否仍属于当前会话周期。
+     * Checks whether a heartbeat result belongs to the current lifecycle.
      *
-     * @param version 用于识别当前任务或回调归属的版本号。
-     * @return 任务或房间仍有效时为 true。
+     * @param version The revision identifying the owning task or callback.
+     * @return True if the task or room remains valid.
      */
     private fun isCurrent(
-        version: Long
+        version: Long,
     ): Boolean = heartbeatVersion.get() == version
 
     /**
-     * 使指定心跳任务失效，阻止其继续更新会话或触发回调。
+     * Invalidates a heartbeat so it cannot update the session or report failures.
      *
-     * @param version 用于识别当前任务或回调归属的版本号。
-     * @return 本次成功使目标心跳周期失效时为 true。
+     * @param version The revision identifying the owning task or callback.
+     * @return True if this call invalidated the requested heartbeat lifecycle.
      */
     private fun invalidate(
-        version: Long
+        version: Long,
     ): Boolean =
-        heartbeatVersion.compareAndSet(version, version + 1L)
+        heartbeatVersion.compareAndSet(
+            version,
+            version + 1L,
+        )
 
     /**
-     * 关联一次会话心跳的标识、版本及失败通知。
+     * The session identifier, revision, and failure callback for one heartbeat lifecycle.
      */
     private data class HeartbeatContext(
         /**
-         * 用于识别当前任务或回调归属的版本号。
+         * The revision identifying the owning task or callback.
          */
         val version: Long,
 
         /**
-         * 服务端会话标识。
+         * The server session identifier.
          */
         val sessionId: String,
 
         /**
-         * 会话续期失败时接收会话标识和错误的回调。
+         * The callback receiving a session identifier and renewal failure.
          */
         val onFailure: RealtimeSessionHeartbeatFailureHandler,
     )
 
     /**
-     * 服务端会话状态的协议取值。
+     * The protocol values for server session state.
      */
     private companion object {
 
         /**
-         * 服务端返回的会话活跃状态。
+         * The server's active session state value.
          */
         const val ACTIVE_STATUS = "ACTIVE"
     }
 }
 
 /**
- * 控制服务端会话心跳的发送间隔。
+ * The server session heartbeat interval.
  */
 internal fun interface RealtimeHeartbeatSleeper {
 
     /**
-     * 挂起等待下一次心跳发送时刻。
+     * Suspends until the next heartbeat time.
      */
     suspend fun sleep()
 
     /**
-     * 会话心跳的默认等待策略。
+     * The default session heartbeat wait strategy.
      */
     companion object {
 
         /**
-         * 每次等待 10 秒的心跳间隔策略。
+         * The strategy waiting ten seconds between heartbeats.
          */
         val live: RealtimeHeartbeatSleeper = RealtimeHeartbeatSleeper {
             delay(10_000L)

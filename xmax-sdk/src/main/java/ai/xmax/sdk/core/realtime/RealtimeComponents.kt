@@ -36,17 +36,19 @@ import android.content.Context
 import ai.xmax.sdk.render.RenderControlling
 
 /**
- * 装配单个实时管理器的媒体、传输、渲染和业务组件，所有组件共享同一个 RTC 管理器。
- * 媒体帧交给 Stream，远端流交给 Render，交互轨迹通过 Stream 发送。
- * 故障通过注入回调返回 Core，由协调器决定清理范围及用户通知；创建结果具有独立的媒体和连接生命周期。
+ * Creates the media, transport, rendering, and service components for one realtime manager, sharing one RTC
+ * manager.
+ * Media frames and interaction signals go through Stream; remote tracks go through Render.
+ * Failures are reported to Core, where the coordinator controls cleanup and notifications. Each component set
+ * owns its media and connections.
  *
- * @param context 访问 Android 系统服务或媒体资源所需的上下文。
- * @param apiService 发起服务端 API 请求的客户端。
- * @param model 用于确定服务端能力、地址及输入规格的模型。
- * @param onError 接收连接或运行错误的回调。
- * @param onMediaError 接收本地媒体故障的回调。
- * @param frameDispatcher 远端视频帧的派发组件。
- * @return 关联同一个 RTC 管理器的媒体、流、渲染和业务组件。
+ * @param context The Android context used for system services and media resources.
+ * @param apiService The client for server API requests.
+ * @param model The model defining server capabilities and input constraints.
+ * @param onError The callback for connection or runtime failures.
+ * @param onMediaError The callback for local media failures.
+ * @param frameDispatcher The remote video frame dispatcher.
+ * @return Components sharing the same RTC manager.
  */
 internal fun createRealtimeComponents(
     context: Context,
@@ -58,7 +60,11 @@ internal fun createRealtimeComponents(
 ): RealtimeComponents {
     val rtcManager = RtcManager(context)
     val mediaService = MediaService(model)
-    val renderController = RenderController(rtcManager, frameDispatcher = frameDispatcher, errorListener = onError)
+    val renderController = RenderController(
+        rtcManager,
+        frameDispatcher = frameDispatcher,
+        errorListener = onError,
+    )
     val streamController = StreamController(
         rtcManager = rtcManager,
         errorListener = onError,
@@ -104,11 +110,15 @@ internal fun createRealtimeComponents(
             errorListener = onMediaError,
         ),
         networkVideoController = NetworkVideoController(
-            context.applicationContext, mediaService,
+            context.applicationContext,
+            mediaService,
         ),
         interactionController = InteractionController(
             listener = { taskId, points ->
-                streamController.sendTracks(taskId, points)
+                streamController.sendTracks(
+                    taskId,
+                    points,
+                )
             },
         ),
     )
@@ -123,35 +133,41 @@ internal fun createRealtimeComponents(
         streamController = streamController,
     )
 
-    return RealtimeComponents(mediaController, streamController, renderController, connectionManager, generationManager)
+    return RealtimeComponents(
+        mediaController,
+        streamController,
+        renderController,
+        connectionManager,
+        generationManager,
+    )
 }
 
 /**
- * 一代运行时的组件集合；close 释放后，下次操作通过工厂重新创建整套组件。
+ * The components of one runtime; after close, the next operation creates a new set.
  */
 internal data class RealtimeComponents(
     /**
-     * 本地媒体生命周期控制器。
+     * The controller owning local media lifecycles.
      */
     val media: MediaControlling,
 
     /**
-     * 执行媒体发布、订阅及业务信令的控制器。
+     * The controller for media publication, subscriptions, and signaling.
      */
     val stream: StreamControlling,
 
     /**
-     * 视频显示与轨迹绑定控制器。
+     * The controller for video rendering and trajectory bindings.
      */
     val render: RenderControlling,
 
     /**
-     * 负责服务端会话和 RTC 连接生命周期的组件。
+     * The manager owning server sessions and RTC connections.
      */
     val connection: XmaxRealtimeConnectionManager,
 
     /**
-     * 负责生成上下文和任务生命周期的组件。
+     * The manager owning generation contexts and tasks.
      */
     val generation: XmaxRealtimeGenerationManager,
 )

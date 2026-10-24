@@ -16,25 +16,25 @@ import ai.xmax.sdk.foundation.rtc.RemoteStream
 import ai.xmax.sdk.media.interaction.InteractionFrame
 
 /**
- * 定义渲染层向 Core 暴露的远端视频能力。
+ * The remote video capabilities exposed by Render to Core.
  */
 internal interface RenderControlling {
 
     /**
-     * 设置当前订阅的远端流；null 表示解除远端流绑定。
+     * Sets the subscribed remote stream; null unbinds it.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
+     * @param stream The remote stream identified by room and user.
      */
     fun setRemoteStream(
-        stream: RemoteStream?
+        stream: RemoteStream?,
     )
 
     /**
-     * 为远端轨道注册视频显示和交互轨迹能力。
+     * Registers remote video display and trajectory capabilities for a track.
      *
-     * @param track 需要显示或绑定的视频轨道。
-     * @param resolvedMediaSize 处理后的本地媒体尺寸，用于固定轨迹交互坐标基准。
-     * @param interactionListener 接收触控轨迹帧的回调。
+     * @param track The video track to display or bind.
+     * @param resolvedMediaSize The fixed, resolved local media dimensions used for interaction coordinates.
+     * @param interactionListener The interaction frame callback.
      */
     fun registerRemoteTrack(
         track: RealtimeVideoTrack,
@@ -43,16 +43,16 @@ internal interface RenderControlling {
     )
 
     /**
-     * 等待当前远端流首帧可显示，超时或流失效时抛出异常。
+     * Waits for a displayable remote frame, throwing if the stream expires or the wait times out.
      */
     suspend fun waitUntilRemoteFrameReady()
 
     /**
-     * 注销指定远端轨道并清理相关显示资源。
+     * Unregisters a remote track and releases its display resources.
      *
-     * @param track 需要显示或绑定的视频轨道。
+     * @param track The video track to display or bind.
      */
     suspend fun resetRemoteTrack(
-        track: RealtimeVideoTrack?
+        track: RealtimeVideoTrack?,
     )
 }

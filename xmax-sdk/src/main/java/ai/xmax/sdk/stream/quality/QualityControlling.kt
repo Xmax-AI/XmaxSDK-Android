@@ -17,70 +17,72 @@ import ai.xmax.sdk.DownlinkVideoStatisticsListener
 import ai.xmax.sdk.RealtimePerformanceAlarmListener
 
 /**
- * 定义视频统计、网络质量与设备性能告警的监听能力。
+ * The video statistics, network quality, and device alarm listener capabilities.
  */
 internal interface QualityControlling {
 
     /**
-     * 接收内部自动调档样本，独立于接入方的网络质量监听器。
+     * Receives internal adaptation samples independently of the app's network listener.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setAdaptiveQualityListener(
-        listener: ((RealtimeNetworkQuality) -> Unit)?
+        listener: ((RealtimeNetworkQuality) -> Unit)?,
     )
 
     /**
-     * 设置上行视频统计的接收状态，并清空当前统计。
+     * Enables or disables uplink statistics and clears the current snapshot.
      *
-     * @param enabled 是否启用对应能力。
+     * @param enabled Whether the capability is enabled.
      */
     fun setUplinkVideoStatisticsEnabled(
-        enabled: Boolean
+        enabled: Boolean,
     )
 
     /**
-     * 设置下行视频统计的目标用户，并清空当前统计；传 null 停止接收。
+     * Sets the downlink statistics user and clears the snapshot; null stops collection.
      *
-     * @param userId 房间中的业务用户标识。
+     * @param userId The room's business user identifier.
      */
     fun setDownlinkVideoStatisticsUser(
-        userId: String?
+        userId: String?,
     )
 
     /**
-     * 设置上行视频统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
+     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
+     * disconnection.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setUplinkVideoStatisticsListener(
-        listener: UplinkVideoStatisticsListener?
+        listener: UplinkVideoStatisticsListener?,
     )
 
     /**
-     * 设置下行结果流统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
+     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
+     * disconnection.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setDownlinkVideoStatisticsListener(
-        listener: DownlinkVideoStatisticsListener?
+        listener: DownlinkVideoStatisticsListener?,
     )
 
     /**
-     * 设置 RTC 网络质量监听器；传 null 注销。
+     * Sets the RTC network quality listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setNetworkQualityListener(
-        listener: RealtimeNetworkQualityListener?
+        listener: RealtimeNetworkQualityListener?,
     )
 
     /**
-     * 设置 RTC 性能告警监听器；传 null 注销。
+     * Sets the RTC performance alarm listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setPerformanceAlarmListener(
-        listener: RealtimePerformanceAlarmListener?
+        listener: RealtimePerformanceAlarmListener?,
     )
 }

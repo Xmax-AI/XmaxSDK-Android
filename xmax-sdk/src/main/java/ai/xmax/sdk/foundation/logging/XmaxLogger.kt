@@ -14,93 +14,88 @@ import android.util.Log
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * 控制 XmaxSDK 输出的日志类型。
+ * The enabled XmaxSDK log categories.
  */
 public class XmaxLoggerOption(
     /**
-     * 用于构造值对象的底层值。
+     * The underlying value represented by this object.
      */
-    public val rawValue: Int
+    public val rawValue: Int,
 ) {
 
     /**
-     * 合并两组日志选项。
+     * Combines two sets of logging options.
      *
-     * @param other 用于比较或组合的另一个对象。
-     * @return 组合后的日志选项。
+     * @param other The object to compare or combine.
+     * @return The combined logging options.
      */
     public operator fun plus(
-        other: XmaxLoggerOption
+        other: XmaxLoggerOption,
     ): XmaxLoggerOption =
         XmaxLoggerOption(rawValue or other.rawValue)
 
     /**
-     * 当前选项是否包含指定日志类型。
+     * Checks whether this set includes the requested log category.
      *
-     * @param option 控制该条日志是否输出的选项。
-     * @return 包含指定选项时为 true。
+     * @param option The category controlling whether this message is logged.
+     * @return True if the option is included.
      */
     public operator fun contains(
-        option: XmaxLoggerOption
+        option: XmaxLoggerOption,
     ): Boolean =
         option.rawValue != 0 && rawValue and option.rawValue == option.rawValue
 
     /**
-     * 当前是否未启用任何日志。
+     * Whether all logging is disabled.
      */
     public val isEmpty: Boolean
         get() = rawValue == 0
 
     /**
-     * 比较对象的值是否相等。
+     * Compares objects by value.
      *
-     * @param other 用于比较或组合的另一个对象。
-     * @return 对象的内容相等时为 true，否则为 false。
+     * @param other The object to compare or combine.
      */
     override fun equals(
-        other: Any?
+        other: Any?,
     ): Boolean =
         other is XmaxLoggerOption && rawValue == other.rawValue
 
     /**
-     * 生成与值相等规则一致的哈希值。
-     *
-     * @return 与值相等规则一致的哈希值。
+     * Computes a hash consistent with value equality.
      */
     override fun hashCode(): Int = rawValue
 
     /**
-     * 返回日志选项的位掩码描述。
-     *
-     * @return 适合日志或诊断显示的对象描述。
+     * Returns a bitmask description of the logging options.
      */
     override fun toString(): String = "XmaxLoggerOption(rawValue=$rawValue)"
 
     /**
-     * 预定义的日志输出选项。
+     * Predefined logging options.
      */
     public companion object {
 
         /**
-         * 不输出 XmaxSDK 日志。
+         * Disables XmaxSDK logging.
          */
         @JvmField
         public val none: XmaxLoggerOption = XmaxLoggerOption(0)
 
         /**
-         * Room、API、Realtime、Storage 等业务运行日志。
+         * Business events from Room, API, Realtime, Storage, and related domains.
          */
         @JvmField
         public val business: XmaxLoggerOption = XmaxLoggerOption(1 shl 0)
 
         /**
-         * RTC 性能指标及性能告警日志。
+         * RTC performance metrics and device alarms.
          */
         @JvmField
         public val performance: XmaxLoggerOption = XmaxLoggerOption(1 shl 1)
 
         /**
-         * 输出全部 XmaxSDK 日志。
+         * Enables all XmaxSDK logs.
          */
         @JvmField
         public val all: XmaxLoggerOption = business + performance
@@ -108,87 +103,109 @@ public class XmaxLoggerOption(
 }
 
 /**
- * 统一输出带 Xmax 前缀和类别的系统日志。
+ * Writes system logs with the Xmax prefix and category.
  */
 internal class XmaxLogger private constructor(
     /**
-     * 用于区分业务域的日志分类。
+     * The business domain of this log category.
      */
     private val category: String,
 ) {
 
     /**
-     * 在指定日志选项开启时输出调试级别消息。
+     * Writes a debug message when the requested category is enabled.
      *
-     * @param message 延迟生成日志文本的函数，仅在日志启用时求值。
-     * @param option 控制该条日志是否输出的选项；默认值为 `XmaxLoggerOption.business`。
+     * @param message Builds the log text only when logging is enabled.
+     * @param option The controlling log category; defaults to `XmaxLoggerOption.business`.
      */
     fun debug(
         message: () -> String,
         option: XmaxLoggerOption = XmaxLoggerOption.business,
     ) {
-        write(XmaxLogLevel.DEBUG, message, option)
+        write(
+            XmaxLogLevel.DEBUG,
+            message,
+            option,
+        )
     }
 
     /**
-     * 在指定日志选项开启时输出信息级别消息。
+     * Writes an informational message when the requested category is enabled.
      *
-     * @param message 延迟生成日志文本的函数，仅在日志启用时求值。
-     * @param option 控制该条日志是否输出的选项；默认值为 `XmaxLoggerOption.business`。
+     * @param message Builds the log text only when logging is enabled.
+     * @param option The controlling log category; defaults to `XmaxLoggerOption.business`.
      */
     fun info(
         message: () -> String,
         option: XmaxLoggerOption = XmaxLoggerOption.business,
     ) {
-        write(XmaxLogLevel.INFO, message, option)
+        write(
+            XmaxLogLevel.INFO,
+            message,
+            option,
+        )
     }
 
     /**
-     * 在指定日志选项开启时输出警告级别消息。
+     * Writes a warning when the requested category is enabled.
      *
-     * @param message 延迟生成日志文本的函数，仅在日志启用时求值。
-     * @param option 控制该条日志是否输出的选项；默认值为 `XmaxLoggerOption.business`。
+     * @param message Builds the log text only when logging is enabled.
+     * @param option The controlling log category; defaults to `XmaxLoggerOption.business`.
      */
     fun warn(
         message: () -> String,
         option: XmaxLoggerOption = XmaxLoggerOption.business,
     ) {
-        write(XmaxLogLevel.WARNING, message, option)
+        write(
+            XmaxLogLevel.WARNING,
+            message,
+            option,
+        )
     }
 
     /**
-     * 在指定日志选项开启时输出错误级别消息。
+     * Writes an error when the requested category is enabled.
      *
-     * @param message 延迟生成日志文本的函数，仅在日志启用时求值。
-     * @param option 控制该条日志是否输出的选项；默认值为 `XmaxLoggerOption.business`。
+     * @param message Builds the log text only when logging is enabled.
+     * @param option The controlling log category; defaults to `XmaxLoggerOption.business`.
      */
     fun error(
         message: () -> String,
         option: XmaxLoggerOption = XmaxLoggerOption.business,
     ) {
-        write(XmaxLogLevel.ERROR, message, option)
+        write(
+            XmaxLogLevel.ERROR,
+            message,
+            option,
+        )
     }
 
     /**
-     * 生成带分类前缀的日志文本，末尾保留一行空白。
+     * Formats category-prefixed log text with a trailing blank line.
      *
-     * @param message 待发送或记录的消息文本。
-     * @return 带业务分类前缀及末尾换行的日志文本。
+     * @param message The message to send or log.
+     * @return Category-prefixed text ending with a newline.
      */
     fun formattedMessage(
-        message: String
+        message: String,
     ): String {
         val prefix = "[Xmax][$category]"
-        return message.trimEnd('\r', '\n').lines()
-            .joinToString(separator = "\n", postfix = "\n\n") { "$prefix $it" }
+        return message.trimEnd(
+            '\r',
+            '\n',
+        ).lines()
+            .joinToString(
+                separator = "\n",
+                postfix = "\n\n",
+            ) { "$prefix $it" }
     }
 
     /**
-     * 按日志级别输出带 SDK 分类前缀的消息。
+     * Writes a message at the requested level with the SDK category prefix.
      *
-     * @param level 该条消息使用的日志级别。
-     * @param message 延迟生成日志文本的函数，仅在日志启用时求值。
-     * @param option 控制该条日志是否输出的选项。
+     * @param level The log severity.
+     * @param message Builds the log text only when logging is enabled.
+     * @param option The category controlling whether this message is logged.
      */
     private fun write(
         level: XmaxLogLevel,
@@ -196,147 +213,159 @@ internal class XmaxLogger private constructor(
         option: XmaxLoggerOption,
     ) {
         if (!isEnabled(option)) return
-        sink.get().write(level, TAG, formattedMessage(message()))
+        sink.get().write(
+            level,
+            TAG,
+            formattedMessage(message()),
+        )
     }
 
     /**
-     * 判断指定日志选项是否已启用。
+     * Checks whether the requested log category is enabled.
      *
-     * @param option 控制该条日志是否输出的选项。
-     * @return 指定日志选项已开启时为 true。
+     * @param option The category controlling whether this message is logged.
+     * @return True if the log category is enabled.
      */
     private fun isEnabled(
-        option: XmaxLoggerOption
+        option: XmaxLoggerOption,
     ): Boolean {
         if (option.isEmpty) return false
         return XmaxLoggerOption(configuration.get().options).contains(option)
     }
 
     /**
-     * 按业务域提供日志入口，并管理统一输出配置。
+     * Provides domain-specific loggers and shared output configuration.
      */
     companion object {
 
         /**
-         * 记录实时媒体与生成生命周期事件。
+         * Logs realtime media and generation lifecycle events.
          */
         val realtime = XmaxLogger("Realtime")
 
         /**
-         * 记录 RTC 引擎与音视频传输事件。
+         * Logs RTC engine and media transport events.
          */
         val rtc = XmaxLogger("RTC")
 
         /**
-         * 记录媒体准备、采集与播放事件。
+         * Logs media preparation, capture, and playback events.
          */
         val media = XmaxLogger("Media")
 
         /**
-         * 记录 API 请求与响应。
+         * Logs API requests and responses.
          */
         val api = XmaxLogger("API")
 
         /**
-         * 记录文件上传、下载与存储事件。
+         * Logs file upload, download, and storage events.
          */
         val storage = XmaxLogger("Storage")
 
         /**
-         * 记录房间连接与信令事件。
+         * Logs room connections and signaling.
          */
         val room = XmaxLogger("Room")
 
         /**
-         * 记录流发布与生成任务事件。
+         * Logs stream publication and generation tasks.
          */
         val stream = XmaxLogger("Stream")
 
         /**
-         * 记录视频渲染事件。
+         * Logs video rendering events.
          */
         val render = XmaxLogger("Render")
 
         /**
-         * 记录触控轨迹与交互事件。
+         * Logs trajectories and interaction events.
          */
         val interaction = XmaxLogger("Interaction")
 
         /**
-         * 记录权限检查结果。
+         * Logs permission check results.
          */
         val permission = XmaxLogger("Permission")
 
         /**
-         * 记录实时生成启动耗时。
+         * Logs generation startup timing.
          */
         val timing = XmaxLogger("Timing")
 
         /**
-         * Android 日志使用的 SDK 标签。
+         * The Android log tag for XmaxSDK.
          */
         private const val TAG = "XmaxSDK"
 
         /**
-         * 保存一次日志配置的开关与语言环境快照。
+         * An immutable snapshot of enabled log categories and language environment.
          */
         private data class Configuration(
             /**
-             * 允许输出的日志选项。
+             * The enabled log categories.
              */
             val options: Int,
 
             /**
-             * 业务服务环境，同时决定日志语言。
+             * The service environment, which also selects the log language.
              */
             val environment: XmaxEnvironment,
         )
 
         /**
-         * 当前日志输出选项与服务环境。
+         * The current log categories and service environment.
          */
         private val configuration = AtomicReference(
-            Configuration(XmaxLoggerOption.none.rawValue, XmaxEnvironment.CHINA),
+            Configuration(
+                XmaxLoggerOption.none.rawValue,
+                XmaxEnvironment.CHINA,
+            ),
         )
 
         /**
-         * 接收格式化日志的输出目标。
+         * The target receiving formatted log messages.
          */
         private val sink = AtomicReference<XmaxLogSink>(AndroidXmaxLogSink)
 
         /**
-         * 设置全局日志开关及输出语言。
+         * Sets the shared logging options and output language.
          *
-         * @param options 允许输出的日志选项。
-         * @param environment 业务服务环境，同时决定日志语言；默认值为 `XmaxEnvironment.CHINA`。
+         * @param options The enabled logging categories.
+         * @param environment The service environment and log language; defaults to `XmaxEnvironment.CHINA`.
          */
         fun configure(
             options: XmaxLoggerOption,
             environment: XmaxEnvironment = XmaxEnvironment.CHINA,
         ) {
-            configuration.set(Configuration(options.rawValue, environment))
+            configuration.set(
+                Configuration(
+                    options.rawValue,
+                    environment,
+                ),
+            )
         }
 
         /**
-         * 根据客户端服务环境选择日志文本。
+         * Selects log text using the client's service environment.
          *
-         * @param chinese 国内环境使用的中文文本。
-         * @param english 海外环境使用的英文文本。
-         * @return 符合当前环境的中文或英文文本。
+         * @param chinese The text used in the China environment.
+         * @param english The text used in the global environment.
+         * @return The Chinese or English text for the current environment.
          */
         fun localized(
             chinese: String,
-            english: String
+            english: String,
         ): String =
             if (configuration.get().environment == XmaxEnvironment.CHINA) chinese else english
 
         /**
-         * 替换日志输出目标；传 null 恢复 Android 日志输出。
+         * Replaces the logging target; null restores Android system logging.
          *
-         * @param value 替代日志输出器；null 表示恢复默认输出。
+         * @param value The replacement logging target, or null to restore the default.
          */
         internal fun setSinkForTesting(
-            value: XmaxLogSink?
+            value: XmaxLogSink?,
         ) {
             sink.set(value ?: AndroidXmaxLogSink)
         }
@@ -344,72 +373,84 @@ internal class XmaxLogger private constructor(
 }
 
 /**
- * SDK 日志消息的严重程度分类。
+ * The severity of an SDK log message.
  */
 internal enum class XmaxLogLevel {
 
     /**
-     * 调试级别日志。
+     * A debug message.
      */
     DEBUG,
 
     /**
-     * 一般信息日志。
+     * An informational message.
      */
     INFO,
 
     /**
-     * 可继续运行但需要关注的警告日志。
+     * A warning about a condition that permits continued operation.
      */
     WARNING,
 
     /**
-     * 操作失败的错误日志。
+     * An operation failure.
      */
     ERROR,
 }
 
 /**
- * 接收格式化后的 SDK 日志消息的输出接口。
+ * The output interface for formatted SDK log messages.
  */
 internal fun interface XmaxLogSink {
 
     /**
-     * 按日志级别输出带 SDK 分类前缀的消息。
+     * Writes a message at the requested level with the SDK category prefix.
      *
-     * @param level 该条消息使用的日志级别。
-     * @param tag Android 日志标签。
-     * @param message 待发送或记录的消息文本。
+     * @param level The log severity.
+     * @param tag The Android log tag.
+     * @param message The message to send or log.
      */
     fun write(
         level: XmaxLogLevel,
         tag: String,
-        message: String
+        message: String,
     )
 }
 
 /**
- * 将 SDK 日志写入 Android 系统日志。
+ * Writes SDK messages to the Android system log.
  */
 private object AndroidXmaxLogSink : XmaxLogSink {
 
     /**
-     * 按日志级别输出带 SDK 分类前缀的消息。
+     * Writes a message at the requested level with the SDK category prefix.
      *
-     * @param level 该条消息使用的日志级别。
-     * @param tag Android 日志标签。
-     * @param message 待发送或记录的消息文本。
+     * @param level The log severity.
+     * @param tag The Android log tag.
+     * @param message The message to send or log.
      */
     override fun write(
         level: XmaxLogLevel,
         tag: String,
-        message: String
+        message: String,
     ) {
         when (level) {
-            XmaxLogLevel.DEBUG -> Log.d(tag, message)
-            XmaxLogLevel.INFO -> Log.i(tag, message)
-            XmaxLogLevel.WARNING -> Log.w(tag, message)
-            XmaxLogLevel.ERROR -> Log.e(tag, message)
+            XmaxLogLevel.DEBUG -> Log.d(
+                tag,
+                message,
+            )
+            XmaxLogLevel.INFO -> Log.i(
+                tag,
+                message,
+            )
+            XmaxLogLevel.WARNING -> Log.w(
+                tag,
+                message,
+            )
+            XmaxLogLevel.ERROR -> Log.e(
+                tag,
+                message,
+            )
         }
     }
 }

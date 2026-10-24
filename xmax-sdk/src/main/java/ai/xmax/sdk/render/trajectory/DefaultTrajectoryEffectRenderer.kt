@@ -28,53 +28,53 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * SDK 内置的发光轨迹效果。
+ * The built-in glowing trajectory effect.
  *
- * @param context Android 上下文；视图应使用具备当前界面主题的 Context。
+ * @param context The Android context; views should use the current UI theme's context.
  */
 public class DefaultTrajectoryEffectRenderer(
-    context: Context
+    context: Context,
 ) : View(context),
     TrajectoryEffectRendering {
 
     /**
-     * 提供给交互覆盖层的效果视图。
+     * The effect view hosted by the interaction overlay.
      */
     override val view: View
         get() = this
 
     /**
-     * 当前活动轨迹的位置和动画状态。
+     * The positions and animation state of active trajectories.
      */
     private val activeTrajectories = mutableMapOf<TrajectoryID, ActiveTrajectory>()
 
     /**
-     * 轨迹绘制所需的画笔与混合模式。
+     * The paint used to draw trajectory effects.
      */
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     /**
-     * 叠加轨迹光效时使用的颜色混合模式。
+     * The blend mode used to overlay trajectory light effects.
      */
     private val additiveXfermode = PorterDuffXfermode(PorterDuff.Mode.ADD)
 
     /**
-     * 拖尾绘制缓冲及淡出状态。
+     * The offscreen trail buffer.
      */
     private var trailBitmap: Bitmap? = null
 
     /**
-     * 绘制轨迹残影的离屏画布。
+     * The canvas drawing into the trail buffer.
      */
     private var trailCanvas: Canvas? = null
 
     /**
-     * 残影缓冲区是否仍有可见内容。
+     * Whether the trail buffer still contains visible pixels.
      */
     private var hasTrailPixels = false
 
     /**
-     * 停止移动后已执行的残影衰减帧数。
+     * The trail decay frame count since movement stopped.
      */
     private var idleFadeFrameCount = 0
 
@@ -85,16 +85,19 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * 开始绘制新加入的触控轨迹。
+     * Starts drawing newly added trajectories.
      *
-     * @param points 包含位置和时间戳的触控轨迹点。
+     * @param points Trajectory points with positions and timestamps.
      */
     override fun renderBegan(
-        points: List<TrajectoryPoint>
+        points: List<TrajectoryPoint>,
     ) {
         points.forEach { point ->
             activeTrajectories[point.id] = ActiveTrajectory(
-                location = PointF(point.location.x, point.location.y),
+                location = PointF(
+                    point.location.x,
+                    point.location.y,
+                ),
                 startTime = point.timestamp,
             )
         }
@@ -102,44 +105,56 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * 更新正在显示的触控轨迹位置。
+     * Updates the positions of visible trajectories.
      *
-     * @param points 包含位置和时间戳的触控轨迹点。
+     * @param points Trajectory points with positions and timestamps.
      */
     override fun renderMoved(
-        points: List<TrajectoryPoint>
+        points: List<TrajectoryPoint>,
     ) {
         points.forEach { point ->
             val trajectory = activeTrajectories[point.id]
             if (trajectory == null) {
                 activeTrajectories[point.id] = ActiveTrajectory(
-                    location = PointF(point.location.x, point.location.y),
+                    location = PointF(
+                        point.location.x,
+                        point.location.y,
+                    ),
                     startTime = point.timestamp,
                 )
                 return@forEach
             }
-            if (distanceSquared(trajectory.location, point.location) >= MINIMUM_MOVE_SQUARED) {
-                drawTrailSegment(trajectory.location, point.location)
+            if (distanceSquared(
+                trajectory.location,
+                point.location,
+            ) >= MINIMUM_MOVE_SQUARED) {
+                drawTrailSegment(
+                    trajectory.location,
+                    point.location,
+                )
             }
-            trajectory.location = PointF(point.location.x, point.location.y)
+            trajectory.location = PointF(
+                point.location.x,
+                point.location.y,
+            )
         }
         invalidate()
     }
 
     /**
-     * 结束指定轨迹的显示。
+     * Ends display of the specified trajectories.
      *
-     * @param identifiers 需要结束的轨迹标识集合。
+     * @param identifiers The trajectory identifiers to end.
      */
     override fun renderEnded(
-        identifiers: List<TrajectoryID>
+        identifiers: List<TrajectoryID>,
     ) {
         identifiers.forEach(activeTrajectories::remove)
         invalidate()
     }
 
     /**
-     * 清除所有轨迹及拖尾效果。
+     * Clears all trajectories and trails.
      */
     override fun reset() {
         activeTrajectories.clear()
@@ -148,33 +163,44 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * 根据新的视图尺寸更新绘制布局。
+     * Updates drawing layout for new view dimensions.
      *
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
-     * @param oldWidth 视图变化前的宽度，单位为像素。
-     * @param oldHeight 视图变化前的高度，单位为像素。
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
+     * @param oldWidth The previous view width, in pixels.
+     * @param oldHeight The previous view height, in pixels.
      */
     override fun onSizeChanged(
         width: Int,
         height: Int,
         oldWidth: Int,
-        oldHeight: Int
+        oldHeight: Int,
     ) {
-        super.onSizeChanged(width, height, oldWidth, oldHeight)
-        rebuildTrailBitmap(width, height)
+        super.onSizeChanged(
+            width,
+            height,
+            oldWidth,
+            oldHeight,
+        )
+        rebuildTrailBitmap(
+            width,
+            height,
+        )
     }
 
     /**
-     * 在视图进入窗口后恢复显示所需的绑定。
+     * Restores display bindings when the view attaches to a window.
      */
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (trailBitmap == null) rebuildTrailBitmap(width, height)
+        if (trailBitmap == null) rebuildTrailBitmap(
+            width,
+            height,
+        )
     }
 
     /**
-     * 在视图离开窗口后解除绑定并停止显示回调。
+     * Unbinds and stops display callbacks when the view leaves its window.
      */
     override fun onDetachedFromWindow() {
         reset()
@@ -185,22 +211,38 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * 绘制当前轨迹的拖尾、光晕及动态效果。
+     * Draws trajectory trails, glows, and animation effects.
      *
-     * @param canvas 用于绘制当前视图的画布。
+     * @param canvas The canvas drawing this view.
      */
     override fun onDraw(
-        canvas: Canvas
+        canvas: Canvas,
     ) {
         super.onDraw(canvas)
         fadeTrailBitmap()
-        trailBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+        trailBitmap?.let { canvas.drawBitmap(
+            it,
+            0f,
+            0f,
+            null,
+        ) }
 
         val now = SystemClock.elapsedRealtimeNanos() / NANOS_PER_SECOND
         activeTrajectories.values.forEach { trajectory ->
-            drawPulsingRings(canvas, trajectory, now)
-            drawOrbitParticles(canvas, trajectory, now)
-            drawHeadGlow(canvas, trajectory.location)
+            drawPulsingRings(
+                canvas,
+                trajectory,
+                now,
+            )
+            drawOrbitParticles(
+                canvas,
+                trajectory,
+                now,
+            )
+            drawHeadGlow(
+                canvas,
+                trajectory.location,
+            )
         }
 
         if (hasTrailPixels || activeTrajectories.isNotEmpty()) {
@@ -209,14 +251,14 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * 按当前视图尺寸重建拖尾绘制缓冲。
+     * Rebuilds the trail buffer for the current view dimensions.
      *
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
      */
     private fun rebuildTrailBitmap(
         width: Int,
-        height: Int
+        height: Int,
     ) {
         trailBitmap?.recycle()
         trailBitmap = null
@@ -225,39 +267,67 @@ public class DefaultTrajectoryEffectRenderer(
         idleFadeFrameCount = 0
         if (width <= 0 || height <= 0) return
 
-        trailBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+        trailBitmap = Bitmap.createBitmap(
+            width,
+            height,
+            Bitmap.Config.ARGB_8888,
+        ).also { bitmap ->
             trailCanvas = Canvas(bitmap)
         }
     }
 
     /**
-     * 绘制相邻触点之间的发光拖尾。
+     * Draws a glowing trail between adjacent touch positions.
      *
-     * @param start 线段起点，使用视图像素坐标。
-     * @param end 线段终点，使用视图像素坐标。
+     * @param start The segment start in view pixels.
+     * @param end The segment end in view pixels.
      */
     private fun drawTrailSegment(
         start: PointF,
-        end: PointF
+        end: PointF,
     ) {
         val canvas = trailCanvas ?: return
-        drawLine(canvas, start, end, dp(18f), GLOW_COLOR, 0.22f, dp(12f))
-        drawLine(canvas, start, end, dp(10f), GLOW_COLOR, 0.52f, dp(6f))
-        drawLine(canvas, start, end, dp(3f), Color.WHITE, 0.82f, 0f)
+        drawLine(
+            canvas,
+            start,
+            end,
+            dp(18f),
+            GLOW_COLOR,
+            0.22f,
+            dp(12f),
+        )
+        drawLine(
+            canvas,
+            start,
+            end,
+            dp(10f),
+            GLOW_COLOR,
+            0.52f,
+            dp(6f),
+        )
+        drawLine(
+            canvas,
+            start,
+            end,
+            dp(3f),
+            Color.WHITE,
+            0.82f,
+            0f,
+        )
         hasTrailPixels = true
         idleFadeFrameCount = 0
     }
 
     /**
-     * 按指定线宽、透明度和模糊半径绘制线段。
+     * Draws a segment with the requested width, opacity, and blur radius.
      *
-     * @param canvas 用于绘制当前视图的画布。
-     * @param start 线段起点，使用视图像素坐标。
-     * @param end 线段终点，使用视图像素坐标。
-     * @param width 画面宽度，单位为像素。
-     * @param color ARGB 颜色值。
-     * @param alpha 不透明度，范围为 0 到 1。
-     * @param blur 模糊半径，单位为像素。
+     * @param canvas The canvas drawing this view.
+     * @param start The segment start in view pixels.
+     * @param end The segment end in view pixels.
+     * @param width The frame width, in pixels.
+     * @param color The ARGB color.
+     * @param alpha The opacity, from 0 to 1.
+     * @param blur The blur radius, in pixels.
      */
     private fun drawLine(
         canvas: Canvas,
@@ -276,19 +346,31 @@ public class DefaultTrajectoryEffectRenderer(
         paint.strokeWidth = width
         paint.color = color
         paint.alpha = (alpha * 255f).toInt()
-        paint.maskFilter = if (blur > 0f) BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL) else null
+        paint.maskFilter = if (blur > 0f) BlurMaskFilter(
+            blur,
+            BlurMaskFilter.Blur.NORMAL,
+        ) else null
         paint.xfermode = additiveXfermode
-        canvas.drawLine(start.x, start.y, end.x, end.y, paint)
+        canvas.drawLine(
+            start.x,
+            start.y,
+            end.x,
+            end.y,
+            paint,
+        )
         paint.xfermode = null
         paint.maskFilter = null
     }
 
     /**
-     * 降低已有拖尾的不透明度，产生逐渐消失的效果。
+     * Fades existing trails by reducing their opacity.
      */
     private fun fadeTrailBitmap() {
         if (!hasTrailPixels) return
-        trailCanvas?.drawColor(FADE_COLOR, PorterDuff.Mode.DST_OUT)
+        trailCanvas?.drawColor(
+            FADE_COLOR,
+            PorterDuff.Mode.DST_OUT,
+        )
         if (activeTrajectories.isNotEmpty()) {
             idleFadeFrameCount = 0
             return
@@ -299,20 +381,23 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * 清空拖尾绘制缓冲。
+     * Clears the trail buffer.
      */
     private fun clearTrailBitmap() {
-        trailCanvas?.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        trailCanvas?.drawColor(
+            Color.TRANSPARENT,
+            PorterDuff.Mode.CLEAR,
+        )
         hasTrailPixels = false
         idleFadeFrameCount = 0
     }
 
     /**
-     * 绘制随时间变化的触点环形效果。
+     * Draws animated rings around a touch point.
      *
-     * @param canvas 用于绘制当前视图的画布。
-     * @param trajectory 当前绘制的活动轨迹。
-     * @param now 当前单调时钟时间，单位为秒。
+     * @param canvas The canvas drawing this view.
+     * @param trajectory The active trajectory being drawn.
+     * @param now The current monotonic time, in seconds.
      */
     private fun drawPulsingRings(
         canvas: Canvas,
@@ -331,17 +416,22 @@ public class DefaultTrajectoryEffectRenderer(
             val radius = dp(14f + index * 18f + pulse * 8f)
             val alpha = 0.5f * (1f - index * 0.2f) * (0.5f + pulse * 0.5f)
             paint.alpha = (alpha * 255f).toInt()
-            canvas.drawCircle(trajectory.location.x, trajectory.location.y, radius, paint)
+            canvas.drawCircle(
+                trajectory.location.x,
+                trajectory.location.y,
+                radius,
+                paint,
+            )
         }
         paint.xfermode = null
     }
 
     /**
-     * 绘制绕触点移动的粒子效果。
+     * Draws particles moving around a touch point.
      *
-     * @param canvas 用于绘制当前视图的画布。
-     * @param trajectory 当前绘制的活动轨迹。
-     * @param now 当前单调时钟时间，单位为秒。
+     * @param canvas The canvas drawing this view.
+     * @param trajectory The active trajectory being drawn.
+     * @param now The current monotonic time, in seconds.
      */
     private fun drawOrbitParticles(
         canvas: Canvas,
@@ -356,39 +446,58 @@ public class DefaultTrajectoryEffectRenderer(
             val centerX = trajectory.location.x + cos(angle) * dp(22f)
             val centerY = trajectory.location.y + sin(angle) * dp(22f)
             val alpha = 0.6f * (0.6f + sin(elapsed * 3f + index) * 0.4f)
-            drawRadialGlow(canvas, centerX, centerY, dp(6f), GLOW_COLOR, alpha)
+            drawRadialGlow(
+                canvas,
+                centerX,
+                centerY,
+                dp(6f),
+                GLOW_COLOR,
+                alpha,
+            )
         }
     }
 
     /**
-     * 在轨迹头部绘制光晕。
+     * Draws the glow at the trajectory head.
      *
-     * @param canvas 用于绘制当前视图的画布。
-     * @param location 触点在视图中的位置，单位为像素。
+     * @param canvas The canvas drawing this view.
+     * @param location The touch position in view pixels.
      */
     private fun drawHeadGlow(
         canvas: Canvas,
-        location: PointF
+        location: PointF,
     ) {
-        drawRadialGlow(canvas, location.x, location.y, dp(16f), GLOW_COLOR, 0.9f)
+        drawRadialGlow(
+            canvas,
+            location.x,
+            location.y,
+            dp(16f),
+            GLOW_COLOR,
+            0.9f,
+        )
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
         paint.xfermode = additiveXfermode
-        canvas.drawCircle(location.x, location.y, dp(5f), paint)
+        canvas.drawCircle(
+            location.x,
+            location.y,
+            dp(5f),
+            paint,
+        )
         paint.xfermode = null
     }
 
     /**
-     * 按指定位置、半径和透明度绘制径向光晕。
+     * Draws a radial glow with the requested position, radius, and opacity.
      *
-     * @param canvas 用于绘制当前视图的画布。
-     * @param centerX 效果中心横坐标，单位为像素。
-     * @param centerY 效果中心纵坐标，单位为像素。
-     * @param radius 效果半径，单位为像素。
-     * @param color ARGB 颜色值。
-     * @param alpha 不透明度，范围为 0 到 1。
+     * @param canvas The canvas drawing this view.
+     * @param centerX The horizontal effect center, in pixels.
+     * @param centerY The vertical effect center, in pixels.
+     * @param radius The effect radius, in pixels.
+     * @param color The ARGB color.
+     * @param alpha The opacity, from 0 to 1.
      */
     private fun drawRadialGlow(
         canvas: Canvas,
@@ -406,84 +515,104 @@ public class DefaultTrajectoryEffectRenderer(
             centerY,
             radius,
             intArrayOf(
-                colorWithAlpha(color, alpha),
-                colorWithAlpha(color, alpha * 0.6f),
+                colorWithAlpha(
+                    color,
+                    alpha,
+                ),
+                colorWithAlpha(
+                    color,
+                    alpha * 0.6f,
+                ),
                 Color.TRANSPARENT,
             ),
-            floatArrayOf(0f, 0.4f, 1f),
+            floatArrayOf(
+                0f,
+                0.4f,
+                1f,
+            ),
             Shader.TileMode.CLAMP,
         )
         paint.xfermode = additiveXfermode
-        canvas.drawCircle(centerX, centerY, radius, paint)
+        canvas.drawCircle(
+            centerX,
+            centerY,
+            radius,
+            paint,
+        )
         paint.xfermode = null
         paint.shader = null
     }
 
     /**
-     * 将密度无关像素转换为当前设备像素。
+     * Converts density-independent pixels to device pixels.
      *
-     * @param value 需要转换的密度无关像素数。
-     * @return 转换后的像素数。
+     * @param value The density-independent pixel value.
+     * @return The device pixel value.
      */
     private fun dp(
-        value: Float
+        value: Float,
     ): Float = value * resources.displayMetrics.density
 
     /**
-     * 保存活动轨迹的位置和动画起始时间。
+     * The position and animation origin of an active trajectory.
      */
     private data class ActiveTrajectory(
         /**
-         * 触点在视图中的位置，单位为像素。
+         * The touch position in view pixels.
          */
         var location: PointF,
 
         /**
-         * 轨迹开始时的单调时钟秒数。
+         * The monotonic trajectory start time, in seconds.
          */
         val startTime: Double,
     )
 
     /**
-     * 轨迹光效的颜色、采样与残影衰减配置。
+     * Trajectory color, sampling, and decay settings.
      */
     private companion object {
 
         /**
-         * 轨迹光效的基础颜色。
+         * The base trajectory glow color.
          */
         const val GLOW_COLOR: Int = -16_711_836
 
         /**
-         * 触发轨迹移动的最小距离平方，单位为平方像素。
+         * The minimum squared movement distance, in square pixels.
          */
         const val MINIMUM_MOVE_SQUARED = 0.25f
 
         /**
-         * 停止移动后最多执行的残影衰减帧数。
+         * The maximum trail decay frame count after movement stops.
          */
         const val IDLE_FADE_FRAME_LIMIT = 64
 
         /**
-         * 秒换算为纳秒的倍率。
+         * The number of nanoseconds per second.
          */
         const val NANOS_PER_SECOND = 1_000_000_000.0
 
         /**
-         * 每帧衰减轨迹残影时覆盖的半透明颜色。
+         * The translucent color used for each trail decay frame.
          */
-        val FADE_COLOR: Int = Color.argb((0.05f * 255f).toInt(), 0, 0, 0)
+        val FADE_COLOR: Int = Color.argb(
+            (0.05f * 255f).toInt(),
+            0,
+            0,
+            0,
+        )
 
         /**
-         * 计算两点之间的距离平方，供位移阈值比较使用。
+         * Computes squared point distance for movement threshold comparisons.
          *
-         * @param first 第一个坐标点。
-         * @param second 第二个坐标点。
-         * @return 两点距离的平方，单位为平方像素。
+         * @param first The first point.
+         * @param second The second point.
+         * @return The squared distance, in square pixels.
          */
         fun distanceSquared(
             first: PointF,
-            second: PointF
+            second: PointF,
         ): Float {
             val dx = second.x - first.x
             val dy = second.y - first.y
@@ -491,18 +620,21 @@ public class DefaultTrajectoryEffectRenderer(
         }
 
         /**
-         * 为指定颜色应用透明度。
+         * Applies opacity to a color.
          *
-         * @param color ARGB 颜色值。
-         * @param alpha 不透明度，范围为 0 到 1。
-         * @return 应用透明度后的 ARGB 颜色值。
+         * @param color The ARGB color.
+         * @param alpha The opacity, from 0 to 1.
+         * @return The ARGB color with the requested opacity.
          */
         fun colorWithAlpha(
             color: Int,
-            alpha: Float
+            alpha: Float,
         ): Int {
             return Color.argb(
-                (alpha.coerceIn(0f, 1f) * 255f).toInt(),
+                (alpha.coerceIn(
+                    0f,
+                    1f,
+                ) * 255f).toInt(),
                 Color.red(color),
                 Color.green(color),
                 Color.blue(color),

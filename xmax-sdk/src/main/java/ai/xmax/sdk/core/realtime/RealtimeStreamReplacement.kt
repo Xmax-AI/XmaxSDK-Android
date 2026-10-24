@@ -11,16 +11,16 @@
 package ai.xmax.sdk
 
 /**
- * 外部输入替换结果；remoteStream 仅在自动恢复生成成功时提供。
+ * The result of replacing external input; remoteStream is provided only if generation resumes successfully.
  */
 public data class RealtimeStreamReplacement(
     /**
-     * 本地输入媒体流。
+     * The local input stream.
      */
     public val localStream: RealtimeMediaStream,
 
     /**
-     * 远端生成结果流。
+     * The remote generation result stream.
      */
     public val remoteStream: RealtimeMediaStream?,
 )

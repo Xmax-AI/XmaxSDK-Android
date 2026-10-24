@@ -11,18 +11,18 @@
 package ai.xmax.sdk.foundation.storage
 
 /**
- * 基础存储能力使用的字节进度监听器。
+ * The byte-progress listener for storage transfers.
  */
 internal fun interface StorageProgressListener {
 
     /**
-     * 接收当前传输的已完成字节数与总字节数。
+     * Receives transferred and total byte counts.
      *
-     * @param completedBytes 已传输的字节数。
-     * @param totalBytes 需要传输的总字节数。
+     * @param completedBytes The transferred byte count.
+     * @param totalBytes The total byte count.
      */
     fun onProgress(
         completedBytes: Long,
-        totalBytes: Long
+        totalBytes: Long,
     )
 }

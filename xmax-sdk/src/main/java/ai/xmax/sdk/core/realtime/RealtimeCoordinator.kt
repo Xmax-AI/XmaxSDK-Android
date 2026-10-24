@@ -31,101 +31,104 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * 管理实时操作的准入、状态提交和终止，是生命周期状态的唯一写入方。
+ * Admits realtime operations, merges termination requests, and owns lifecycle state changes.
  *
- * [lock] 仅保护短时状态访问，不在持锁期间挂起；实际操作及回滚共用 [effects] 串行执行。
- * 终止请求先登记再取消旧操作，并在独立协程中清理，调用方取消等待不会中断资源释放。
+ * [lock] protects short state accesses without suspension; [effects] serializes operations and rollback.
+ * Termination cancels affected operations and completes cleanup independently of a waiting caller's
+ * cancellation.
  *
- * @param dispatcher 执行后台操作的协程调度器；默认值为 `Dispatchers.Default`。
+ * @param dispatcher The dispatcher for background operations; defaults to `Dispatchers.Default`.
  */
 internal class RealtimeCoordinator(
     /**
-     * 向接入方派发状态与视频帧的回调组件。
+     * The dispatcher for app state and video frame callbacks.
      */
     private val callbacks: RealtimeCallbacks,
 
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
 
     /**
-     * 查询是否仍有可用本地媒体的函数。
+     * The function checking whether local media is still available.
      */
     private val hasLocalMedia: () -> Boolean = { false },
 
     /**
-     * 按终止范围释放资源的挂起操作。
+     * The suspending cleanup operation for a termination scope.
      */
     private val cleanup: suspend (TerminationScope) -> Unit,
 ) {
 
     /**
-     * 生成与外部切流请求以最新一次为准，设置可排队，其他操作同一时刻只接纳一个。
+     * Generation and external-source replacements prefer the latest request; settings may queue, while other
+     * conflicting operations are rejected.
      */
     enum class OperationKind {
 
         /**
-         * 创建、替换或停止本地媒体的操作。
+         * Creates, replaces, or stops local media.
          */
         MEDIA,
 
         /**
-         * 实时连接操作或连接范围的资源终止。
+         * Connects or terminates connection resources.
          */
         CONNECTION,
 
         /**
-         * 生成任务操作或任务范围的资源终止。
+         * Starts or terminates a generation task.
          */
         GENERATION,
 
         /**
-         * 替换外部视频输入的操作。
+         * Replaces external video input.
          */
         REPLACEMENT,
 
         /**
-         * 切换相机方向的操作。
+         * Switches the active camera.
          */
         SWITCH,
 
         /**
-         * 更新媒体编码配置的操作。
+         * Updates media encoding settings.
          */
         CONFIGURATION,
 
         /**
-         * 更新音量或监听配置的操作。
+         * Updates volume or listener settings.
          */
         SETTING
     }
 
     /**
-     * 按清理范围递增排列；合并终止请求时只能扩大范围。
+     * Resource scopes ordered from narrowest to broadest; merged termination requests may only expand the
+     * scope.
      */
     enum class TerminationScope {
 
         /**
-         * 生成任务操作或任务范围的资源终止。
+         * Starts or terminates a generation task.
          */
         GENERATION,
 
         /**
-         * 实时连接操作或连接范围的资源终止。
+         * Connects or terminates connection resources.
          */
         CONNECTION,
 
         /**
-         * 终止全部实时媒体和连接资源。
+         * Terminates all realtime media and connection resources.
          */
         ALL;
 
         /**
-         * 判断指定类型的操作是否会使当前操作失效。
+         * Checks whether an operation kind invalidates this operation.
          *
-         * @param kind 本次操作或媒体源的类型。
-         * @return 该操作会使当前操作失效时为 true。
+         * @param kind The operation or media source kind.
+         * @return True if the operation invalidates the current operation.
          */
         fun affects(
-            kind: OperationKind
+            kind: OperationKind,
         ): Boolean = when (this) {
             GENERATION -> kind == OperationKind.GENERATION || kind == OperationKind.REPLACEMENT || kind == OperationKind.SWITCH ||
                 kind == OperationKind.CONFIGURATION
@@ -135,64 +138,65 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 状态访问和副作用执行的并发保护。
+     * The lock protecting lifecycle state and operation ownership.
      */
     private val lock = Any()
 
     /**
-     * 串行执行媒体与连接操作的互斥锁。
+     * The mutex serializing media and connection effects.
      */
     private val effects = Mutex()
 
     /**
-     * 生命周期操作的执行作用域。
+     * The scope for lifecycle operations.
      */
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     /**
-     * 当前操作、生成请求及终止任务。
+     * The currently admitted operation.
      */
     private var active: Operation? = null
 
     /**
-     * 当前有效的生成请求。
+     * The current generation request.
      */
     private var generation: GenerationRequest? = null
 
     /**
-     * 尚未完成的配置操作。
+     * The pending configuration operations.
      */
     private val settings = mutableSetOf<Operation>()
 
     /**
-     * 等待执行或正在执行的前台请求数。
+     * The number of foreground requests waiting or executing.
      */
     private var foregroundRequests = 0
 
     /**
-     * 当前待完成的终止请求。
+     * The pending termination request.
      */
     private var termination: Termination? = null
 
     /**
-     * 生命周期状态及公开只读快照。
+     * The lifecycle state exposed as a read-only snapshot.
      */
     private var state = RealtimeState(RealtimeConnectionState.IDLE)
 
     /**
-     * 同步读取不可变快照，外部不能直接修改协调器状态。
+     * Returns an immutable snapshot without allowing external state changes.
      */
     val currentState: RealtimeState get() = synchronized(lock) { state }
 
     /**
-     * 是否有尚未完成的前台、后台或资源清理操作。
+     * Whether foreground, background, or cleanup operations are pending.
      */
     val isBusy: Boolean get() = synchronized(lock) {
         foregroundRequests > 0 || active != null || settings.isNotEmpty() || termination != null || generation != null
     }
 
     /**
-     * 相机首帧与预览绑定均就绪后结束媒体准备；迟到通知不改变其他状态。
+     * Completes media preparation once the camera frame and preview binding are ready; late callbacks do not
+     * change other states.
      */
     fun localPreviewDidBecomeReady() = synchronized(lock) {
         if (state.connectionState == RealtimeConnectionState.PREPARING && termination == null) {
@@ -201,41 +205,44 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 单次操作的所有权凭证；异步返回后检查它，阻止旧结果覆盖新生命周期。
+     * An operation ownership token that prevents stale asynchronous results from changing the current
+     * lifecycle.
      */
     inner class Token internal constructor(
         /**
-         * 本次生命周期操作及其执行状态。
+         * The lifecycle operation associated with this token.
          */
-        private val operation: Operation
+        private val operation: Operation,
     ) {
 
         /**
-         * 切换输入后恢复生成所需的请求配置。
+         * The request settings needed to resume generation after replacing input.
          *
-         * 替换沿用正在启动的请求意图；已生效条件仍只保存在 GenerationManager。
+         * Replacement inherits a pending request; committed conditions remain owned by GenerationManager.
          */
         val resumeGeneration: Boolean get() = operation.generation?.resumeGeneration == true
 
         /**
-         * 当前操作关联的生成上下文。
+         * The generation context associated with this operation.
          */
         val requestedContext: RealtimeContext? get() = synchronized(lock) { operation.generation?.context }
 
         /**
-         * 切流恢复生成时使用同一请求的人脸还原设置，尚未继承时为 null。
+         * The inherited face restoration setting, or null before a replacement request inherits it.
          */
         val requestedFaceRestoration: Boolean? get() = synchronized(lock) { operation.generation?.faceRestoration }
 
         /**
-         * 为待恢复的生成任务保留最近一次有效的生成条件。
+         * Retains the latest valid conditions for generation resumption.
          *
-         * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
-         * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`；默认值为 `false`。
+         * @param context Generation prompts and reference media; null reuses cached conditions, which must
+         * exist for the first request.
+         * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to
+         * false.
          */
         fun inheritGenerationContext(
             context: RealtimeContext?,
-            faceRestoration: Boolean = false
+            faceRestoration: Boolean = false,
         ) = synchronized(lock) {
             ensureCurrent()
             operation.generation?.let {
@@ -245,7 +252,8 @@ internal class RealtimeCoordinator(
         }
 
         /**
-         * 操作被替换或终止后按协程取消退出，避免将过期结果视为业务失败。
+         * Replaced or terminated operations exit through coroutine cancellation rather than reporting stale
+         * results as new failures.
          */
         fun ensureCurrent() = synchronized(lock) {
             if ((active !== operation && operation !in settings) || operation.invalidated) throw CancellationException("Realtime operation was superseded")
@@ -255,24 +263,25 @@ internal class RealtimeCoordinator(
         }
 
         /**
-         * 仅有效操作可以提交状态；验证所有权与状态写入处于同一临界区。
+         * Commits state only while ownership is valid, checking ownership and updating state in the same
+         * critical section.
          *
-         * @param next 准备提交的新状态快照。
+         * @param next The state snapshot to commit.
          */
         fun commit(
-            next: RealtimeState
+            next: RealtimeState,
         ) = synchronized(lock) {
             ensureCurrent()
             setState(next)
         }
 
         /**
-         * 连接建立后将后续故障的清理范围收窄到当前生成任务。
+         * Narrows subsequent failure cleanup to the generation task after the connection is established.
          *
-         * @param scope 需要终止的资源范围。
+         * @param scope The resources to terminate.
          */
         fun setFailureScope(
-            scope: TerminationScope
+            scope: TerminationScope,
         ) = synchronized(lock) {
             ensureCurrent()
             operation.failureScope = scope
@@ -280,15 +289,18 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 生成和切流请求替换上一请求；其他冲突返回配置错误，最多同时接纳 16 个设置操作。
-     * 调用方取消时，先等待操作及回滚结束，再释放准入资格，防止新操作复用尚未清理的资源。
+     * Replaces previous generation or source-replacement requests, rejecting other conflicts; at most 16
+     * settings operations are admitted.
+     * Caller cancellation waits for the operation and rollback before releasing admission, preventing reuse
+     * of resources still being cleaned up.
      *
-     * @param kind 本次操作或媒体源的类型。
-     * @param failureScope 操作失败时终止的资源范围；null 表示不额外终止资源。
-     * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`；默认值为 `false`。
-     * @param action 需要执行的操作。
-     * @return 传入操作成功执行后的结果。
+     * @param kind The operation or media source kind.
+     * @param failureScope The resources to terminate on failure; null requests no additional termination.
+     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
+     * for the first request.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
+     * @param action The operation to perform.
+     * @return The operation's successful result.
      */
     suspend fun <T> run(
         kind: OperationKind,
@@ -308,9 +320,19 @@ internal class RealtimeCoordinator(
             background?.task?.join()
             synchronized(lock) { if (active === background) active = null }
             return if (kind == OperationKind.GENERATION || kind == OperationKind.REPLACEMENT) {
-                runGeneration(kind, failureScope, context, faceRestoration, action)
+                runGeneration(
+                    kind,
+                    failureScope,
+                    context,
+                    faceRestoration,
+                    action,
+                )
             } else {
-                runOperation(kind, failureScope, action = action)
+                runOperation(
+                    kind,
+                    failureScope,
+                    action = action,
+                )
             }
         } finally {
             synchronized(lock) { foregroundRequests-- }
@@ -318,32 +340,41 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 空闲时执行低优先级调档，前台操作及终止请求优先，失败不结束生成。
+     * Applies a low-priority quality adjustment only while idle; foreground operations and termination take
+     * priority, and failure does not end generation.
      *
-     * @param action 需要执行的操作。
-     * @return 调档操作被接纳并执行时为 true，否则为 false。
+     * @param action The operation to perform.
+     * @return True if the quality adjustment was admitted and performed.
      */
     suspend fun runAdaptiveConfiguration(
-        action: suspend (Token) -> Unit
+        action: suspend (Token) -> Unit,
     ): Boolean {
         return try {
-            runOperation(OperationKind.CONFIGURATION, null, background = true, action = action)
+            runOperation(
+                OperationKind.CONFIGURATION,
+                null,
+                background = true,
+                action = action,
+            )
             true
-        } catch (cancelled: CancellationException) {
+        } catch (
+            cancelled: CancellationException,
+        ) {
             currentCoroutineContext().ensureActive()
             false
         }
     }
 
     /**
-     * 执行最新生成请求，并在启动前等待被替换请求及其资源回滚完成。
+     * Runs the latest generation request after the replaced request and its rollback finish.
      *
-     * @param kind 本次操作或媒体源的类型。
-     * @param failureScope 操作失败时终止的资源范围；null 表示不额外终止资源。
-     * @param context 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`。
-     * @param action 需要执行的操作。
-     * @return 传入操作成功执行后的结果。
+     * @param kind The operation or media source kind.
+     * @param failureScope The resources to terminate on failure; null requests no additional termination.
+     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
+     * for the first request.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`.
+     * @param action The operation to perform.
+     * @return The operation's successful result.
      */
     private suspend fun <T> runGeneration(
         kind: OperationKind,
@@ -381,8 +412,15 @@ internal class RealtimeCoordinator(
                     terminal?.join()
                 }
                 currentCoroutineContext().ensureActive()
-                runOperation(kind, failureScope, request, action = action)
-            } catch (cancelled: CancellationException) {
+                runOperation(
+                    kind,
+                    failureScope,
+                    request,
+                    action = action,
+                )
+            } catch (
+                cancelled: CancellationException,
+            ) {
                 callerContext.ensureActive()
                 request.error?.let { throw it }
                 throw cancelled
@@ -396,14 +434,14 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 串行执行生命周期操作，并将失败清理限制在指定资源范围内。
+     * Serializes lifecycle operations and limits failure cleanup to the requested resource scope.
      *
-     * @param kind 本次操作或媒体源的类型。
-     * @param failureScope 操作失败时终止的资源范围；null 表示不额外终止资源。
-     * @param request 准备执行的生成请求；null 表示不附带生成上下文。
-     * @param background 是否作为后台操作执行；默认值为 `false`。
-     * @param action 需要执行的操作。
-     * @return 传入操作成功执行后的结果。
+     * @param kind The operation or media source kind.
+     * @param failureScope The resources to terminate on failure; null requests no additional termination.
+     * @param request The generation request, or null when no context is attached.
+     * @param background Whether this is a background operation; defaults to false.
+     * @param action The operation to perform.
+     * @return The operation's successful result.
      */
     private suspend fun <T> runOperation(
         kind: OperationKind,
@@ -421,7 +459,7 @@ internal class RealtimeCoordinator(
             if (request != null && (generation !== request || !request.job.isActive)) {
                 throw CancellationException("Realtime generation was superseded")
             }
-            // 已在生成时，startGeneration 只更新条件，不再代表一轮生成生命周期。
+            // During generation, startGeneration changes conditions rather than beginning another lifecycle.
             val operationKind = if (kind == OperationKind.GENERATION &&
                 state.connectionState == RealtimeConnectionState.GENERATING
             ) OperationKind.CONFIGURATION else kind
@@ -452,10 +490,12 @@ internal class RealtimeCoordinator(
         task.start()
         try {
             return task.await()
-        } catch (cancelled: CancellationException) {
+        } catch (
+            cancelled: CancellationException,
+        ) {
             synchronized(lock) { operation.invalidated = true }
             task.cancel(cancelled)
-            // 即使底层已产生结果，调用方也可能来不及接收；回收后才允许新操作进入。
+            // A caller may be cancelled after an underlying result is ready; release it before admitting another operation.
             withContext(NonCancellable) {
                 task.join()
                 val terminal = synchronized(lock) {
@@ -466,22 +506,31 @@ internal class RealtimeCoordinator(
                         val replacing = operation.generation != null && generation != null && generation !== operation.generation
                         val connected = state.connectionState == RealtimeConnectionState.CONNECTED ||
                             state.connectionState == RealtimeConnectionState.GENERATING
-                        // 生成启动已连接时，替换只回收任务，保留连接供两个 startGeneration 重载复用。
+                        // When generation starts on an existing connection, replacement releases only the task so both overloads can reuse the connection.
                         val cleanupTarget = if (replacing && connected && target == TerminationScope.CONNECTION) {
                             TerminationScope.GENERATION
                         } else target
-                        requestTermination(cleanupTarget, origin = operation)
+                        requestTermination(
+                            cleanupTarget,
+                            origin = operation,
+                        )
                     }
                 }
                 terminal?.await()
             }
             if (currentCoroutineContext().isActive) operation.terminationError?.let { throw it }
             throw cancelled
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             val resolved = XmaxError.from(error)
             val terminal = synchronized(lock) {
                 termination?.task ?: operation.failureScope?.let {
-                    requestTermination(it, resolved, origin = operation)
+                    requestTermination(
+                        it,
+                        resolved,
+                        origin = operation,
+                    )
                 }
             }
             if (terminal != null) {
@@ -508,19 +557,22 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 合并清理请求并等待结束；调用方可指定最终状态原因。
+     * Merges termination requests and waits for cleanup, recording the final state reason.
      *
-     * @param target 需要终止的资源范围。
-     * @param reason 引起状态变化或失败的原因；默认值为 `RealtimeReason.Normal`。
+     * @param target The resources to terminate.
+     * @param reason The reason for the transition or failure; defaults to `RealtimeReason.Normal`.
      */
     suspend fun terminate(
         target: TerminationScope,
         reason: RealtimeReason = RealtimeReason.Normal,
     ) {
         val (request, task) = synchronized(lock) {
-            generation to requestTermination(target, reason = reason)
+            generation to requestTermination(
+                target,
+                reason = reason,
+            )
         }
-        // 等待者的取消不能传递给独立的资源清理任务。
+        // Cancelling a waiter must not cancel the independent cleanup task.
         withContext(NonCancellable) {
             task.await()
             request?.finished?.await()
@@ -528,12 +580,13 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 空闲时不重复清理，但仍会取消尚未提交连接状态的活动操作。
+     * Do not repeat idle cleanup, but still cancel an operation whose connection state has not been
+     * committed.
      *
-     * @param reason 引起状态变化或失败的原因；默认值为 `RealtimeReason.Normal`。
+     * @param reason The reason for the transition or failure; defaults to `RealtimeReason.Normal`.
      */
     suspend fun disconnect(
-        reason: RealtimeReason = RealtimeReason.Normal
+        reason: RealtimeReason = RealtimeReason.Normal,
     ) {
         val (request, task) = synchronized(lock) {
             val hasConnectionOperation = active?.let {
@@ -558,28 +611,31 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 非阻塞登记后台故障，可直接从心跳或媒体失败协程调用，避免等待自身退出。
+     * Registers a background failure without waiting on its originating heartbeat or media coroutine.
      *
-     * @param error 本次操作失败的异常或 SDK 错误。
-     * @param target 需要终止的资源范围。
+     * @param error The operation failure or SDK error.
+     * @param target The resources to terminate.
      */
     fun reportFailure(
         error: XmaxError,
-        target: TerminationScope
+        target: TerminationScope,
     ) = synchronized(lock) {
         if (state.reason is RealtimeReason.Failure && termination == null) return@synchronized
-        requestTermination(target, error)
+        requestTermination(
+            target,
+            error,
+        )
         Unit
     }
 
     /**
-     * 合并资源终止请求，并等待较大终止范围内的全部清理完成。
+     * Merges termination requests and waits until all resources in the expanded scope are released.
      *
-     * @param target 需要终止的资源范围。
-     * @param error 本次操作失败的异常或 SDK 错误。
-     * @param reason 引起状态变化或失败的原因。
-     * @param origin 触发终止的操作；null 表示不限定来源操作。
-     * @return 完成资源清理时结束的异步等待结果。
+     * @param target The resources to terminate.
+     * @param error The operation failure or SDK error.
+     * @param reason The reason for the state transition or failure.
+     * @param origin The operation requesting termination, or null for an external request.
+     * @return An awaitable result completed when cleanup finishes.
      */
     private fun requestTermination(
         target: TerminationScope,
@@ -587,8 +643,8 @@ internal class RealtimeCoordinator(
         reason: RealtimeReason = error?.let(RealtimeReason::Failure) ?: RealtimeReason.Normal,
         origin: Operation? = null,
     ): Deferred<Unit> {
-        // 显式终止或后台故障取消已登记的生成，包括尚在等待旧请求清理的最新请求。
-        // 旧操作自己的回滚不能取消取代它的新请求。
+        // Explicit termination and background failures also cancel the latest request waiting for a previous request's cleanup.
+        // Rollback of an old operation must not cancel its replacement.
         if (origin == null) generation?.let {
             if (it.error == null) it.error = error
             it.job.cancel(CancellationException("Realtime generation terminated"))
@@ -607,8 +663,10 @@ internal class RealtimeCoordinator(
                         val requested = synchronized(lock) { pending.target }
                         try {
                             cleanup(requested)
-                        } catch (cleanupError: Throwable) {
-                            // 清理失败保留为诊断；已有原始故障时附加 suppressed，不覆盖首个故障。
+                        } catch (
+                            cleanupError: Throwable,
+                        ) {
+                            // Preserve the original failure; attach cleanup failures as suppressed diagnostics.
                             XmaxLogger.realtime.warn(
                                 message = {
                                     "Realtime cleanup failed: " +
@@ -630,7 +688,7 @@ internal class RealtimeCoordinator(
                                     sessionId = state.sessionId,
                                     reason = pending.reason,
                                 )
-                                // 先注销旧操作和终止任务，再允许最终状态回调重入新生命周期。
+                                // Unregister old operations and termination before allowing the final callback to enter a new lifecycle.
                                 if (active?.let { requested.affects(it.kind) } == true) active = null
                                 settings.removeAll { requested.affects(it.kind) }
                                 if (state != finalState) {
@@ -673,12 +731,12 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 更新当前状态并异步通知监听器；相同状态不重复通知。
+     * Updates the state and queues listener notification only if the state changed.
      *
-     * @param next 准备提交的新状态快照。
+     * @param next The state snapshot to commit.
      */
     private fun setState(
-        next: RealtimeState
+        next: RealtimeState,
     ) {
         if (state == next) return
         state = next
@@ -686,13 +744,13 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 确定操作失败时需要释放的资源范围。
+     * Resolves the cleanup scope required after an operation fails.
      *
-     * @param kind 本次操作或媒体源的类型。
-     * @return 需要清理的资源范围；null 表示无需扩大清理范围。
+     * @param kind The operation or media source kind.
+     * @return The cleanup scope, or null if no additional cleanup is needed.
      */
     private fun defaultFailureScope(
-        kind: OperationKind
+        kind: OperationKind,
     ): TerminationScope? = when (kind) {
         OperationKind.MEDIA -> TerminationScope.ALL
         OperationKind.CONNECTION -> TerminationScope.CONNECTION
@@ -701,110 +759,112 @@ internal class RealtimeCoordinator(
     }
 
     /**
-     * 失效与终止标记在 lock 内更新，task 在操作对外可见前完成赋值。
+     * Validity and termination flags are protected by lock; task assignment precedes publication of the
+     * operation.
      */
     internal class Operation(
         /**
-         * 本次操作或媒体源的类型。
+         * The operation or media source kind.
          */
         val kind: OperationKind,
 
         /**
-         * 操作失败时终止的资源范围；null 表示不额外终止资源。
+         * The resources to terminate on failure; null requests no additional termination.
          */
         var failureScope: TerminationScope?,
 
         /**
-         * 用于识别当前生成请求或事件归属的标识。
+         * The identifier associating a request or event with its generation task.
          */
         val generation: GenerationRequest? = null,
 
         /**
-         * 是否作为后台操作执行；默认值为 `false`。
+         * Whether this is a background operation; defaults to false.
          */
         val background: Boolean = false,
     ) {
 
         /**
-         * 操作执行任务及失效、终止结果。
+         * The task executing this operation.
          */
         lateinit var task: Deferred<*>
 
         /**
-         * 操作是否已被后续请求替代。
+         * Whether a later request has replaced this operation.
          */
         var invalidated = false
 
         /**
-         * 操作是否已进入终止状态。
+         * Whether this operation has entered termination.
          */
         var terminated = false
 
         /**
-         * 导致操作终止的错误。
+         * The error causing operation termination.
          */
         var terminationError: XmaxError? = null
     }
 
     /**
-     * 在途生成/切流的所有权和意图，完成后释放；已生效条件仍由 GenerationManager 缓存。
+     * Owns a pending generation or replacement request until completion; GenerationManager retains committed
+     * conditions.
      */
     internal class GenerationRequest(
         /**
-         * 需要等待或取消的协程任务。
+         * The coroutine task to await or cancel.
          */
         val job: Job,
 
         /**
-         * 生成提示词及参考素材；null 表示复用已缓存条件，首次生成时必须提供。
+         * Generation prompts and reference media; null reuses cached conditions after the initial request.
          */
         var context: RealtimeContext?,
 
         /**
-         * 是否启用人脸修复，对应生成参数 `face_replace`。
+         * Whether face restoration is enabled through `face_replace`.
          */
         var faceRestoration: Boolean?,
 
         /**
-         * 替换输入后是否恢复生成。
+         * Whether to resume generation after replacing input.
          */
         val resumeGeneration: Boolean,
     ) {
 
         /**
-         * 生成请求完成状态及失败结果。
+         * The completion and failure result for this generation request.
          */
         val finished = CompletableDeferred<Unit>()
 
         /**
-         * 本次生成请求的失败原因。
+         * The failure associated with this generation request.
          */
         @Volatile
         var error: XmaxError? = null
     }
 
     /**
-     * 合并后的清理目标和首个故障；清理过程中收到更大目标时继续执行下一轮。
+     * The merged cleanup target and first failure; cleanup repeats if a broader scope arrives.
      */
     private class Termination(
         /**
-         * 需要终止的资源范围。
+         * The resources to terminate.
          */
-        var target: TerminationScope
+        var target: TerminationScope,
     ) {
 
         /**
-         * 资源终止任务及最终状态原因。
+         * The resource termination task.
          */
         lateinit var task: Deferred<Unit>
 
         /**
-         * 终止流程需要向接入方报告的错误。
+         * The error termination must report to your app.
          */
         var error: XmaxError? = null
 
         /**
-         * 连接结束的原因。
+         * The reason the connection ended.
          */
         var reason: RealtimeReason = RealtimeReason.Normal
     }

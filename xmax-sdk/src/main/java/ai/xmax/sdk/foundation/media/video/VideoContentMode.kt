@@ -11,22 +11,22 @@
 package ai.xmax.sdk
 
 /**
- * 视频内容在渲染容器中的显示模式。
+ * The video's scaling mode within its rendering container.
  */
 public enum class VideoContentMode(
     /**
-     * 需要规范化、校验或显示的文本。
+     * The string representation used for configuration or display.
      */
-    public val value: String
+    public val value: String,
 ) {
 
     /**
-     * 保持视频比例完整显示，容器剩余区域留空。
+     * Fits the complete video while preserving aspect ratio, leaving unused container space empty.
      */
     FIT("fit"),
 
     /**
-     * 保持视频比例填满容器，超出区域裁切。
+     * Fills the container while preserving aspect ratio and cropping overflow.
      */
     FILL("fill"),
 }

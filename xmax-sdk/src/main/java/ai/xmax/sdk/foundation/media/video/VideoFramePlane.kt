@@ -13,23 +13,23 @@ package ai.xmax.sdk
 import java.nio.ByteBuffer
 
 /**
- * 表示视频帧中的一个像素数据平面。
- * 构造时校验数据范围与行步长；无效配置会抛出 [XmaxError]。
+ * A plane of video pixel data.
+ * Construction validates byte ranges and row stride, throwing [XmaxError] for invalid configuration.
  *
- * @param data 包含该平面有效字节范围的像素数据。
- * @param byteLength 有效数据字节数；null 表示使用偏移后的剩余数据。
- * @param copyData 是否复制像素数据，使帧不依赖调用方缓冲的后续修改；默认值为 `true`。
+ * @param data The bytes containing this plane's valid range.
+ * @param byteLength The valid byte count, or null to use the remaining bytes after the offset.
+ * @param copyData Whether to isolate pixels from later input mutations by copying them; defaults to true.
  */
 internal class VideoFramePlane(
     data: ByteArray,
 
     /**
-     * 相邻像素行起点之间的字节距离。
+     * The byte distance between consecutive row starts.
      */
     val stride: Int,
 
     /**
-     * 有效数据的起始字节偏移；默认值为 `0`。
+     * The start offset of valid bytes; defaults to 0.
      */
     val byteOffset: Int = 0,
 
@@ -38,27 +38,31 @@ internal class VideoFramePlane(
 ) {
 
     /**
-     * 当前平面持有的底层像素数据。
+     * The underlying bytes owned by this plane.
      */
     private val bytes: ByteArray = if (copyData) data.copyOf() else data
 
     /**
-     * 像素平面数据的副本。
+     * A copy of the plane's pixels.
      */
     val data: ByteArray
         get() = bytes.copyOf()
 
     /**
-     * 当前平面有效数据的字节数。
+     * The valid byte count in this plane.
      */
     val byteLength: Int = byteLength ?: data.size - byteOffset
 
     /**
-     * 供原生转换器读取的直接内存缓冲区。
+     * The direct buffer used by the native converter.
      */
     private val directBytes: ByteBuffer by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         ByteBuffer.allocateDirect(this.byteLength).apply {
-            put(bytes, byteOffset, this@VideoFramePlane.byteLength)
+            put(
+                bytes,
+                byteOffset,
+                this@VideoFramePlane.byteLength,
+            )
             flip()
         }
     }
@@ -82,9 +86,9 @@ internal class VideoFramePlane(
     }
 
     /**
-     * 取得当前像素平面有效范围的字节缓冲区。
+     * Returns a buffer restricted to this plane's valid byte range.
      *
-     * @return 有效范围对应的字节缓冲区。
+     * @return A buffer covering the valid bytes.
      */
     internal fun byteBuffer(): ByteBuffer = directBytes.duplicate().apply {
         position(0)
@@ -92,9 +96,9 @@ internal class VideoFramePlane(
     }
 
     /**
-     * 复制缓冲区当前有效范围内的字节。
+     * Copies the buffer's current valid byte range.
      *
-     * @return 有效数据对应的字节数组。
+     * @return An array containing the valid bytes.
      */
     internal fun selectedBytes(): ByteArray = bytes.copyOfRange(
         fromIndex = byteOffset,
@@ -102,9 +106,9 @@ internal class VideoFramePlane(
     )
 
     /**
-     * 仅供同步只读的平台转换使用；调用方不得修改返回数组。
+     * Returns pixels for synchronous, read-only platform conversion; callers must not modify the array.
      *
-     * @return 有效数据对应的字节数组。
+     * @return An array containing the valid bytes.
      */
     internal fun selectedBytesView(): ByteArray = if (
         byteOffset == 0 && byteLength == bytes.size
@@ -115,13 +119,12 @@ internal class VideoFramePlane(
     }
 
     /**
-     * 比较对象的值是否相等。
+     * Compares objects by value.
      *
-     * @param other 用于比较或组合的另一个对象。
-     * @return 对象的内容相等时为 true，否则为 false。
+     * @param other The object to compare or combine.
      */
     override fun equals(
-        other: Any?
+        other: Any?,
     ): Boolean =
         this === other ||
             other is VideoFramePlane &&
@@ -131,9 +134,7 @@ internal class VideoFramePlane(
             bytes.contentEquals(other.bytes)
 
     /**
-     * 生成与值相等规则一致的哈希值。
-     *
-     * @return 与值相等规则一致的哈希值。
+     * Computes a hash consistent with value equality.
      */
     override fun hashCode(): Int {
         var result = bytes.contentHashCode()
@@ -144,14 +145,12 @@ internal class VideoFramePlane(
     }
 
     /**
-     * 像素平面范围错误的构造入口。
+     * The pixel range validation helpers.
      */
     private companion object {
 
         /**
-         * 创建用于报告像素平面字节范围无效的错误。
-         *
-         * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+         * Creates an error for an invalid pixel-plane byte range.
          */
         fun invalidRangeError(): XmaxError = XmaxError(
             code = XmaxErrorCode.INVALID_CONFIGURATION,

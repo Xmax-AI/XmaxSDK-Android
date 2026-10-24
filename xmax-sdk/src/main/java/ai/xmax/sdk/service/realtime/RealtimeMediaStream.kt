@@ -13,29 +13,29 @@ package ai.xmax.sdk
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * 用于本地预览或展示生成结果的媒体流。
+ * A media stream for local preview or generated output.
  */
 public class RealtimeMediaStream internal constructor(
     /**
-     * 当前媒体流的标识。
+     * The media stream identifier.
      */
     public val id: String,
 
     /**
-     * 媒体流包含的视频轨道。
+     * The stream's video track.
      */
     public val videoTrack: RealtimeVideoTrack?,
 )
 
 /**
- * 实时视频轨道及其动态元数据。
+ * A realtime video track with mutable metadata snapshots.
  *
- * @param videoFormat 轨道的初始视频规格；未知时不提供。
- * @param position 摄像头轨道的初始镜头位置。
+ * @param videoFormat The initial format, omitted when unknown.
+ * @param position The initial lens position of a camera track.
  */
 public class RealtimeVideoTrack internal constructor(
     /**
-     * 用于视频渲染与轨迹绑定的轨道标识。
+     * The identifier used for rendering and trajectory bindings.
      */
     public val id: String,
 
@@ -44,67 +44,72 @@ public class RealtimeVideoTrack internal constructor(
 ) {
 
     /**
-     * 轨道的当前视频规格与摄像头方向。
+     * The current format and camera position snapshot.
      */
-    private val metadata = AtomicReference(Metadata(videoFormat, position))
+    private val metadata = AtomicReference(
+        Metadata(
+            videoFormat,
+            position,
+        ),
+    )
 
     /**
-     * 轨道当前的媒体输入规格；传输档位调整不会改变该规格。
+     * The current media input format, unaffected by transmission quality changes.
      */
     public val videoFormat: RealtimeVideoFormat?
         get() = metadata.get().videoFormat
 
     /**
-     * 摄像头轨道当前使用的镜头位置。
+     * The camera lens position for this track.
      */
     public val position: CameraPosition?
         get() = metadata.get().position
 
     /**
-     * 更新轨道对外提供的视频规格快照。
+     * Updates the track's exposed format snapshot.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
     internal fun updateVideoFormat(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     ) {
         metadata.updateAndGet { it.copy(videoFormat = videoFormat) }
     }
 
     /**
-     * 更新轨道对外提供的摄像头方向。
+     * Updates the track's camera position.
      *
-     * @param position 需要使用的前置或后置摄像头。
+     * @param position The front or rear camera to use.
      */
     internal fun updatePosition(
-        position: CameraPosition
+        position: CameraPosition,
     ) {
         metadata.updateAndGet { it.copy(position = position) }
     }
 
     /**
-     * 保存轨道当前的视频规格和摄像头方向快照。
+     * An immutable snapshot of current video format and camera position.
      */
     private data class Metadata(
         /**
-         * 轨道当前的视频规格。
+         * The track's current video format.
          */
         val videoFormat: RealtimeVideoFormat?,
 
         /**
-         * 摄像头轨道当前的镜头位置。
+         * The camera lens position for this track.
          */
         val position: CameraPosition?,
     )
 }
 
 /**
- * 内部相机预览就绪通知；公共就绪语义通过 RealtimeConnectionState.READY 表达。
+ * Internal camera preview readiness; public readiness is represented by RealtimeConnectionState.READY.
  */
 internal fun interface RealtimeCameraPreviewReadyListener {
 
     /**
-     * 通知当前相机预览已可显示。
+     * Reports that the current camera preview can be displayed.
      */
     fun onCameraPreviewReady()
 }

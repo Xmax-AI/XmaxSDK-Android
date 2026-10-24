@@ -24,80 +24,83 @@ import ai.xmax.sdk.service.realtime.RealtimeSessionConnection
 import kotlinx.coroutines.Deferred
 
 /**
- * 定义传输层向 Core 暴露的统一能力。
+ * The transport capabilities exposed to Core.
  */
 internal interface StreamControlling {
 
     /**
-     * 接收自动调档使用的网络质量样本，不占用公共监听器。
+     * Receives internal adaptation samples without occupying the public network listener.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setAdaptiveQualityListener(
-        listener: ((RealtimeNetworkQuality) -> Unit)?
+        listener: ((RealtimeNetworkQuality) -> Unit)?,
     )
 
     /**
-     * 设置上行视频统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
+     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
+     * disconnection.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setUplinkVideoStatisticsListener(
-        listener: UplinkVideoStatisticsListener?
+        listener: UplinkVideoStatisticsListener?,
     )
 
     /**
-     * 设置下行结果流统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
+     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
+     * disconnection.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setDownlinkVideoStatisticsListener(
-        listener: DownlinkVideoStatisticsListener?
+        listener: DownlinkVideoStatisticsListener?,
     )
 
     /**
-     * 更新上行视频的尺寸、帧率和编码码率配置。
+     * Updates uplink dimensions, frame rate, and encoder bitrate.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
     fun setVideoEncoderConfig(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     )
 
     /**
-     * 设置 RTC 网络质量监听器；传 null 注销。
+     * Sets the RTC network quality listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setNetworkQualityListener(
-        listener: RealtimeNetworkQualityListener?
+        listener: RealtimeNetworkQualityListener?,
     )
 
     /**
-     * 设置 RTC 性能告警监听器；传 null 注销。
+     * Sets the RTC performance alarm listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setPerformanceAlarmListener(
-        listener: RealtimePerformanceAlarmListener?
+        listener: RealtimePerformanceAlarmListener?,
     )
 
     /**
-     * 设置当前结果流的音频播放音量，范围为 0 到 1，并保留供后续订阅使用。
+     * Sets result audio volume from 0 to 1 and retains it for future subscriptions.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     fun setRemoteAudioVolume(
-        volume: Float
+        volume: Float,
     )
 
     /**
-     * 加入 RTC 房间，按输入来源发布本地媒体并启用对应上行统计。
+     * Joins RTC, publishes media according to its source, and enables appropriate uplink statistics.
      *
-     * @param connection 服务端返回的 RTC 房间、用户、鉴权及结果流信息。
-     * @param includeLocalAudio 是否同时发布本地音频。
-     * @param publishLocalMedia 是否发布本地媒体；服务端直接读取网络视频时为 false；默认值为 `true`。
-     * @param ensureActive 检查当前操作是否仍可继续的函数，取消时应抛出异常。
+     * @param connection The server-provided RTC room, user, credentials, and result publisher.
+     * @param includeLocalAudio Whether to publish local audio alongside video.
+     * @param publishLocalMedia Whether to publish local media; false for server-read network video, true by
+     * default.
+     * @param ensureActive Checks operation validity and throws on cancellation.
      */
     suspend fun connect(
         connection: RealtimeSessionConnection,
@@ -107,38 +110,39 @@ internal interface StreamControlling {
     )
 
     /**
-     * 解除媒体发布、远端订阅和生成等待，并离开当前 RTC 房间。
+     * Clears local publication, remote subscriptions, and generation waits, then leaves the room.
      */
     suspend fun disconnect()
 
     /**
-     * 在生成需要输入帧时向 RTC 提交本地视频帧。
+     * Submits local video to RTC while generation requests input frames.
      *
-     * @param frame 待处理、显示或提交的视频帧。
+     * @param frame The video frame to process, display, or submit.
      */
     fun pushLocalVideoFrame(
-        frame: VideoFrame
+        frame: VideoFrame,
     )
 
     /**
-     * 在本地音频已发布时向 RTC 提交音频帧。
+     * Submits audio to RTC while local audio is published.
      *
-     * @param frame 待播放或提交的 PCM 音频帧。
+     * @param frame The PCM audio frame to play or submit.
      */
     fun pushLocalAudioFrame(
-        frame: AudioFrame
+        frame: AudioFrame,
     )
 
     /**
-     * 启动生成并等待结果流确认；回传规格缺省时沿用生成规格，上传码率字段不影响下行。
+     * Starts generation and waits for result confirmation; output dimensions default to the generation
+     * format, and uplink bitrate fields do not control downlink.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`；默认值为 `false`。
-     * @param targetVideoFormat 下行输出的视频规格。
-     * @param paddingContain 是否让服务端等比适配输入并在输出时移除补边；默认值为 `false`。
-     * @return 完成资源清理时结束的异步等待结果。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param context The generation prompt and reference media.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
+     * @param targetVideoFormat The downlink output format.
+     * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @return An awaitable result completed when cleanup finishes.
      */
     suspend fun beginGeneration(
         taskId: String,
@@ -150,11 +154,11 @@ internal interface StreamControlling {
     ): Deferred<Unit>
 
     /**
-     * 更新当前任务的回传尺寸与码率；下行码率按固定 24 fps 估算。
+     * Updates downlink dimensions and bitrate, estimating bitrate at a fixed 24 fps.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param targetVideoFormat 下行输出的视频规格。
-     * @param ensureActive 检查当前操作是否仍可继续的函数，取消时应抛出异常。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param targetVideoFormat The downlink output format.
+     * @param ensureActive Checks operation validity and throws on cancellation.
      */
     suspend fun updateDownlinkVideoResolution(
         taskId: String,
@@ -163,27 +167,27 @@ internal interface StreamControlling {
     )
 
     /**
-     * 启用网络视频完成回调，满足生成首帧和服务端完成条件后通知。
+     * Enables network video completion notification after both the server completion event and first frame.
      *
-     * @param onFinish 网络视频任务完成的通知；null 表示不接收完成通知。
+     * @param onFinish The completion callback for the network video task, or null to omit it.
      */
     fun activateNetworkVideoCompletion(
-        onFinish: (() -> Unit)?
+        onFinish: (() -> Unit)?,
     )
 
     /**
-     * 订阅当前结果流的音频并应用远端播放音量。
+     * Subscribes to result audio and applies remote playback volume.
      */
     fun activateRemoteAudio()
 
     /**
-     * 更新当前任务的生成条件，不重新创建服务端会话。
+     * Updates the current task's conditions without creating another server session.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`；默认值为 `false`。
-     * @param paddingContain 是否让服务端等比适配输入并在输出时移除补边；默认值为 `false`。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param context The generation prompt and reference media.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
+     * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
      */
     suspend fun updateGeneration(
         taskId: String,
@@ -194,22 +198,22 @@ internal interface StreamControlling {
     )
 
     /**
-     * 发送停止指定生成任务的信令。
+     * Sends a stop signal for the generation task.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
+     * @param taskId The identifier associating the generation request with its result stream.
      */
     suspend fun stopGeneration(
-        taskId: String
+        taskId: String,
     )
 
     /**
-     * 向服务端发送当前任务的媒体归一化坐标轨迹。
+     * Submits media-normalized trajectories for the current task.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param points 媒体归一化坐标中的轨迹点集合，范围为 [0, 1]。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param points Normalized media trajectory points from 0 to 1.
      */
     suspend fun sendTracks(
         taskId: String,
-        points: List<RealtimePoint>
+        points: List<RealtimePoint>,
     )
 }

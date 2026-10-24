@@ -11,22 +11,22 @@
 package ai.xmax.sdk
 
 /**
- * 相机采集使用的镜头方向。
+ * The camera lens position.
  */
 public enum class CameraPosition(
     /**
-     * 需要规范化、校验或显示的文本。
+     * The string representation used for configuration or display.
      */
-    public val value: String
+    public val value: String,
 ) {
 
     /**
-     * 前置摄像头。
+     * The front camera.
      */
     FRONT("front"),
 
     /**
-     * 后置摄像头。
+     * The rear camera.
      */
     BACK("back"),
 }

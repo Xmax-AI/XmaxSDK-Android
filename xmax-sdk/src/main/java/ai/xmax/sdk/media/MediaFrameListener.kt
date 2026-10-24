@@ -14,10 +14,10 @@ import ai.xmax.sdk.AudioFrame
 import ai.xmax.sdk.VideoFrame
 
 /**
- * 接收本地媒体输出的视频帧。
+ * Receives a video frame from local media.
  */
 internal typealias MediaVideoFrameListener = (VideoFrame) -> Unit
 /**
- * 接收本地媒体输出的 PCM 音频帧。
+ * Receives a PCM audio frame from local media.
  */
 internal typealias MediaAudioFrameListener = (AudioFrame) -> Unit

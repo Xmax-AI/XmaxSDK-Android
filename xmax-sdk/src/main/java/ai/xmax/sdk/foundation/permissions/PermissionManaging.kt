@@ -11,17 +11,17 @@
 package ai.xmax.sdk.foundation.permissions
 
 /**
- * 定义 SDK 所需平台权限的检查能力。
+ * The platform permission checks required by XmaxSDK.
  */
 internal interface PermissionManaging {
 
     /**
-     * 确认应用已取得相机权限，否则抛出相机权限错误。
+     * Checks camera permission and throws a camera permission error if missing.
      */
     suspend fun ensureCameraPermission()
 
     /**
-     * 确认应用已取得麦克风权限，否则抛出麦克风权限错误。
+     * Checks microphone permission and throws a microphone permission error if missing.
      */
     suspend fun ensureMicrophonePermission()
 }

@@ -13,20 +13,22 @@ package ai.xmax.sdk
 import java.io.File
 
 /**
- * 图片和视频的文件存储入口，挂起调用完成后返回传输结果，失败通过异常返回。
- * 取消调用会传递给底层传输；进度回调来自传输线程，更新 UI 时由接入方切换到主线程。
- * 下载先写临时文件，成功后替换目标文件；同一目标路径不允许并发下载写入。
+ * The image and video storage API; suspending calls return transfer results or throw failures.
+ * Cancellation propagates to the transfer. Progress arrives on the transfer thread; your app must dispatch UI
+ * updates to the main thread.
+ * Downloads write a temporary file before replacing the destination; concurrent writes to the same
+ * destination are rejected.
  */
 public interface XmaxStorageManaging {
 
     /**
-     * 上传图片字节；fileName 用于生成对象名称，contentType 必须为图片 MIME 类型。
+     * Uploads image bytes; fileName forms the object name, and contentType must identify an image.
      *
-     * @param data 编码后的图片文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded image file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadImage(
         data: ByteArray,
@@ -36,12 +38,12 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * 上传可读取的本地图片；contentType 为 null 时按文件扩展名推断。
+     * Uploads a readable image file, inferring its MIME type from the extension when contentType is null.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadImageFile(
         file: File,
@@ -50,12 +52,12 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * [uploadImageFile] 的本地路径重载，参数含义与 File 版本一致。
+     * The local-path overload of [uploadImageFile], with the same parameter meanings as the File overload.
      *
-     * @param filePath 可读取的本地文件路径。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param filePath A readable local file path.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadImageFile(
         filePath: String,
@@ -64,13 +66,13 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * 先上传图片字节，再执行服务端内容安全检查；检查通过后返回结果。
+     * Uploads image bytes and returns the result after the server content safety check passes.
      *
-     * @param data 编码后的图片文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded image file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadImageWithSafetyCheck(
         data: ByteArray,
@@ -80,12 +82,12 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * 上传本地图片并执行内容安全检查；未通过时抛出 UNSAFE_IMAGE。
+     * Uploads a local image and checks content safety; rejected images throw UNSAFE_IMAGE.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadImageFileWithSafetyCheck(
         file: File,
@@ -94,12 +96,12 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * [uploadImageFileWithSafetyCheck] 的本地路径重载。
+     * The local-path overload of [uploadImageFileWithSafetyCheck].
      *
-     * @param filePath 可读取的本地文件路径。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param filePath A readable local file path.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadImageFileWithSafetyCheck(
         filePath: String,
@@ -108,13 +110,13 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * 上传视频字节；fileName 用于生成对象名称，contentType 必须为视频 MIME 类型。
+     * Uploads video bytes; fileName forms the object name, and contentType must identify video.
      *
-     * @param data 编码后的视频文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded video file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadVideo(
         data: ByteArray,
@@ -124,12 +126,12 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * 上传可读取的本地视频；contentType 为 null 时按文件扩展名推断。
+     * Uploads a readable video file, inferring its MIME type from the extension when contentType is null.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadVideoFile(
         file: File,
@@ -138,12 +140,12 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * [uploadVideoFile] 的本地路径重载。
+     * The local-path overload of [uploadVideoFile].
      *
-     * @param filePath 可读取的本地文件路径。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param filePath A readable local file path.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     public suspend fun uploadVideoFile(
         filePath: String,
@@ -152,12 +154,12 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * 从 HTTP(S) 地址下载图片至指定文件，返回目标路径及实际字节数。
+     * Downloads an image from HTTP(S), returning the destination path and actual byte count.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地路径及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded local path and actual byte count.
      */
     public suspend fun downloadImage(
         remoteUrl: String,
@@ -166,12 +168,12 @@ public interface XmaxStorageManaging {
     ): XmaxDownloadedFile
 
     /**
-     * [downloadImage] 的目标路径重载。
+     * The destination-path overload of [downloadImage].
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destinationPath 下载成功后保存内容的目标文件路径。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地路径及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destinationPath The destination path replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded local path and actual byte count.
      */
     public suspend fun downloadImage(
         remoteUrl: String,
@@ -180,12 +182,12 @@ public interface XmaxStorageManaging {
     ): XmaxDownloadedFile
 
     /**
-     * 从 HTTP(S) 地址下载视频至指定文件，返回目标路径及实际字节数。
+     * Downloads a video from HTTP(S), returning the destination path and actual byte count.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地路径及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded local path and actual byte count.
      */
     public suspend fun downloadVideo(
         remoteUrl: String,
@@ -194,12 +196,12 @@ public interface XmaxStorageManaging {
     ): XmaxDownloadedFile
 
     /**
-     * [downloadVideo] 的目标路径重载。
+     * The destination-path overload of [downloadVideo].
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destinationPath 下载成功后保存内容的目标文件路径。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地路径及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destinationPath The destination path replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded local path and actual byte count.
      */
     public suspend fun downloadVideo(
         remoteUrl: String,

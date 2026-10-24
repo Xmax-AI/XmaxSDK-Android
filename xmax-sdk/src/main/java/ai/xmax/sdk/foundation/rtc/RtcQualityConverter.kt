@@ -17,18 +17,19 @@ import io.agora.rtc2.IRtcEngineEventHandler.LocalVideoStats
 import io.agora.rtc2.IRtcEngineEventHandler.RemoteVideoStats
 
 /**
- * 转换声网网络质量和视频统计；不可用指标不伪造为有效测量值。
+ * Converts Agora network quality and video statistics without substituting invented values for unavailable
+ * measurements.
  */
 internal object RtcQualityConverter {
 
     /**
-     * 将 RTC 本地视频统计转换为 SDK 上行指标。
+     * Converts local RTC video statistics to uplink metrics.
      *
-     * @param stats RTC 视频统计快照。
-     * @return 已转换为 SDK 单位和字段约定的上行统计。
+     * @param stats The RTC video statistics snapshot.
+     * @return Uplink statistics using SDK units and fields.
      */
     fun uplinkVideoStatistics(
-        stats: LocalVideoStats
+        stats: LocalVideoStats,
     ): UplinkVideoStatistics = UplinkVideoStatistics(
         width = stats.encodedFrameWidth.takeIf { it > 0 },
         height = stats.encodedFrameHeight.takeIf { it > 0 },
@@ -40,15 +41,15 @@ internal object RtcQualityConverter {
     )
 
     /**
-     * 将 RTC 远端视频统计转换为 SDK 下行指标。
+     * Converts remote RTC video statistics to downlink metrics.
      *
-     * @param userId 房间中的业务用户标识。
-     * @param stats RTC 视频统计快照。
-     * @return 已转换为 SDK 单位和字段约定的下行统计。
+     * @param userId The room's business user identifier.
+     * @param stats The RTC video statistics snapshot.
+     * @return Downlink statistics using SDK units and fields.
      */
     fun downlinkVideoStatistics(
         userId: String,
-        stats: RemoteVideoStats
+        stats: RemoteVideoStats,
     ): DownlinkVideoStatistics = DownlinkVideoStatistics(
         userId = userId,
         width = stats.width.takeIf { it > 0 },
@@ -61,13 +62,13 @@ internal object RtcQualityConverter {
     )
 
     /**
-     * 将 RTC 厂商的质量等级转换为 SDK 内部质量等级。
+     * Converts vendor network quality ratings to internal SDK levels.
      *
-     * @param quality RTC 厂商报告的网络质量等级。
-     * @return RTC 质量值对应的内部质量等级。
+     * @param quality The vendor's network quality rating.
+     * @return The corresponding internal network quality level.
      */
     fun convertLevel(
-        quality: Int
+        quality: Int,
     ): RtcQualityLevel = when (quality) {
         Constants.QUALITY_EXCELLENT -> RtcQualityLevel.EXCELLENT
         Constants.QUALITY_GOOD -> RtcQualityLevel.GOOD

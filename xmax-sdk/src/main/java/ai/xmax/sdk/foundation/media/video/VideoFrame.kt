@@ -13,36 +13,36 @@ package ai.xmax.sdk
 import java.util.UUID
 
 /**
- * 持有中性像素数据及时间信息的视频帧。
+ * A platform-neutral video frame with pixels and timing metadata.
  *
- * @param planes 按像素格式顺序排列的像素平面。
+ * @param planes The pixel planes in the format's required order.
  */
 internal class VideoFrame(
     /**
-     * 视频像素尺寸、排列格式及旋转信息。
+     * The video dimensions and pixel arrangement.
      */
     val format: VideoFormat,
 
     /**
-     * 帧的单调时间戳，单位为微秒。
+     * The monotonic frame timestamp, in microseconds.
      */
     val timestampUs: Long,
 
     planes: List<VideoFramePlane>,
 
     /**
-     * 应用到源画面的旋转方向；默认值为 `VideoRotation.ROTATION_0`。
+     * The rotation applied to the source image; defaults to `VideoRotation.ROTATION_0`.
      */
     val rotation: VideoRotation = VideoRotation.ROTATION_0,
 
     /**
-     * 用于识别可复用像素缓冲的标识；null 表示没有复用标识。
+     * The identifier of reusable pixel storage, or null without one.
      */
     val bufferReuseId: UUID? = null,
 ) {
 
     /**
-     * 视频或图片的尺寸与像素数据。
+     * The dimensions and pixels of an image or video.
      */
     val planes: List<VideoFramePlane> = planes.toList()
 
@@ -62,11 +62,11 @@ internal class VideoFrame(
     }
 
     /**
-     * 复用像素数据并更新逐帧变化的信息。
+     * Reuses pixel storage with updated per-frame metadata.
      *
-     * @param timestampUs 帧的单调时间戳，单位为微秒。
-     * @param rotation 应用到源画面的旋转方向；默认值为 `this.rotation`。
-     * @return 按目标像素格式、尺寸和方向生成的视频帧。
+     * @param timestampUs The monotonic frame timestamp, in microseconds.
+     * @param rotation The source rotation; defaults to `this.rotation`.
+     * @return A frame with the requested pixel format, dimensions, and orientation.
      */
     fun updating(
         timestampUs: Long,
@@ -80,13 +80,12 @@ internal class VideoFrame(
     )
 
     /**
-     * 比较对象的值是否相等。
+     * Compares objects by value.
      *
-     * @param other 用于比较或组合的另一个对象。
-     * @return 对象的内容相等时为 true，否则为 false。
+     * @param other The object to compare or combine.
      */
     override fun equals(
-        other: Any?
+        other: Any?,
     ): Boolean =
         this === other ||
             other is VideoFrame &&
@@ -97,9 +96,7 @@ internal class VideoFrame(
             bufferReuseId == other.bufferReuseId
 
     /**
-     * 生成与值相等规则一致的哈希值。
-     *
-     * @return 与值相等规则一致的哈希值。
+     * Computes a hash consistent with value equality.
      */
     override fun hashCode(): Int {
         var result = format.hashCode()

@@ -11,77 +11,81 @@
 package ai.xmax.sdk
 
 /**
- * 表示一次文件传输的进度。
+ * Progress for one file transfer.
  */
 public data class XmaxStorageProgress(
     /**
-     * 本次传输已完成的字节数。
+     * The number of bytes transferred.
      */
     public val completedBytes: Long,
 
     /**
-     * 总字节数；底层尚未获知总大小时可能为非正值。
+     * The total byte count; may be nonpositive before the transport knows the size.
      */
     public val totalBytes: Long,
 ) {
 
     /**
-     * 限制在 0 至 1 范围内的完成比例；总大小未知或为零时返回 0。
+     * The completion ratio clamped to 0 through 1; returns 0 for an unknown or zero total.
      */
     public val fractionCompleted: Float
         get() = if (totalBytes <= 0L) {
             0f
         } else {
-            (completedBytes.toDouble() / totalBytes.toDouble()).coerceIn(0.0, 1.0).toFloat()
+            (completedBytes.toDouble() / totalBytes.toDouble()).coerceIn(
+                0.0,
+                1.0,
+            ).toFloat()
         }
 }
 
 /**
- * 文件传输进度监听器；通知不保证在主线程执行，且不代表内容安全检查已通过。
+ * File transfer progress notifications, not guaranteed on the main thread and not confirmation of a
+ * successful content safety check.
  */
 public fun interface XmaxStorageProgressListener {
 
     /**
-     * 接收字节进度快照；最终成功结果以挂起调用的返回值为准。
+     * Receives byte progress; the suspending call's return value confirms final success.
      *
-     * @param progress 本次传输的已完成字节数和总字节数。
+     * @param progress The transferred and total byte counts.
      */
     public fun onProgress(
-        progress: XmaxStorageProgress
+        progress: XmaxStorageProgress,
     )
 }
 
 /**
- * 表示上传成功的文件。
+ * A successfully uploaded file.
  */
 public data class XmaxUploadedFile(
     /**
-     * 上传后的访问地址；安全检查版本可能返回服务端调整后的地址。
+     * The uploaded URL; content safety checks may return an adjusted server URL.
      */
     public val url: String,
 
     /**
-     * 远端存储对象的键。
+     * The remote object key.
      */
     public val objectKey: String,
 
     /**
-     * 存储服务返回的实体标签；未提供时为 null。
+     * The storage entity tag, or null if not provided.
      */
     public val etag: String? = null,
 )
 
 /**
- * 表示下载成功的文件。
+ * A successfully downloaded file.
  */
 public data class XmaxDownloadedFile(
     /**
-     * 下载目标的本地路径，与调用时指定的目标文件对应。
+     * The local destination path supplied to the download call.
      */
     public val filePath: String,
 
     /**
-     * 下载成功后实际写入的字节数。
+     * The actual number of bytes written successfully.
      */
     public val byteCount: Long,
 )

@@ -23,99 +23,100 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.coroutineContext
 
 /**
- * 有序发送房间信令，并在发送额度不足时仅保留同键轨迹的最新内容。
+ * Sends room signaling in order, retaining only the latest unsent trajectory for each key when the budget is
+ * exhausted.
  *
- * @param scope 房间生命周期内的发送协程作用域。
+ * @param scope The sending scope owned by the room lifecycle.
  */
 internal class RtcMessageQueue(
     scope: CoroutineScope,
 
     /**
-     * 将单个数据包提交给 RTC，失败时抛出异常。
+     * Submits one packet to RTC, throwing on failure.
      */
     private val send: (ByteArray) -> Unit,
 
     /**
-     * 通知房间信令发送故障。
+     * The callback reporting room signal send failures.
      */
     private val onFailure: (Throwable) -> Unit,
 
     /**
-     * 单调递增的毫秒时钟，用于计算发送窗口。
+     * The monotonic millisecond clock for send budget windows.
      */
     private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
 
     /**
-     * 保存同一条信令的完整分片、合并键和发送结果。
+     * One complete signal with its packet fragments, coalescing key, and result.
      */
     private class Message(
         /**
-         * 按顺序发送的数据包。
+         * The packets sent in order.
          */
         var packets: List<ByteArray>,
 
         /**
-         * 尚未发送时用于替换内容的合并键。
+         * The coalescing key used before sending starts.
          */
         val key: String?,
 
         /**
-         * 整条信令提交给 RTC 后完成的结果。
+         * The result completed after the entire signal is submitted to RTC.
          */
         val completion: CompletableDeferred<Unit> = CompletableDeferred(),
     )
 
     /**
-     * 队列状态、未发送内容与包含正在发送信令的结果集合。
+     * The lock protecting queued and in-flight signal results.
      */
     private val lock = Any()
 
     /**
-     * 尚未发送的房间信令。
+     * The unsent room signals.
      */
     private val pending = ArrayDeque<Message>()
 
     /**
-     * 等待发送结果的请求。
+     * The pending send results.
      */
     private val completions = mutableSetOf<CompletableDeferred<Unit>>()
 
     /**
-     * 队列是否已停止接受新消息。
+     * Whether the queue has stopped accepting messages.
      */
     private var closed = false
 
     /**
-     * 导致发送队列终止的错误。
+     * The failure that terminated the sending queue.
      */
     private var failure: Throwable? = null
 
     /**
-     * 消息编码、队列唤醒及单一发送协程。
+     * The signaling packet codec.
      */
     private val codec = RoomMessageCodec()
 
     /**
-     * 唤醒发送循环的合并通知通道。
+     * The conflated channel waking the sending loop.
      */
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
     /**
-     * 持续发送待处理信令的协程。
+     * The coroutine sending pending signals.
      */
     private val worker = scope.launch { drain() }
 
     /**
-     * 将信令加入有序队列；同键且尚未开始发送的内容被替换为最新值。
+     * Queues a signal in order, replacing unsent content with the latest value for the same key.
      *
-     * @param message 完整的房间信令。
-     * @param replacingPendingMessage 合并键；null 表示每条信令均须保留。
-     * @return 整条信令的发送结果，被合并的调用共享同一结果。
+     * @param message The complete room signal.
+     * @param replacingPendingMessage The coalescing key, or null to retain every signal.
+     * @return The complete signal's send result, shared by coalesced callers.
      */
     fun enqueue(
         message: String,
-        replacingPendingMessage: String? = null
+        replacingPendingMessage: String? = null,
     ): CompletableDeferred<Unit> {
         val packets = codec.encode(message).map { it.toByteArray(Charsets.UTF_8) }
         return synchronized(lock) {
@@ -128,10 +129,16 @@ internal class RtcMessageQueue(
             }
 
             if (completions.size >= 64) {
-                throw XmaxError(XmaxErrorCode.RTC_ERROR, "RTC room message queue is full")
+                throw XmaxError(
+                    XmaxErrorCode.RTC_ERROR,
+                    "RTC room message queue is full",
+                )
             }
 
-            val entry = Message(packets, replacingPendingMessage)
+            val entry = Message(
+                packets,
+                replacingPendingMessage,
+            )
             pending.addLast(entry)
             completions.add(entry.completion)
             wake.trySend(Unit)
@@ -140,12 +147,13 @@ internal class RtcMessageQueue(
     }
 
     /**
-     * 丢弃尚未开始发送的可合并信令，不中断已开始发送的分片或普通控制信令。
+     * Discards unsent coalescible signals without interrupting started fragments or ordinary control
+     * messages.
      *
-     * @param key 要清理的合并键；null 表示清理全部可合并信令。
+     * @param key The coalescing key to discard, or null for all coalescible signals.
      */
     fun discardPendingMessages(
-        key: String? = null
+        key: String? = null,
     ) {
         synchronized(lock) {
             val discarded = pending.filter { it.key != null && (key == null || it.key == key) }
@@ -159,7 +167,7 @@ internal class RtcMessageQueue(
     }
 
     /**
-     * 等待调用时已入队的信令提交完成；关闭队列或发送失败时抛出异常。
+     * Waits for signals queued at invocation to be submitted, throwing if the queue closes or sending fails.
      */
     suspend fun flush() {
         val snapshot = synchronized(lock) {
@@ -170,7 +178,7 @@ internal class RtcMessageQueue(
     }
 
     /**
-     * 关闭队列并取消所有尚未完成的发送结果。
+     * Closes the queue and cancels all incomplete send results.
      */
     fun close() {
         synchronized(lock) {
@@ -185,7 +193,7 @@ internal class RtcMessageQueue(
     }
 
     /**
-     * 队列不可用时抛出关闭或发送失败原因。
+     * Throws the closure or sending failure if the queue is unavailable.
      */
     private fun checkAvailable() {
         failure?.let { throw it }
@@ -193,7 +201,7 @@ internal class RtcMessageQueue(
     }
 
     /**
-     * 在额度可用后取出最新信令，完整发送其分片并记录实际发送量。
+     * Waits for budget, then sends the latest complete signal and records actual usage.
      */
     private suspend fun drain() {
         val sent = ArrayDeque<Pair<Long, Int>>()
@@ -205,7 +213,10 @@ internal class RtcMessageQueue(
                     checkAvailable()
                     val next = pending.firstOrNull()
                     if (next != null) {
-                        waitMillis = remainingWait(sent, next.packets.first().size)
+                        waitMillis = remainingWait(
+                            sent,
+                            next.packets.first().size,
+                        )
                     }
                     if (next != null && waitMillis == 0L) pending.removeFirst() else null
                 }
@@ -217,7 +228,10 @@ internal class RtcMessageQueue(
                 for (packet in entry.packets) {
                     while (true) {
                         coroutineContext.ensureActive()
-                        val remaining = remainingWait(sent, packet.size)
+                        val remaining = remainingWait(
+                            sent,
+                            packet.size,
+                        )
                         if (remaining == 0L) break
                         withTimeoutOrNull(remaining) { wake.receive() }
                     }
@@ -230,7 +244,9 @@ internal class RtcMessageQueue(
                     completions.remove(entry.completion)
                 }
             }
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             val report = synchronized(lock) {
                 val shouldReport = !closed && error !is CancellationException
                 failure = error
@@ -244,15 +260,15 @@ internal class RtcMessageQueue(
     }
 
     /**
-     * 计算当前数据包满足每秒 58 包、29,000 字节额度所需的等待时间。
+     * Calculates the wait required by the 58-packet and 29,000-byte per-second budgets.
      *
-     * @param sent 当前窗口中已提交的数据包时间及字节数。
-     * @param byteCount 待发送数据包的字节数。
-     * @return 需等待的毫秒数；0 表示可立即发送。
+     * @param sent Packet timestamps and byte counts submitted in the current window.
+     * @param byteCount The pending packet size in bytes.
+     * @return The required wait in milliseconds, or 0 if sending can proceed.
      */
     private fun remainingWait(
         sent: ArrayDeque<Pair<Long, Int>>,
-        byteCount: Int
+        byteCount: Int,
     ): Long {
         val now = nowMillis()
         while (sent.isNotEmpty() && now - sent.first().first >= 1_000) sent.removeFirst()

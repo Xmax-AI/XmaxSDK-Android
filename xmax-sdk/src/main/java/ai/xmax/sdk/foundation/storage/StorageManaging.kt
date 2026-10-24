@@ -13,19 +13,19 @@ package ai.xmax.sdk.foundation.storage
 import java.io.File
 
 /**
- * 定义基础文件上传和下载能力。
+ * The basic file upload and download capabilities.
  */
 internal interface StorageManaging {
 
     /**
-     * 上传文件或字节至指定存储对象，并返回可访问的对象信息。
+     * Uploads a file or bytes to an object key and returns accessible object metadata.
      *
-     * @param source 待上传的本地文件或字节数据。
-     * @param objectKey 对象在存储桶内的完整键名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param configuration 对象存储端点、地域、存储桶及临时凭据。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param source The local file or bytes to upload.
+     * @param objectKey The complete object key within the bucket.
+     * @param contentType The media MIME type.
+     * @param configuration The storage endpoint, region, bucket, and temporary credentials.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     suspend fun upload(
         source: StorageSource,
@@ -36,12 +36,12 @@ internal interface StorageManaging {
     ): StoredFile
 
     /**
-     * 下载远端文件；成功后替换目标文件，失败时保留已有目标内容。
+     * Downloads a file, replacing the destination only on success and retaining existing contents on failure.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地文件及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded file and actual byte count.
      */
     suspend fun download(
         remoteUrl: String,

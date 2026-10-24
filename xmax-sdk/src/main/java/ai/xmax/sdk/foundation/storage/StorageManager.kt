@@ -45,28 +45,28 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * 封装腾讯云 COS 上传和 HTTP 文件下载能力。
+ * The Tencent COS upload and HTTP download transport.
  *
- * @param context 访问 Android 系统服务或媒体资源所需的上下文。
+ * @param context The Android context used for system services and media resources.
  */
 internal class StorageManager(
-    context: Context
+    context: Context,
 ) : StorageManaging {
 
     /**
-     * Android 媒体或文件访问环境。
+     * The Android context for media and file access.
      */
     private val applicationContext = context.applicationContext
 
     /**
-     * 上传文件或字节至指定存储对象，并返回可访问的对象信息。
+     * Uploads a file or bytes to an object key and returns accessible object metadata.
      *
-     * @param source 待上传的本地文件或字节数据。
-     * @param objectKey 对象在存储桶内的完整键名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param configuration 对象存储端点、地域、存储桶及临时凭据。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param source The local file or bytes to upload.
+     * @param objectKey The complete object key within the bucket.
+     * @param contentType The media MIME type.
+     * @param configuration The storage endpoint, region, bucket, and temporary credentials.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun upload(
         source: StorageSource,
@@ -79,21 +79,35 @@ internal class StorageManager(
         val completed = AtomicBoolean(false)
         try {
             val serviceConfig = makeServiceConfiguration(configuration)
-            val service = CosXmlSimpleService(applicationContext, serviceConfig)
-            // 使用临时凭据允许的 PutObject 上传方式，不要求额外的分片上传权限。
+            val service = CosXmlSimpleService(
+                applicationContext,
+                serviceConfig,
+            )
+            // Use PutObject with the temporary credentials, without requiring extra multipart-upload permissions.
             val transferConfig = TransferConfig.Builder()
                 .setForceSimpleUpload(source is StorageSource.LocalFile)
                 .build()
-            val manager = TransferManager(service, transferConfig)
+            val manager = TransferManager(
+                service,
+                transferConfig,
+            )
             val request = when (source) {
                 is StorageSource.LocalFile -> PutObjectRequest(
                     configuration.bucket,
                     objectKey,
                     source.file.absolutePath,
                 )
-                is StorageSource.Bytes -> PutObjectRequest(configuration.bucket, objectKey, source.data)
+                is StorageSource.Bytes -> PutObjectRequest(
+                    configuration.bucket,
+                    objectKey,
+                    source.data,
+                )
             }
-            request.setRequestHeaders("Content-Type", contentType, false)
+            request.setRequestHeaders(
+                "Content-Type",
+                contentType,
+                false,
+            )
             val nowSeconds = System.currentTimeMillis() / 1000L
             request.setCredential(
                 SessionQCloudCredentials(
@@ -104,27 +118,40 @@ internal class StorageManager(
                     nowSeconds + 25L * 60L,
                 ),
             )
-            val task = manager.upload(request, null)
+            val task = manager.upload(
+                request,
+                null,
+            )
             task.setCosXmlProgressListener { completed, total ->
-                if (continuation.isActive) runCatching { progress?.onProgress(completed, total) }
+                if (continuation.isActive) runCatching { progress?.onProgress(
+                    completed,
+                    total,
+                ) }
             }
             task.setCosXmlResultListener(
                 object : CosXmlResultListener {
 
                     /**
-                     * 完成存储传输的成功结果回调。
+                     * Completes a successful storage transfer.
                      *
-                     * @param request 本次对象存储请求。
-                     * @param result 存储服务返回的传输结果。
+                     * @param request The current object storage request.
+                     * @param result The storage service's transfer result.
                      */
                     override fun onSuccess(
                         request: CosXmlRequest,
-                        result: CosXmlResult
+                        result: CosXmlResult,
                     ) {
-                        if (!continuation.isActive || !completed.compareAndSet(false, true)) return
+                        if (!continuation.isActive || !completed.compareAndSet(
+                            false,
+                            true,
+                        )) return
                         try {
                             val uploadResult = result as? COSXMLUploadTask.COSXMLUploadTaskResult
-                            val url = resolveUrl(result.accessUrl, configuration, objectKey)
+                            val url = resolveUrl(
+                                result.accessUrl,
+                                configuration,
+                                objectKey,
+                            )
                             continuation.resume(
                                 StoredFile(
                                     url = url,
@@ -132,24 +159,29 @@ internal class StorageManager(
                                     etag = uploadResult?.eTag?.trim()?.takeIf { it.isNotEmpty() },
                                 ),
                             )
-                        } catch (error: Throwable) {
+                        } catch (
+                            error: Throwable,
+                        ) {
                             if (continuation.isActive) continuation.resumeWithException(XmaxError.from(error))
                         }
                     }
 
                     /**
-                     * 将存储传输失败转换为挂起调用的异常结果。
+                     * Completes a failed storage transfer with an exception.
                      *
-                     * @param request 本次对象存储请求。
-                     * @param clientException 存储客户端发生的错误；null 表示无客户端错误。
-                     * @param serviceException 存储服务端返回的错误；null 表示无服务端错误。
+                     * @param request The current object storage request.
+                     * @param clientException The client failure, or null without one.
+                     * @param serviceException The server failure, or null without one.
                      */
                     override fun onFail(
                         request: CosXmlRequest,
                         clientException: CosXmlClientException?,
                         serviceException: CosXmlServiceException?,
                     ) {
-                        if (!continuation.isActive || !completed.compareAndSet(false, true)) return
+                        if (!continuation.isActive || !completed.compareAndSet(
+                            false,
+                            true,
+                        )) return
                         val cause = serviceException ?: clientException
                         continuation.resumeWithException(
                             XmaxError(
@@ -163,8 +195,13 @@ internal class StorageManager(
                 },
             )
             continuation.invokeOnCancellation { completed.set(true); runCatching { task.cancel(true) } }
-        } catch (error: Throwable) {
-            if (continuation.isActive && completed.compareAndSet(false, true)) {
+        } catch (
+            error: Throwable,
+        ) {
+            if (continuation.isActive && completed.compareAndSet(
+                false,
+                true,
+            )) {
                 continuation.resumeWithException(
                     if (error is XmaxError) error else XmaxError(
                         XmaxErrorCode.UPLOAD_ERROR,
@@ -177,27 +214,31 @@ internal class StorageManager(
     }
 
     /**
-     * 下载远端文件；成功后替换目标文件，失败时保留已有目标内容。
+     * Downloads a file, replacing the destination only on success and retaining existing contents on failure.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地文件及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded file and actual byte count.
      */
     override suspend fun download(
         remoteUrl: String,
         destination: File,
         progress: StorageProgressListener?,
-    ): DownloadedFile = downloadFile(remoteUrl, destination, progress)
+    ): DownloadedFile = downloadFile(
+        remoteUrl,
+        destination,
+        progress,
+    )
 
     /**
-     * 创建指定地域、端点及存储桶对应的 COS 客户端配置。
+     * Builds the COS configuration for a region, endpoint, and bucket.
      *
-     * @param configuration 对象存储端点、地域、存储桶及临时凭据。
-     * @return 用于创建 COS 客户端的地域和端点配置。
+     * @param configuration The storage endpoint, region, bucket, and temporary credentials.
+     * @return The region and endpoint configuration for a COS client.
      */
     private fun makeServiceConfiguration(
-        configuration: StorageConfiguration
+        configuration: StorageConfiguration,
     ): CosXmlServiceConfig {
         val builder = CosXmlServiceConfig.Builder()
             .setRegion(configuration.region)
@@ -209,8 +250,16 @@ internal class StorageManager(
         if (endpoint.isNotEmpty()) {
             val normalized = if (endpoint.contains("://")) endpoint else "https://$endpoint"
             val uri = URI(normalized)
-            val host = uri.host ?: throw XmaxError(XmaxErrorCode.API_ERROR, "Invalid storage endpoint")
-            builder.isHttps(!uri.scheme.equals("http", true))
+            val host = uri.host ?: throw XmaxError(
+                XmaxErrorCode.API_ERROR,
+                "Invalid storage endpoint",
+            )
+            builder.isHttps(
+                !uri.scheme.equals(
+                    "http",
+                    true,
+                ),
+            )
             if (host.startsWith("cos.")) {
                 builder.setHostFormat("\${bucket}.$host")
             } else {
@@ -221,17 +270,17 @@ internal class StorageManager(
     }
 
     /**
-     * 取得服务返回的资源地址，缺失时根据存储配置和对象键生成。
+     * Uses the returned resource URL, deriving one from the storage configuration and object key if absent.
      *
-     * @param candidate 服务返回的候选资源地址。
-     * @param configuration 对象存储端点、地域、存储桶及临时凭据。
-     * @param objectKey 对象在存储桶内的完整键名。
-     * @return 解析后的资源或请求地址。
+     * @param candidate The resource URL returned by the service.
+     * @param configuration The storage endpoint, region, bucket, and temporary credentials.
+     * @param objectKey The complete object key within the bucket.
+     * @return The resolved resource or request URL.
      */
     private fun resolveUrl(
         candidate: String?,
         configuration: StorageConfiguration,
-        objectKey: String
+        objectKey: String,
     ): String {
         val value = candidate?.trim().orEmpty()
         if (value.startsWith("//")) return "https:$value"
@@ -250,20 +299,27 @@ internal class StorageManager(
                 (if (uri.port >= 0) ":${uri.port}" else "")
         }
         val encodedKey = objectKey.split('/').joinToString("/") { part ->
-            URLEncoder.encode(part, Charsets.UTF_8.name()).replace("+", "%20")
+            URLEncoder.encode(
+                part,
+                Charsets.UTF_8.name(),
+            ).replace(
+                "+",
+                "%20",
+            )
         }
         return "$endpoint/$encodedKey"
     }
 }
 
 /**
- * 将下载内容落入同目录临时文件，并只在完整成功后原子替换目标文件。
+ * Downloads to a temporary file in the destination directory, replacing the destination atomically only after
+ * completion.
  *
- * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
- * @param destination 下载成功后保存内容的目标文件。
- * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
- * @param connectionFactory 按 URL 创建 HTTP 连接的函数。
- * @return 下载后的本地文件及实际字节数。
+ * @param remoteUrl The HTTP or HTTPS URL to download.
+ * @param destination The destination file replaced after a successful download.
+ * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+ * @param connectionFactory Creates an HTTP connection for a URL.
+ * @return The downloaded file and actual byte count.
  */
 internal suspend fun downloadFile(
     remoteUrl: String,
@@ -286,11 +342,18 @@ internal suspend fun downloadFile(
     }
 
     val destinationKey = resolvedDestination.canonicalPath
-    if (activeDownloads.putIfAbsent(destinationKey, Unit) != null) throw XmaxError(
-        XmaxErrorCode.INVALID_CONFIGURATION, "Another download is writing to this destination",
+    if (activeDownloads.putIfAbsent(
+        destinationKey,
+        Unit,
+    ) != null) throw XmaxError(
+        XmaxErrorCode.INVALID_CONFIGURATION,
+        "Another download is writing to this destination",
     )
     try {
-        withCancellableConnection(URL(remoteUrl), factory = connectionFactory) { connection, ensureActive ->
+        withCancellableConnection(
+            URL(remoteUrl),
+            factory = connectionFactory,
+        ) { connection, ensureActive ->
             var temporaryFile: File? = null
             try {
                 connection.connectTimeout = 15_000
@@ -319,9 +382,16 @@ internal suspend fun downloadFile(
                             ensureActive()
                             val count = input.read(buffer)
                             if (count < 0) break
-                            output.write(buffer, 0, count)
+                            output.write(
+                                buffer,
+                                0,
+                                count,
+                            )
                             completed += count
-                            runCatching { progress?.onProgress(completed, total) }
+                            runCatching { progress?.onProgress(
+                                completed,
+                                total,
+                            ) }
                         }
                     }
                 }
@@ -334,15 +404,30 @@ internal suspend fun downloadFile(
                 }
 
                 ensureActive()
-                replaceAtomically(stagingFile, resolvedDestination)
+                replaceAtomically(
+                    stagingFile,
+                    resolvedDestination,
+                )
                 temporaryFile = null
-                runCatching { progress?.onProgress(completed, completed) }
-                DownloadedFile(destination, completed)
-            } catch (error: CancellationException) {
+                runCatching { progress?.onProgress(
+                    completed,
+                    completed,
+                ) }
+                DownloadedFile(
+                    destination,
+                    completed,
+                )
+            } catch (
+                error: CancellationException,
+            ) {
                 throw error
-            } catch (error: XmaxError) {
+            } catch (
+                error: XmaxError,
+            ) {
                 throw error
-            } catch (error: Throwable) {
+            } catch (
+                error: Throwable,
+            ) {
                 ensureActive()
                 throw XmaxError(
                     XmaxErrorCode.DOWNLOAD_ERROR,
@@ -357,19 +442,19 @@ internal suspend fun downloadFile(
 }
 
 /**
- * 正在写入的下载目标，防止并发下载覆盖同一文件。
+ * The destinations currently being written, preventing concurrent replacement of the same file.
  */
 private val activeDownloads = ConcurrentHashMap<String, Unit>()
 
 /**
- * 以完整下载的文件替换目标文件，替换失败时保留错误信息。
+ * Replaces the destination with a completed download, preserving replacement failures.
  *
- * @param source 准备替换目标文件的完整下载文件。
- * @param destination 下载成功后保存内容的目标文件。
+ * @param source The complete download that will replace the destination.
+ * @param destination The destination file replaced after a successful download.
  */
 private fun replaceAtomically(
     source: File,
-    destination: File
+    destination: File,
 ) {
     try {
         Files.move(
@@ -378,7 +463,9 @@ private fun replaceAtomically(
             StandardCopyOption.ATOMIC_MOVE,
             StandardCopyOption.REPLACE_EXISTING,
         )
-    } catch (error: AtomicMoveNotSupportedException) {
+    } catch (
+        error: AtomicMoveNotSupportedException,
+    ) {
         throw XmaxError(
             XmaxErrorCode.DOWNLOAD_ERROR,
             "Download destination does not support atomic replacement",

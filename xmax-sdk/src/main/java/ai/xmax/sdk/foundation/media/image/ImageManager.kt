@@ -19,55 +19,69 @@ import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayInputStream
 
 /**
- * 使用 Android BitmapFactory 提供 SDK 内部图片解码能力。
+ * Decodes images using Android BitmapFactory.
  */
 internal class ImageManager : ImageManaging {
 
     /**
-     * 解码图片文件字节并校正 EXIF 方向。
+     * Decodes image bytes and normalizes EXIF orientation.
      *
-     * @param data 待读取、传输或持有的二进制数据。
-     * @return 已解码并校正方向的图片数据。
+     * @param data The binary data to read, transfer, or retain.
+     * @return The decoded image with normalized orientation.
      */
     override fun decode(
-        data: ByteArray
+        data: ByteArray,
     ): DecodedImage {
         if (data.isEmpty()) throw processingError("Image source data must not be empty")
-        val decoded = BitmapFactory.decodeByteArray(data, 0, data.size)
+        val decoded = BitmapFactory.decodeByteArray(
+            data,
+            0,
+            data.size,
+        )
             ?: throw processingError("Failed to decode image")
         return try {
-            BitmapDecodedImage(applyOrientation(decoded, readOrientation(data)))
-        } catch (error: Throwable) {
+            BitmapDecodedImage(
+                applyOrientation(
+                    decoded,
+                    readOrientation(data),
+                ),
+            )
+        } catch (
+            error: Throwable,
+        ) {
             if (!decoded.isRecycled) decoded.recycle()
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * 将 Bitmap 转换为可用于生成视频帧的图片数据。
+     * Converts a Bitmap into an image that can supply video frames.
      *
-     * @param bitmap 待处理或显示的 Android 图片。
-     * @return 已解码并校正方向的图片数据。
+     * @param bitmap The Android image to process or display.
+     * @return The decoded image with normalized orientation.
      */
     override fun decode(
-        bitmap: Bitmap
+        bitmap: Bitmap,
     ): DecodedImage {
         if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) {
             throw processingError("Bitmap image is unavailable")
         }
-        val copy = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val copy = bitmap.copy(
+            Bitmap.Config.ARGB_8888,
+            false,
+        )
             ?: throw processingError("Failed to copy bitmap image")
         return BitmapDecodedImage(copy)
     }
 
     /**
-     * 读取图片的 EXIF 方向，用于恢复正确的显示方向。
+     * Reads EXIF orientation for correct image presentation.
      *
-     * @param data 待读取、传输或持有的二进制数据。
-     * @return EXIF 方向值；无法读取时使用默认方向。
+     * @param data The binary data to read, transfer, or retain.
+     * @return The EXIF orientation, or the default when unavailable.
      */
     private fun readOrientation(
-        data: ByteArray
+        data: ByteArray,
     ): Int = runCatching {
         ExifInterface(ByteArrayInputStream(data)).getAttributeInt(
             ExifInterface.TAG_ORIENTATION,
@@ -76,29 +90,41 @@ internal class ImageManager : ImageManaging {
     }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
 
     /**
-     * 按 EXIF 方向旋转或翻转图片。
+     * Rotates or flips an image according to EXIF orientation.
      *
-     * @param bitmap 待处理或显示的 Android 图片。
-     * @param orientation 图片 EXIF 方向值。
-     * @return 用于本地显示的图片。
+     * @param bitmap The Android image to process or display.
+     * @param orientation The image's EXIF orientation.
+     * @return An image for local display.
      */
     private fun applyOrientation(
         bitmap: Bitmap,
-        orientation: Int
+        orientation: Int,
     ): Bitmap {
         val matrix = Matrix()
         when (orientation) {
-            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.setScale(
+                -1f,
+                1f,
+            )
             ExifInterface.ORIENTATION_ROTATE_180 -> matrix.setRotate(180f)
-            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.setScale(1f, -1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.setScale(
+                1f,
+                -1f,
+            )
             ExifInterface.ORIENTATION_TRANSPOSE -> {
                 matrix.setRotate(90f)
-                matrix.postScale(-1f, 1f)
+                matrix.postScale(
+                    -1f,
+                    1f,
+                )
             }
             ExifInterface.ORIENTATION_ROTATE_90 -> matrix.setRotate(90f)
             ExifInterface.ORIENTATION_TRANSVERSE -> {
                 matrix.setRotate(-90f)
-                matrix.postScale(-1f, 1f)
+                matrix.postScale(
+                    -1f,
+                    1f,
+                )
             }
             ExifInterface.ORIENTATION_ROTATE_270 -> matrix.setRotate(-90f)
             else -> return ensureArgb8888(bitmap)
@@ -117,29 +143,34 @@ internal class ImageManager : ImageManaging {
     }
 
     /**
-     * 取得可按 ARGB_8888 像素格式读取的图片。
+     * Returns an image readable as ARGB_8888 pixels.
      *
-     * @param bitmap 待处理或显示的 Android 图片。
-     * @return 用于本地显示的图片。
+     * @param bitmap The Android image to process or display.
+     * @return An image for local display.
      */
     private fun ensureArgb8888(
-        bitmap: Bitmap
+        bitmap: Bitmap,
     ): Bitmap {
         if (bitmap.config == Bitmap.Config.ARGB_8888) return bitmap
-        val copy = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val copy = bitmap.copy(
+            Bitmap.Config.ARGB_8888,
+            false,
+        )
             ?: throw processingError("Failed to normalize image pixels")
         if (!bitmap.isRecycled) bitmap.recycle()
         return copy
     }
 
     /**
-     * 创建用于报告图像处理失败的媒体错误。
+     * Creates an image processing error.
      *
-     * @param message 待发送或记录的消息文本。
-     * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+     * @param message The message to send or log.
      */
     private fun processingError(
-        message: String
+        message: String,
     ): XmaxError =
-        XmaxError(XmaxErrorCode.MEDIA_ERROR, message)
+        XmaxError(
+            XmaxErrorCode.MEDIA_ERROR,
+            message,
+        )
 }

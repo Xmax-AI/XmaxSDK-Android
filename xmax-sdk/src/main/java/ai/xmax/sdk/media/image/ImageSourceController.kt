@@ -37,76 +37,76 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 将本地图片处理为目标尺寸，并按固定帧率持续输出视频帧。
+ * Processes a local image to the target format and repeatedly outputs frames at a fixed rate.
  */
 internal class ImageSourceController(
     /**
-     * 负责图片解码和方向处理的组件。
+     * The image decoder and orientation normalizer.
      */
     private val imageManager: ImageManaging,
 
     /**
-     * 解析媒体尺寸及模型输入规则的服务。
+     * The service resolving media dimensions and model constraints.
      */
     private val mediaService: MediaServicing,
 
     /**
-     * 接收本地视频帧的监听器。
+     * The local video frame listener.
      */
     private val frameListener: MediaVideoFrameListener,
 
     /**
-     * 接收媒体错误的回调。
+     * The media failure callback.
      */
     private val errorListener: (XmaxError) -> Unit,
 
     /**
-     * 从有读取权限的 URI 加载字节的函数。
+     * The function loading bytes from a readable URI.
      */
     private val uriDataLoader: suspend (Uri) -> ByteArray,
 
     /**
-     * 提供单调时钟微秒时间戳的函数。
+     * The monotonic clock returning microseconds.
      */
     private val timestampUsProvider: () -> Long = {
         (SystemClock.elapsedRealtimeNanos() / 1_000L).coerceAtLeast(0L)
     },
 
     /**
-     * 持续输出媒体帧的协程作用域。
+     * The scope continuously supplying media frames.
      */
     private val outputScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : ImageSourceControlling {
 
     /**
-     * 图片输入状态的并发保护。
+     * The lock protecting prepared image input.
      */
     private val stateLock = Any()
 
     /**
-     * 已准备图片及持续供帧任务。
+     * The prepared image frame.
      */
     private var preparedSource: Pair<RealtimeVideoFormat, VideoFrame>? = null
 
     /**
-     * 定时输出图片视频帧的协程。
+     * The coroutine producing timed image frames.
      */
     private var outputJob: Job? = null
 
     /**
-     * 图片视频帧输出是否正在运行。
+     * Whether repeated image output is running.
      */
     private var isRunning = false
 
     /**
-     * 创建 ImageSourceController，并配置其依赖和运行参数。
+     * Creates an image source controller.
      *
-     * @param context 访问 Android 系统服务或媒体资源所需的上下文。
-     * @param imageManager 负责图片解码和方向处理的组件。
-     * @param mediaService 解析媒体尺寸及模型输入规则的服务。
-     * @param frameListener 接收本地视频帧的监听器。
-     * @param errorListener 接收媒体错误的回调。
-     * @param outputScope 持续输出媒体帧的协程作用域。
+     * @param context The Android context used for system services and media resources.
+     * @param imageManager The image decoder and orientation normalizer.
+     * @param mediaService The service resolving dimensions and model input constraints.
+     * @param frameListener The local video frame listener.
+     * @param errorListener The media failure callback.
+     * @param outputScope The scope continuously supplying media frames.
      */
     constructor(
         context: Context,
@@ -120,15 +120,18 @@ internal class ImageSourceController(
         mediaService = mediaService,
         frameListener = frameListener,
         errorListener = errorListener,
-        uriDataLoader = { uri -> readUriBytes(context, uri) },
+        uriDataLoader = { uri -> readUriBytes(
+            context,
+            uri,
+        ) },
         outputScope = outputScope,
     )
 
     /**
-     * 解码图片并准备保持原始比例的图片输入规格和视频帧。
+     * Decodes an image and prepares its aspect-preserving input format and video frame.
      *
-     * @param imageData 可解码的图片文件字节，不是裸像素数据。
-     * @return 图片输入的视频规格及对应视频帧。
+     * @param imageData Encoded image file bytes, not raw pixels.
+     * @return The image input format and corresponding video frame.
      */
     override suspend fun prepare(
         imageData: ByteArray,
@@ -137,10 +140,10 @@ internal class ImageSourceController(
     }
 
     /**
-     * 解码图片并准备保持原始比例的图片输入规格和视频帧。
+     * Decodes an image and prepares its aspect-preserving input format and video frame.
      *
-     * @param bitmap 待处理或显示的 Android 图片。
-     * @return 图片输入的视频规格及对应视频帧。
+     * @param bitmap The Android image to process or display.
+     * @return The image input format and corresponding video frame.
      */
     override suspend fun prepare(
         bitmap: Bitmap,
@@ -149,20 +152,20 @@ internal class ImageSourceController(
     }
 
     /**
-     * 解码图片并准备保持原始比例的图片输入规格和视频帧。
+     * Decodes an image and prepares its aspect-preserving input format and video frame.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 图片输入的视频规格及对应视频帧。
+     * @param uri A media URI your app can read.
+     * @return The image input format and corresponding video frame.
      */
     override suspend fun prepare(
         uri: Uri,
     ): Pair<RealtimeVideoFormat, VideoFrame> = prepare(uriDataLoader(uri))
 
     /**
-     * 解码图片并准备保持原始比例的图片输入规格和视频帧。
+     * Decodes an image and prepares its aspect-preserving input format and video frame.
      *
-     * @param decodedImage 完成解码及方向校正的图片。
-     * @return 图片输入的视频规格及对应视频帧。
+     * @param decodedImage The decoded, orientation-normalized image.
+     * @return The image input format and corresponding video frame.
      */
     override suspend fun prepare(
         decodedImage: DecodedImage,
@@ -171,7 +174,7 @@ internal class ImageSourceController(
     }
 
     /**
-     * 开始按配置帧率重复输出当前图片帧。
+     * Starts repeating the prepared image at the configured frame rate.
      */
     override fun start() {
         val source = synchronized(stateLock) {
@@ -190,7 +193,9 @@ internal class ImageSourceController(
         }
         try {
             emitFrame(source.second)
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             synchronized(stateLock) { isRunning = false }
             throw XmaxError.from(error)
         }
@@ -204,7 +209,9 @@ internal class ImageSourceController(
                     preparedSource?.second
                 } ?: return@launch
                 try { emitFrame(frame) }
-                catch (error: Throwable) {
+                catch (
+                    error: Throwable,
+                ) {
                     currentCoroutineContext().ensureActive()
                     errorListener(XmaxError.from(error))
                     return@launch
@@ -217,7 +224,7 @@ internal class ImageSourceController(
     }
 
     /**
-     * 停止图片帧输出并清除已准备的输入资源。
+     * Stops image frame output and clears prepared input resources.
      */
     override suspend fun stop() {
         val job = synchronized(stateLock) {
@@ -229,10 +236,10 @@ internal class ImageSourceController(
     }
 
     /**
-     * 将已解码图片转换为输入规格及可重复提交的视频帧。
+     * Converts a decoded image to an input format and reusable frame.
      *
-     * @param decodedImage 完成解码及方向校正的图片。
-     * @return 图片输入的视频规格及对应视频帧。
+     * @param decodedImage The decoded, orientation-normalized image.
+     * @return The image input format and corresponding video frame.
      */
     private fun prepareDecoded(
         decodedImage: DecodedImage,
@@ -260,48 +267,58 @@ internal class ImageSourceController(
     }
 
     /**
-     * 根据方向校正后的图片尺寸计算保持媒体比例的输入规格。
+     * Resolves aspect-preserving input dimensions from the orientation-corrected image.
      *
-     * @param sourceSize 原始媒体的显示尺寸，单位为像素。
-     * @return 解析或计算后的视频尺寸、帧率和编码配置。
+     * @param sourceSize The original display dimensions, in pixels.
+     * @return The resolved video dimensions, frame rate, and encoding settings.
      */
     private fun resolveVideoFormat(
         sourceSize: IntSize,
     ): RealtimeVideoFormat {
         if (sourceSize.width < 2 || sourceSize.height < 2) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Image dimensions must be at least two pixels")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "Image dimensions must be at least two pixels",
+            )
         }
 
-        val resolvedMediaSize = mediaService.resolveMediaSize(sourceSize, RealtimeMediaSource.IMAGE)
-        return RealtimeVideoFormat(resolvedMediaSize.width, resolvedMediaSize.height, mediaService.model.defaultFrameRate)
+        val resolvedMediaSize = mediaService.resolveMediaSize(
+            sourceSize,
+            RealtimeMediaSource.IMAGE,
+        )
+        return RealtimeVideoFormat(
+            resolvedMediaSize.width,
+            resolvedMediaSize.height,
+            mediaService.model.defaultFrameRate,
+        )
     }
 
     /**
-     * 向媒体监听器提交当前图片的视频帧。
+     * Submits the current image frame to the media listener.
      *
-     * @param frame 待处理、显示或提交的视频帧。
+     * @param frame The video frame to process, display, or submit.
      */
     private fun emitFrame(
-        frame: VideoFrame
+        frame: VideoFrame,
     ) {
         frameListener(frame.updating(timestampUsProvider()))
     }
 
     /**
-     * 本地图片内容的读取入口。
+     * The local image content reader.
      */
     private companion object {
 
         /**
-         * 读取应用有权限访问的 URI 内容。
+         * Reads URI contents accessible to your app.
          *
-         * @param context 访问 Android 系统服务或媒体资源所需的上下文。
-         * @param uri 应用有读取权限的媒体地址。
-         * @return 有效数据对应的字节数组。
+         * @param context The Android context used for system services and media resources.
+         * @param uri A media URI your app can read.
+         * @return An array containing the valid bytes.
          */
         suspend fun readUriBytes(
             context: Context,
-            uri: Uri
+            uri: Uri,
         ): ByteArray =
             withContext(Dispatchers.IO) {
                 context.contentResolver.openInputStream(uri)?.use { it.readBytes() }

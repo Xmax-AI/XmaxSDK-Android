@@ -19,17 +19,17 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * 将渲染视口坐标映射到固定媒体基准的归一化坐标。
+ * Maps rendering viewport coordinates to normalized coordinates on the fixed media baseline.
  */
 internal object InteractionCoordinateMapper {
 
     /**
-     * 按处理后的媒体比例和显示模式计算视口中的媒体区域。
+     * Resolves the media region from the processed aspect ratio and scaling mode.
      *
-     * @param viewportSize 预览视图的尺寸，单位为像素。
-     * @param resolvedMediaSize 经面积上限和对齐处理的固定媒体尺寸。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
-     * @return 视频在视图中的实际显示区域；尺寸无效时为 null。
+     * @param viewportSize The preview dimensions, in pixels.
+     * @param resolvedMediaSize The fixed media dimensions after area limits and alignment.
+     * @param contentMode Aspect-preserving fit or fill scaling.
+     * @return The displayed video region, or null for invalid dimensions.
      */
     fun displayedFrame(
         viewportSize: SizeF,
@@ -42,9 +42,15 @@ internal object InteractionCoordinateMapper {
         val widthScale = viewportSize.width / resolvedMediaSize.width
         val heightScale = viewportSize.height / resolvedMediaSize.height
         val scale = if (contentMode == VideoContentMode.FILL) {
-            max(widthScale, heightScale)
+            max(
+                widthScale,
+                heightScale,
+            )
         } else {
-            min(widthScale, heightScale)
+            min(
+                widthScale,
+                heightScale,
+            )
         }
         if (!scale.isFinite() || scale <= 0f) return null
 
@@ -52,17 +58,22 @@ internal object InteractionCoordinateMapper {
         val displayedHeight = resolvedMediaSize.height * scale
         val left = (viewportSize.width - displayedWidth) / 2f
         val top = (viewportSize.height - displayedHeight) / 2f
-        return RectF(left, top, left + displayedWidth, top + displayedHeight)
+        return RectF(
+            left,
+            top,
+            left + displayedWidth,
+            top + displayedHeight,
+        )
     }
 
     /**
-     * 根据处理后的媒体比例计算完整媒体的归一化坐标；FIT 留白区域不产生轨迹点。
+     * Normalizes points using the complete media aspect ratio; FIT letterbox regions do not produce points.
      *
-     * @param point 预览视图坐标系中的触点，单位为像素。
-     * @param viewportSize 预览视图的尺寸，单位为像素。
-     * @param resolvedMediaSize 经面积上限和对齐处理的固定媒体尺寸，作为归一化坐标基准。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
-     * @return 范围为 [0, 1] 的媒体坐标；输入无效或位于 FIT 留白区时为 null。
+     * @param point The touch location in preview coordinates, in pixels.
+     * @param viewportSize The preview dimensions, in pixels.
+     * @param resolvedMediaSize The area-limited, aligned media dimensions defining normalized coordinates.
+     * @param contentMode Aspect-preserving fit or fill scaling.
+     * @return Media coordinates from 0 to 1, or null for invalid input or FIT letterboxing.
      */
     fun map(
         point: PointF,
@@ -72,12 +83,28 @@ internal object InteractionCoordinateMapper {
     ): RealtimePoint? {
         if (!point.x.isFinite() || !point.y.isFinite()) return null
 
-        val displayedFrame = displayedFrame(viewportSize, resolvedMediaSize, contentMode) ?: return null
-        if (contentMode == VideoContentMode.FIT && !displayedFrame.contains(point.x, point.y)) {
+        val displayedFrame = displayedFrame(
+            viewportSize,
+            resolvedMediaSize,
+            contentMode,
+        ) ?: return null
+        if (contentMode == VideoContentMode.FIT && !displayedFrame.contains(
+            point.x,
+            point.y,
+        )) {
             return null
         }
         val normalizedX = (point.x.toDouble() - displayedFrame.left) / displayedFrame.width()
         val normalizedY = (point.y.toDouble() - displayedFrame.top) / displayedFrame.height()
-        return RealtimePoint(normalizedX.coerceIn(0.0, 1.0), normalizedY.coerceIn(0.0, 1.0))
+        return RealtimePoint(
+            normalizedX.coerceIn(
+                0.0,
+                1.0,
+            ),
+            normalizedY.coerceIn(
+                0.0,
+                1.0,
+            ),
+        )
     }
 }

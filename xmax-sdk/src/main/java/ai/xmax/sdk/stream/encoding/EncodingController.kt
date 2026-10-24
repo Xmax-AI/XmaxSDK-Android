@@ -18,22 +18,22 @@ import ai.xmax.sdk.foundation.rtc.RtcManaging
 import ai.xmax.sdk.foundation.rtc.VideoEncodingConfiguration
 
 /**
- * 根据实时视频格式配置 RTC 视频编码参数。
+ * Configures RTC encoding from a realtime video format.
  */
 internal class EncodingController(
     /**
-     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     * The manager for RTC capture, publication, subscription, and rendering.
      */
     private val rtcManager: RtcManaging,
 ) : EncodingControlling {
 
     /**
-     * 校验并应用实时视频编码格式；未指定最低码率时使用 500 kbps，且不超过最高码率。
+     * Validates and applies video encoding; the default minimum is 500 kbps capped at the maximum.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
     override fun configure(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     ) {
         videoFormat.validate()
         val minimum: Int
@@ -48,7 +48,10 @@ internal class EncodingController(
                 videoFormat.fps,
             )
             maximum = videoFormat.maximumBitrate ?: defaultMaximum
-            minimum = videoFormat.minimumBitrate ?: minOf(500, maximum)
+            minimum = videoFormat.minimumBitrate ?: minOf(
+                500,
+                maximum,
+            )
         }
 
         if (minimum > maximum) {
@@ -70,10 +73,10 @@ internal class EncodingController(
     }
 
     /**
-     * 将公共编码偏好转换为 RTC 基础层使用的内部类型。
+     * Converts the public encoding preference to the internal RTC preference.
      *
-     * @param preference 编码时优先保帧率或保画质的策略。
-     * @return 与公共配置对应的内部编码偏好。
+     * @param preference Whether encoding prioritizes frame rate or image quality.
+     * @return The internal encoder preference.
      */
     private fun resolveEncoderPreference(
         preference: RealtimeVideoEncoderPreference,

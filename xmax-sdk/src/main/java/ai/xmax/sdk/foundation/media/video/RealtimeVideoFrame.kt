@@ -13,94 +13,97 @@ package ai.xmax.sdk
 import java.nio.ByteBuffer
 
 /**
- * 最终远端视频帧，像素格式固定为 I420（Y、U、V 三个紧密排列的平面）。
- * SDK 已复制像素，不依赖 RTC 原生帧的生命周期；接入方可持有此对象供异步编码使用，无须释放。
- * 各 data 访问器返回独立的只读视图，修改 position 不会影响其他消费者。
+ * A final remote video frame with tightly packed I420 Y, U, and V planes.
+ * XmaxSDK copies the pixels independently of the native RTC frame; your app may retain this object for
+ * asynchronous encoding without releasing it.
+ * Each data accessor returns an independent read-only view; changing its position does not affect other
+ * consumers.
  */
 public class RealtimeVideoFrame internal constructor(
     /**
-     * 画面宽度，单位为像素。
+     * The frame width, in pixels.
      */
     public val width: Int,
 
     /**
-     * 画面高度，单位为像素。
+     * The frame height, in pixels.
      */
     public val height: Int,
 
     /**
-     * 原始流时间戳，单位微秒；录制时以第一帧为基准归零。
+     * The original stream timestamp, in microseconds; recording rebases it to the first frame.
      */
     public val presentationTimeUs: Long,
 
     /**
-     * 单帧时长，单位微秒；RTC 未提供时为 null。
+     * The frame duration in microseconds, or null if RTC does not provide it.
      */
     public val durationUs: Long?,
 
     /**
-     * 显示时仍需顺时针旋转的角度（0、90、180、270）。
+     * The clockwise rotation still required for display: 0, 90, 180, or 270 degrees.
      */
     public val rotationDegrees: Int,
 
     /**
-     * Y 像素平面数据。
+     * The Y pixel plane.
      */
     private val y: ByteArray,
 
     /**
-     * U 像素平面数据。
+     * The U pixel plane.
      */
     private val u: ByteArray,
 
     /**
-     * V 像素平面数据。
+     * The V pixel plane.
      */
     private val v: ByteArray,
 ) {
 
     /**
-     * I420 各像素平面的行步长，单位为字节。
+     * The Y-plane row stride, in bytes.
      */
     public val yStride: Int get() = width
 
     /**
-     * U 平面每行的字节数。
+     * The U-plane row stride, in bytes.
      */
     public val uStride: Int get() = (width + 1) / 2
 
     /**
-     * V 平面每行的字节数。
+     * The V-plane row stride, in bytes.
      */
     public val vStride: Int get() = uStride
 
     /**
-     * 远端帧的 I420 像素数据。
+     * The I420 pixel data owned by this remote frame.
      */
     public val yData: ByteBuffer get() = ByteBuffer.wrap(y).asReadOnlyBuffer()
 
     /**
-     * U 色度平面的只读数据。
+     * The read-only U chroma plane.
      */
     public val uData: ByteBuffer get() = ByteBuffer.wrap(u).asReadOnlyBuffer()
 
     /**
-     * V 色度平面的只读数据。
+     * The read-only V chroma plane.
      */
     public val vData: ByteBuffer get() = ByteBuffer.wrap(v).asReadOnlyBuffer()
 }
 
 /**
- * 在 SDK 的后台串行队列上接收最终帧。应尽快转交编码任务，避免阻塞后续回调。
+ * Receives final frames on the SDK's serial background queue. Dispatch encoding promptly to avoid blocking
+ * later callbacks.
  */
 public fun interface RealtimeVideoFrameListener {
 
     /**
-     * 接收当前订阅的视频帧。
+     * Receives a frame from the subscribed video stream.
      *
-     * @param frame 待处理、显示或提交的视频帧。
+     * @param frame The video frame to process, display, or submit.
      */
     public fun onFrame(
-        frame: RealtimeVideoFrame
+        frame: RealtimeVideoFrame,
     )
 }

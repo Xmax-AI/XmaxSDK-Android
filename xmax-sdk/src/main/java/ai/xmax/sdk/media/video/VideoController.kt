@@ -24,49 +24,50 @@ import ai.xmax.sdk.stream.StreamID
 import android.net.Uri
 
 /**
- * 协调本地视频播放器、RTC 外部音视频源和预览资源。
+ * Coordinates local playback, RTC external media input, and preview resources.
  */
 internal class VideoController(
     /**
-     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     * The manager for RTC capture, publication, subscription, and rendering.
      */
     private val rtcManager: RtcManaging,
 
     /**
-     * 解析媒体输入并驱动帧输出的组件。
+     * The component resolving media input and driving frame output.
      */
     private val mediaSourceController: MediaSourceControlling,
 ) {
 
     /**
-     * 视频输入轨道的并发保护。
+     * The lock protecting the local video track.
      */
     private val stateLock = Any()
 
     /**
-     * 活动视频轨道及音轨信息。
+     * The active video track.
      */
     private var activeTrack: RealtimeVideoTrack? = null
 
     /**
-     * 当前本地视频对应的媒体轨道。
+     * The media track representing the current local video.
      */
     val currentTrack: RealtimeVideoTrack?
         get() = synchronized(stateLock) { activeTrack }
 
     /**
-     * 当前视频轨道是否包含音频。
+     * Whether the current video track includes audio.
      */
     val hasAudio: Boolean
         get() = currentTrack != null && mediaSourceController.hasAudio
 
     /**
-     * 从 URI 创建本地视频流；存在音轨时同时提供视频文件的音频输入。
-     * 使用方向校正后的素材尺寸（受模型面积上限约束并按 4 对齐）和模型默认帧率。
-     * SDK 单独选择生成画布，服务端等比适配并裁边输出。
+     * Creates a local video stream from a URI, including its audio track when present.
+     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
+     * output.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
      */
     suspend fun createLocalVideoStream(
         uri: Uri,
@@ -100,9 +101,15 @@ internal class VideoController(
             )
             mediaSourceController.start()
             synchronized(stateLock) { activeTrack = localTrack }
-            return RealtimeMediaStream(StreamID.LOCAL.value, localTrack)
-        } catch (error: Throwable) {
-            cleanupAfterFailure(error,
+            return RealtimeMediaStream(
+                StreamID.LOCAL.value,
+                localTrack,
+            )
+        } catch (
+            error: Throwable,
+        ) {
+            cleanupAfterFailure(
+                error,
                 { mediaSourceController.stop() },
                 { if (externalAudioStarted) rtcManager.stopExternalAudioSource() },
                 { track?.let(VideoRenderRegistry::unregister) },
@@ -112,29 +119,30 @@ internal class VideoController(
     }
 
     /**
-     * 设置本地预览是否静音，不改变保存的音量值。
+     * Mutes or unmutes local preview without changing its stored volume.
      *
-     * @param muted 是否静音。
+     * @param muted Whether audio is muted.
      */
     suspend fun setLocalAudioPreviewMuted(
-        muted: Boolean
+        muted: Boolean,
     ) {
         if (currentTrack != null) mediaSourceController.setLocalAudioPreviewMuted(muted)
     }
 
     /**
-     * 设置当前本地媒体的预览音量，范围为 0 到 1，不影响提交给 RTC 的音频数据。
+     * Sets local preview volume from 0 to 1 without changing audio submitted to RTC.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     suspend fun setLocalAudioVolume(
-        volume: Float
+        volume: Float,
     ) {
         mediaSourceController.setLocalAudioVolume(volume)
     }
 
     /**
-     * 停止当前视频流并释放解码与预览资源；当前源不是视频时不执行释放。
+     * Stops the current video source and releases decoding and preview resources; does nothing for other
+     * source types.
      */
     suspend fun stopLocalVideoStream() {
         val state = synchronized(stateLock) {
@@ -152,12 +160,12 @@ internal class VideoController(
     }
 
     /**
-     * 本地视频轨道的标识约定。
+     * The local video track identifier.
      */
     private companion object {
 
         /**
-         * 本地视频文件的视频轨道标识。
+         * The video track identifier for a local file.
          */
         const val LOCAL_VIDEO_TRACK_ID = "video0"
     }

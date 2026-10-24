@@ -20,23 +20,23 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * 生成 SDK 与 RTC 房间之间传输的结构化事件消息。
+ * Builds structured event messages for RTC room transport.
  */
 internal object RoomEvent {
 
     /**
-     * 构造启动实时生成的房间信令。
+     * Builds a realtime generation start signal.
      *
-     * @param userId 房间中的业务用户标识。
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材。
-     * @param minimumBitrate 最低编码码率，单位为 kbps。
-     * @param maximumBitrate 最高编码码率，单位为 kbps。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`；默认值为 `false`。
-     * @param targetVideoFormat 下行输出的视频规格。
-     * @param paddingContain 是否让服务端等比适配输入并在输出时移除补边；默认值为 `false`。
-     * @return 视频开始生成的 JSON 信令。
+     * @param userId The room's business user identifier.
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param context The generation prompt and reference media.
+     * @param minimumBitrate The minimum encoder bitrate, in kbps.
+     * @param maximumBitrate The maximum encoder bitrate, in kbps.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
+     * @param targetVideoFormat The downlink output format.
+     * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @return The generation start JSON signal.
      */
     fun start(
         userId: String,
@@ -52,34 +52,62 @@ internal object RoomEvent {
         event = "start",
         userId = userId,
         taskId = taskId,
-        params = generationParameters(videoFormat, context, faceRestoration).apply {
+        params = generationParameters(
+            videoFormat,
+            context,
+            faceRestoration,
+        ).apply {
             if (paddingContain) {
                 if (targetVideoFormat == null || context.referenceVideo != null) {
-                    throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Contain padding requires a target size and a realtime frame input")
+                    throw XmaxError(
+                        XmaxErrorCode.INVALID_CONFIGURATION,
+                        "Contain padding requires a target size and a realtime frame input",
+                    )
                 }
-                put("padding", "contain")
+                put(
+                    "padding",
+                    "contain",
+                )
             }
-            put("mirror", false)
-            put("min_bitrate", minimumBitrate)
-            put("max_bitrate", maximumBitrate)
+            put(
+                "mirror",
+                false,
+            )
+            put(
+                "min_bitrate",
+                minimumBitrate,
+            )
+            put(
+                "max_bitrate",
+                maximumBitrate,
+            )
             val target = targetVideoFormat ?: videoFormat.takeIf { context.referenceVideo != null }
-            target?.let { put("target_size", JSONArray().put(it.width).put(it.height)) }
+            target?.let { put(
+                "target_size",
+                JSONArray().put(it.width).put(it.height),
+            ) }
             context.referenceVideo?.let {
-                put("ref_video_path", it.path)
-                put("sample_method", it.sampleMethod.value)
+                put(
+                    "ref_video_path",
+                    it.path,
+                )
+                put(
+                    "sample_method",
+                    it.sampleMethod.value,
+                )
             }
         },
     )
 
     /**
-     * 编码回传尺寸与服务端码率更新信令，码率单位为 Kbps。
+     * Encodes output dimension and server bitrate updates, with bitrate in kbps.
      *
-     * @param userId 房间中的业务用户标识。
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param targetVideoFormat 下行输出的视频规格。
-     * @param minimumBitrate 最低编码码率，单位为 kbps。
-     * @param maximumBitrate 最高编码码率，单位为 kbps。
-     * @return 更新下行尺寸与码率的 JSON 信令。
+     * @param userId The room's business user identifier.
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param targetVideoFormat The downlink output format.
+     * @param minimumBitrate The minimum encoder bitrate, in kbps.
+     * @param maximumBitrate The maximum encoder bitrate, in kbps.
+     * @return The downlink dimension and bitrate JSON signal.
      */
     fun changeTargetSize(
         userId: String,
@@ -92,21 +120,30 @@ internal object RoomEvent {
         userId = userId,
         taskId = taskId,
         params = JSONObject()
-            .put("target_size", JSONArray().put(targetVideoFormat.width).put(targetVideoFormat.height))
-            .put("min_bitrate", minimumBitrate)
-            .put("max_bitrate", maximumBitrate),
+            .put(
+                "target_size",
+                JSONArray().put(targetVideoFormat.width).put(targetVideoFormat.height),
+            )
+            .put(
+                "min_bitrate",
+                minimumBitrate,
+            )
+            .put(
+                "max_bitrate",
+                maximumBitrate,
+            ),
     )
 
     /**
-     * 构造更新生成条件的房间信令。
+     * Builds a generation condition update signal.
      *
-     * @param userId 房间中的业务用户标识。
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`；默认值为 `false`。
-     * @param paddingContain 是否让服务端等比适配输入并在输出时移除补边；默认值为 `false`。
-     * @return 更新生成条件的 JSON 信令。
+     * @param userId The room's business user identifier.
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param context The generation prompt and reference media.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
+     * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @return The generation condition JSON signal.
      */
     fun changeCondition(
         userId: String,
@@ -119,17 +156,24 @@ internal object RoomEvent {
         event = "change_condition",
         userId = userId,
         taskId = taskId,
-        params = generationParameters(videoFormat, context, faceRestoration).apply {
-            if (paddingContain) put("padding", "contain")
+        params = generationParameters(
+            videoFormat,
+            context,
+            faceRestoration,
+        ).apply {
+            if (paddingContain) put(
+                "padding",
+                "contain",
+            )
         },
     )
 
     /**
-     * 构造停止指定生成任务的房间信令。
+     * Builds a signal stopping the specified task.
      *
-     * @param userId 房间中的业务用户标识。
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @return 停止生成的 JSON 信令。
+     * @param userId The room's business user identifier.
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @return The generation stop JSON signal.
      */
     fun stop(
         userId: String,
@@ -141,12 +185,12 @@ internal object RoomEvent {
     )
 
     /**
-     * 构造携带触控轨迹的房间信令。
+     * Builds a trajectory signal.
      *
-     * @param userId 房间中的业务用户标识。
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param points 媒体归一化坐标中的轨迹点集合，范围为 [0, 1]。
-     * @return 携带触控轨迹的 JSON 信令。
+     * @param userId The room's business user identifier.
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param points Normalized media trajectory points from 0 to 1.
+     * @return The trajectory JSON signal.
      */
     fun tracks(
         userId: String,
@@ -164,48 +208,63 @@ internal object RoomEvent {
     )
 
     /**
-     * 构造维持房间活跃状态的心跳信令。
+     * Builds a room heartbeat signal.
      *
-     * @param userId 房间中的业务用户标识。
-     * @return 房间心跳 JSON 信令。
+     * @param userId The room's business user identifier.
+     * @return The room heartbeat JSON signal.
      */
     fun heartbeat(
-        userId: String
+        userId: String,
     ): String = encode(
         event = "heartbeat",
         userId = userId,
     )
 
     /**
-     * 构造生成尺寸、提示词、参考素材及人脸修复参数。
+     * Builds generation dimensions, prompt, reference media, and face restoration parameters.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`。
-     * @return 供当前业务使用的 JSON 数据。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param context The generation prompt and reference media.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`.
+     * @return JSON for the current operation.
      */
     private fun generationParameters(
         videoFormat: RealtimeVideoFormat,
         context: RealtimeContext,
         faceRestoration: Boolean,
     ): JSONObject = JSONObject()
-        .put("model", "default")
-        .put("size", JSONArray().put(videoFormat.width).put(videoFormat.height))
-        .put("prompt", context.prompt)
-        .put("face_replace", faceRestoration)
+        .put(
+            "model",
+            "default",
+        )
+        .put(
+            "size",
+            JSONArray().put(videoFormat.width).put(videoFormat.height),
+        )
+        .put(
+            "prompt",
+            context.prompt,
+        )
+        .put(
+            "face_replace",
+            faceRestoration,
+        )
         .apply {
-            context.referencePath?.let { put("ref_image_path", it) }
+            context.referencePath?.let { put(
+                "ref_image_path",
+                it,
+            ) }
         }
 
     /**
-     * 构造包含事件名称、用户、任务和业务参数的 JSON 信令。
+     * Builds a JSON signal containing the event, user, task, and parameters.
      *
-     * @param event 业务信令事件名称。
-     * @param userId 房间中的业务用户标识。
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param params 业务信令参数；null 表示不携带参数对象。
-     * @param tracks 轨迹坐标 JSON 数组；null 表示不携带轨迹。
-     * @return 编码后的 JSON 信令。
+     * @param event The business signaling event name.
+     * @param userId The room's business user identifier.
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param params The business parameters, or null to omit the parameter object.
+     * @param tracks The trajectory coordinate array, or null to omit trajectories.
+     * @return The encoded JSON signal.
      */
     private fun encode(
         event: String,
@@ -215,16 +274,39 @@ internal object RoomEvent {
         tracks: JSONArray? = null,
     ): String = try {
         JSONObject()
-            .put("event", event)
-            .put("user_id", userId)
-            .put("runtime", RuntimeInfo.current.toJson())
+            .put(
+                "event",
+                event,
+            )
+            .put(
+                "user_id",
+                userId,
+            )
+            .put(
+                "runtime",
+                RuntimeInfo.current.toJson(),
+            )
             .apply {
-                taskId?.let { put("uid", it); put("session_uid", it) }
-                params?.let { put("params", it) }
-                tracks?.let { put("tracks", it) }
+                taskId?.let { put(
+                    "uid",
+                    it,
+                ); put(
+                    "session_uid",
+                    it,
+                ) }
+                params?.let { put(
+                    "params",
+                    it,
+                ) }
+                tracks?.let { put(
+                    "tracks",
+                    it,
+                ) }
             }
             .toString()
-    } catch (error: Throwable) {
+    } catch (
+        error: Throwable,
+    ) {
         throw XmaxError(
             code = XmaxErrorCode.INTERNAL_ERROR,
             message = "Failed to encode RTC room event",

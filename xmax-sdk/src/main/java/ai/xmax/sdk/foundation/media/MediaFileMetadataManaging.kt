@@ -13,17 +13,17 @@ package ai.xmax.sdk.foundation.media
 import android.net.Uri
 
 /**
- * 定义读取本地媒体文件元数据的能力。
+ * Reads metadata from local media files.
  */
 internal interface MediaFileMetadataManaging {
 
     /**
-     * 读取媒体的显示尺寸、旋转方向、时长和音轨信息。
+     * Reads media dimensions, rotation, duration, and audio track metadata.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 媒体的尺寸、旋转、时长及音轨信息。
+     * @param uri A media URI your app can read.
+     * @return The media dimensions, rotation, duration, and audio metadata.
      */
     suspend fun readMetadata(
-        uri: Uri
+        uri: Uri,
     ): MediaFileMetadata
 }

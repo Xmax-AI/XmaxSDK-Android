@@ -11,22 +11,22 @@
 package ai.xmax.sdk
 
 /**
- * Xmax 服务环境，在创建客户端时选择。
+ * The Xmax service environment selected when creating a client.
  */
 public enum class XmaxEnvironment {
 
     /**
-     * 国内环境。
+     * The China service environment.
      */
     CHINA,
 
     /**
-     * 海外环境。
+     * The global service environment.
      */
     GLOBAL;
 
     /**
-     * 当前环境的服务入口。
+     * The API endpoint for this environment.
      */
     internal val apiBaseUrl: String
         get() = when (this) {
@@ -35,7 +35,7 @@ public enum class XmaxEnvironment {
         }
 
     /**
-     * 当前环境的实时会话服务入口。
+     * The realtime session endpoint for this environment.
      */
     internal val realtimeApiBaseUrl: String
         get() = when (this) {

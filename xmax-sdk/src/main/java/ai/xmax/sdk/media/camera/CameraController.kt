@@ -30,37 +30,37 @@ import android.content.Context
 import androidx.compose.ui.unit.IntSize
 
 /**
- * 协调相机权限、RTC 内部采集和本地预览资源。
+ * Coordinates camera permissions, internal RTC capture, and local preview resources.
  */
 internal class CameraController(
     /**
-     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     * The manager for RTC capture, publication, subscription, and rendering.
      */
     private val rtcManager: RtcManaging,
 
     /**
-     * 检查 Android 相机及录音权限的组件。
+     * The Android camera and recording permission checker.
      */
     private val permissionManager: PermissionManaging,
 
     /**
-     * 解析媒体尺寸及模型输入规则的服务。
+     * The service resolving media dimensions and model constraints.
      */
     private val mediaService: MediaServicing,
 
     /**
-     * 接收媒体错误的回调。
+     * The media failure callback.
      */
     private val errorListener: (XmaxError) -> Unit = {},
 ) {
 
     /**
-     * 创建 CameraController，并配置其依赖和运行参数。
+     * Creates a camera controller.
      *
-     * @param context 访问 Android 系统服务或媒体资源所需的上下文。
-     * @param rtcManager 提供 RTC 采集、发布、订阅和渲染能力的管理器。
-     * @param mediaService 解析媒体尺寸及模型输入规则的服务。
-     * @param errorListener 接收媒体错误的回调。
+     * @param context The Android context used for system services and media resources.
+     * @param rtcManager The manager for RTC capture, publication, subscription, and rendering.
+     * @param mediaService The service resolving dimensions and model input constraints.
+     * @param errorListener The media failure callback.
      */
     constructor(
         context: Context,
@@ -75,56 +75,58 @@ internal class CameraController(
     )
 
     /**
-     * 相机输入状态的并发保护。
+     * The lock protecting camera input state.
      */
     private val stateLock = Any()
 
     /**
-     * 活动相机轨道与麦克风采集配置。
+     * The active camera track.
      */
     private var activeTrack: RealtimeVideoTrack? = null
 
     /**
-     * 创建摄像头流时指定的麦克风开关。
+     * The microphone option selected when creating this camera source.
      */
     private var storedUseMicrophone = false
 
     /**
-     * 麦克风采集是否已启动。
+     * Whether microphone capture has started.
      */
     private var isMicrophoneCapturing = false
 
     /**
-     * 供调用方读取的媒体配置快照。
+     * The current camera track snapshot.
      */
     val currentTrack: RealtimeVideoTrack?
         get() = synchronized(stateLock) { activeTrack }
 
     /**
-     * 当前摄像头轨道是否启用了麦克风输入。
+     * Whether the current camera source enables microphone input.
      */
     val useMicrophone: Boolean
         get() = synchronized(stateLock) { activeTrack != null && storedUseMicrophone }
 
     /**
-     * 替换相机预览就绪监听器；null 表示注销。
+     * Replaces the camera preview readiness listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     fun setPreviewReadyListener(
-        listener: RealtimeCameraPreviewReadyListener?
+        listener: RealtimeCameraPreviewReadyListener?,
     ) {
         rtcManager.setCameraPreviewReadyListener(listener)
     }
 
     /**
-     * 创建并启动相机输入；接入方须先取得所需权限，输入尺寸会按模型规则调整。
-     * 麦克风默认关闭；启用后在连接时开始采集、断开时停止，不进行本地回放。
+     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
+     * follow the model's constraints.
+     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
+     * disconnection without local playback.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param position 需要使用的前置或后置摄像头。
-     * @param useMicrophone 是否启用麦克风；启用前须由应用取得录音权限；默认值为 `false`。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param position The front or rear camera to use.
+     * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
+     * false.
      */
     suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
@@ -159,8 +161,13 @@ internal class CameraController(
                     attachHandler = { view, contentMode ->
                         try {
                             view.prepareRtcVideoRendering()
-                            rtcManager.bindLocalVideo(view.rtcRenderView, contentMode)
-                        } catch (error: Throwable) {
+                            rtcManager.bindLocalVideo(
+                                view.rtcRenderView,
+                                contentMode,
+                            )
+                        } catch (
+                            error: Throwable,
+                        ) {
                             errorListener(XmaxError.from(error))
                             throw error
                         }
@@ -172,9 +179,15 @@ internal class CameraController(
                 activeTrack = track
                 storedUseMicrophone = useMicrophone
             }
-            return RealtimeMediaStream(StreamID.LOCAL.value, track)
-        } catch (error: Throwable) {
-            cleanupAfterFailure(error,
+            return RealtimeMediaStream(
+                StreamID.LOCAL.value,
+                track,
+            )
+        } catch (
+            error: Throwable,
+        ) {
+            cleanupAfterFailure(
+                error,
                 { VideoRenderRegistry.unregister(track) },
                 { rtcManager.stopVideoCapture() },
             )
@@ -183,26 +196,35 @@ internal class CameraController(
     }
 
     /**
-     * 更新摄像头输出规格，保留镜头、轨道与预览绑定；配置失败时保留原规格。
+     * Updates camera output while retaining the lens, track, and preview; failure retains the previous
+     * format.
      *
-     * @param videoFormat 模型支持的尺寸、采集帧率与编码配置。
-     * @throws XmaxError 摄像头未启动、规格不支持或采集配置失败时抛出错误。
+     * @param videoFormat Model-supported dimensions, capture frame rate, and encoding settings.
+     * @throws XmaxError If the camera is not started, the format is unsupported, or capture configuration
+     * fails.
      */
     fun updateVideoFormat(
         videoFormat: RealtimeVideoFormat,
     ) {
         synchronized(stateLock) {
             val track = activeTrack
-                ?: throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Camera preview is not started")
+                ?: throw XmaxError(
+                    XmaxErrorCode.INVALID_CONFIGURATION,
+                    "Camera preview is not started",
+                )
             val resolved = resolveVideoFormat(videoFormat)
             if (resolved == track.videoFormat) return
-            rtcManager.updateVideoCaptureFormat(resolved.width, resolved.height, resolved.fps)
+            rtcManager.updateVideoCaptureFormat(
+                resolved.width,
+                resolved.height,
+                resolved.fps,
+            )
             track.updateVideoFormat(resolved)
         }
     }
 
     /**
-     * 启动当前相机源的麦克风采集。
+     * Starts microphone capture for the current camera source.
      */
     fun startMicrophoneCapture() {
         val shouldStart = synchronized(stateLock) {
@@ -217,7 +239,7 @@ internal class CameraController(
     }
 
     /**
-     * 停止当前相机源的麦克风采集。
+     * Stops microphone capture for the current camera source.
      */
     fun stopMicrophoneCapture() {
         if (!synchronized(stateLock) { isMicrophoneCapturing }) return
@@ -226,7 +248,7 @@ internal class CameraController(
     }
 
     /**
-     * 停止当前相机输入并释放其资源；当前源不是相机时不执行释放。
+     * Stops and releases the current camera source; does nothing for other source types.
      */
     suspend fun stopLocalCameraStream() {
         val track = synchronized(stateLock) {
@@ -248,9 +270,7 @@ internal class CameraController(
     }
 
     /**
-     * 切换前后摄像头，并更新当前相机轨道的方向。
-     *
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * Switches front and rear cameras and updates the track's position.
      */
     suspend fun switchCamera(): RealtimeMediaStream {
         val track = currentTrack
@@ -269,37 +289,48 @@ internal class CameraController(
         return try {
             rtcManager.switchCamera(nextPosition)
             track.updatePosition(nextPosition)
-            RealtimeMediaStream(StreamID.LOCAL.value, track)
-        } catch (error: Throwable) {
+            RealtimeMediaStream(
+                StreamID.LOCAL.value,
+                track,
+            )
+        } catch (
+            error: Throwable,
+        ) {
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * 使用模型规则校验或调整摄像头输入规格。
+     * Validates or resolves camera input using the model's constraints.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @return 解析或计算后的视频尺寸、帧率和编码配置。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @return The resolved video dimensions, frame rate, and encoding settings.
      */
     private fun resolveVideoFormat(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     ): RealtimeVideoFormat {
         videoFormat.validate()
         val size = mediaService.resolveMediaSize(
-            IntSize(videoFormat.width, videoFormat.height),
+            IntSize(
+                videoFormat.width,
+                videoFormat.height,
+            ),
             source = RealtimeMediaSource.CAMERA,
         )
-        return videoFormat.copy(width = size.width, height = size.height)
+        return videoFormat.copy(
+            width = size.width,
+            height = size.height,
+        )
             .also(RealtimeVideoFormat::validate)
     }
 
     /**
-     * 本地摄像头轨道的标识约定。
+     * The local camera track identifier.
      */
     private companion object {
 
         /**
-         * 本地摄像头的视频轨道标识。
+         * The local camera video track identifier.
          */
         const val LOCAL_VIDEO_TRACK_ID = "video0"
     }

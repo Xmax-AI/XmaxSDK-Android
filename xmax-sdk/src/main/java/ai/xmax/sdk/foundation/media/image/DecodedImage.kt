@@ -25,49 +25,52 @@ import androidx.compose.ui.unit.IntSize
 import java.util.UUID
 
 /**
- * 表示 SDK 内部已经完成方向处理和像素解码的图片。
+ * An internally decoded image with normalized orientation.
  */
 internal interface DecodedImage {
 
     /**
-     * 视频或图片的尺寸与像素数据。
+     * The dimensions and pixels of an image or video.
      */
     val size: IntSize
 
     /**
-     * 将已解码图片转换为指定尺寸和帧率对应的 RGBA 视频帧。
+     * Converts a decoded image to an RGBA frame with the requested dimensions and frame rate.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @return 按目标像素格式、尺寸和方向生成的视频帧。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @return A frame with the requested pixel format, dimensions, and orientation.
      */
     fun makeVideoFrame(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     ): VideoFrame
 }
 
 /**
- * 持有方向已经规范化的 Android Bitmap，并生成可复用的 RGBA 视频帧。
+ * An orientation-normalized Android Bitmap that supplies reusable RGBA frames.
  */
 internal class BitmapDecodedImage(
     /**
-     * 待处理或显示的 Android 图片。
+     * The Android Bitmap to process or display.
      */
     private val bitmap: Bitmap,
 ) : DecodedImage {
 
     /**
-     * 视频或图片的尺寸与像素数据。
+     * The dimensions and pixels of an image or video.
      */
-    override val size: IntSize = IntSize(bitmap.width, bitmap.height)
+    override val size: IntSize = IntSize(
+        bitmap.width,
+        bitmap.height,
+    )
 
     /**
-     * 将已解码图片转换为指定尺寸和帧率对应的 RGBA 视频帧。
+     * Converts a decoded image to an RGBA frame with the requested dimensions and frame rate.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @return 按目标像素格式、尺寸和方向生成的视频帧。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @return A frame with the requested pixel format, dimensions, and orientation.
      */
     override fun makeVideoFrame(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     ): VideoFrame {
         videoFormat.validate()
         if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) {
@@ -82,8 +85,18 @@ internal class BitmapDecodedImage(
         try {
             Canvas(target).drawBitmap(
                 bitmap,
-                Rect(0, 0, bitmap.width, bitmap.height),
-                Rect(0, 0, videoFormat.width, videoFormat.height),
+                Rect(
+                    0,
+                    0,
+                    bitmap.width,
+                    bitmap.height,
+                ),
+                Rect(
+                    0,
+                    0,
+                    videoFormat.width,
+                    videoFormat.height,
+                ),
                 Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
             )
             val pixels = IntArray(videoFormat.width * videoFormat.height)
@@ -120,9 +133,13 @@ internal class BitmapDecodedImage(
                 ),
                 bufferReuseId = UUID.randomUUID(),
             )
-        } catch (error: XmaxError) {
+        } catch (
+            error: XmaxError,
+        ) {
             throw error
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             throw XmaxError(
                 code = XmaxErrorCode.MEDIA_ERROR,
                 message = "Failed to prepare image video frame",
@@ -134,23 +151,25 @@ internal class BitmapDecodedImage(
     }
 
     /**
-     * 图像像素布局与处理错误的构造入口。
+     * The RGBA pixel layout constants.
      */
     internal companion object {
 
         /**
-         * 创建用于报告图像处理失败的媒体错误。
+         * Creates an image processing error.
          *
-         * @param message 待发送或记录的消息文本。
-         * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+         * @param message The message to send or log.
          */
         private fun processingError(
-            message: String
+            message: String,
         ): XmaxError =
-            XmaxError(XmaxErrorCode.MEDIA_ERROR, message)
+            XmaxError(
+                XmaxErrorCode.MEDIA_ERROR,
+                message,
+            )
 
         /**
-         * RGBA 每个像素占用的字节数。
+         * The number of bytes per RGBA pixel.
          */
         private const val RGBA_BYTES_PER_PIXEL = 4
     }

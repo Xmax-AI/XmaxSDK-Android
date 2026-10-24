@@ -15,23 +15,26 @@ import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
 
 /**
- * 校验声网外部音频所需的 48 kHz、单声道、PCM16LE 数据。
+ * Validates 48 kHz mono PCM16LE for Agora external audio.
  */
 internal object RtcAudioConverter {
 
     /**
-     * 校验外部音频帧为 10 ms、48 kHz、单声道 PCM16LE，并返回有效字节。
+     * Validates a 10 ms, 48 kHz mono PCM16LE frame and returns its valid bytes.
      *
-     * @param frame 待播放或提交的 PCM 音频帧。
-     * @return 有效数据对应的字节数组。
+     * @param frame The PCM audio frame to play or submit.
+     * @return An array containing the valid bytes.
      */
     fun convertFrame(
-        frame: AudioFrame
+        frame: AudioFrame,
     ): ByteArray {
         val bytes = frame.dataBytes()
         val expected = AudioFrame.samplesPerFrame * AudioFrame.channelCount * Short.SIZE_BYTES
         if (bytes.size != expected) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Audio frame must contain exactly $expected bytes")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "Audio frame must contain exactly $expected bytes",
+            )
         }
         return bytes
     }

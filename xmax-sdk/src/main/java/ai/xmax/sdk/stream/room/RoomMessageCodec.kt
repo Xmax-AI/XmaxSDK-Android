@@ -14,43 +14,43 @@ import java.util.UUID
 import org.json.JSONObject
 
 /**
- * 使用 __agora_chunk__ 协议，按 JSON 转义后的 UTF-8 字节预算分片。
+ * Fragments `__agora_chunk__` messages within the JSON-escaped UTF-8 packet budget.
  */
 internal class RoomMessageCodec {
 
     /**
-     * 保存同一条分片消息已接收的数据及完整性信息。
+     * The fragments and integrity metadata for one partially received message.
      */
     private data class Record(
         /**
-         * 消息分片的总数量。
+         * The total fragment count.
          */
         val count: Int,
 
         /**
-         * 按序号保存的已收到消息分片。
+         * Received fragments indexed by sequence number.
          */
         val parts: MutableMap<Int, String> = mutableMapOf(),
 
         /**
-         * 已接收分片数据的累计字节数；默认值为 `0`。
+         * The cumulative received payload size in bytes; defaults to 0.
          */
-        var bytes: Int = 0
+        var bytes: Int = 0,
     )
 
     /**
-     * 按发送者与消息标识保存的分片重组缓存。
+     * The reassembly cache keyed by sender and message identifier.
      */
     private val records = LinkedHashMap<Pair<String, String>, Record>()
 
     /**
-     * 将信令编码为符合 RTC 单包大小限制的有序消息片段。
+     * Encodes a signal as ordered fragments within the RTC packet size limit.
      *
-     * @param message 待发送或记录的消息文本。
-     * @return 按发送顺序排列的信令消息片段。
+     * @param message The message to send or log.
+     * @return The signal fragments in transmission order.
      */
     fun encode(
-        message: String
+        message: String,
     ): List<String> {
         require(message.toByteArray(Charsets.UTF_8).size <= MAX_MESSAGE_BYTES) { "Room message is too large" }
         if (message.toByteArray(Charsets.UTF_8).size <= 800) return listOf(message)
@@ -72,24 +72,42 @@ internal class RoomMessageCodec {
             offset += Character.charCount(codePoint)
         }
         if (part.isNotEmpty()) pieces += part.toString()
-        val id = UUID.randomUUID().toString().replace("-", "")
+        val id = UUID.randomUUID().toString().replace(
+            "-",
+            "",
+        )
         return pieces.mapIndexed { index, data ->
-            JSONObject().put("event", EVENT).put("eventId", id).put("index", index)
-                .put("count", pieces.size).put("data", data).toString()
+            JSONObject().put(
+                "event",
+                EVENT,
+            ).put(
+                "eventId",
+                id,
+            ).put(
+                "index",
+                index,
+            )
+                .put(
+                    "count",
+                    pieces.size,
+                ).put(
+                    "data",
+                    data,
+                ).toString()
         }
     }
 
     /**
-     * 重组指定发送者的分片信令；未收齐时返回 null。
+     * Reassembles a sender's fragmented signal, returning null until complete.
      *
-     * @param sender 发送分片消息的用户标识。
-     * @param message 待发送或记录的消息文本。
-     * @return 完整重组后的消息；尚未收齐时为 null。
+     * @param sender The user sending the fragments.
+     * @param message The message to send or log.
+     * @return The complete message, or null while fragments remain missing.
      */
     @Synchronized
     fun decode(
         sender: String,
-        message: String
+        message: String,
     ): String? {
         if (message.toByteArray(Charsets.UTF_8).size > MAX_MESSAGE_BYTES) return null
         val json = runCatching { JSONObject(message) }.getOrNull() ?: return null
@@ -121,23 +139,23 @@ internal class RoomMessageCodec {
     }
 
     /**
-     * 清除尚未完成重组的消息分片。
+     * Clears incomplete message fragments.
      */
     @Synchronized
     fun clear() = records.clear()
 
     /**
-     * 房间信令分片的事件名称与消息大小限制。
+     * Fragment event names and message size limits.
      */
     private companion object {
 
         /**
-         * 用于识别信令分片的协议事件名。
+         * The protocol event identifying signal fragments.
          */
         const val EVENT = "__agora_chunk__"
 
         /**
-         * 允许重组的信令消息大小上限，单位为字节。
+         * The maximum reassembled message size, in bytes.
          */
         const val MAX_MESSAGE_BYTES = 256 * 1024
     }

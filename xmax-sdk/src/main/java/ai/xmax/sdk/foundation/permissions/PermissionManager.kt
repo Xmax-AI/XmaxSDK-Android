@@ -17,39 +17,39 @@ import android.content.Context
 import android.content.pm.PackageManager
 
 /**
- * 检查相机和麦克风权限；运行时权限申请由接入方的 Activity 负责。
+ * Checks camera and microphone permissions; your app's Activity owns runtime permission requests.
  */
 internal class PermissionManager(
     /**
-     * 查询应用是否已获得相机权限的函数。
+     * The function checking whether camera permission has been granted.
      */
     private val isCameraPermissionGranted: () -> Boolean,
 
     /**
-     * 查询应用是否已获得录音权限的函数。
+     * The function checking whether recording permission has been granted.
      */
     private val isMicrophonePermissionGranted: () -> Boolean,
 ) : PermissionManaging {
 
     /**
-     * 创建 PermissionManager，并配置其依赖和运行参数。
+     * Creates a permission manager.
      *
-     * @param isCameraPermissionGranted 查询应用是否已获得相机权限的函数。
+     * @param isCameraPermissionGranted Checks whether camera permission has been granted.
      */
     constructor(
-        isCameraPermissionGranted: () -> Boolean
+        isCameraPermissionGranted: () -> Boolean,
     ) : this(
         isCameraPermissionGranted = isCameraPermissionGranted,
         isMicrophonePermissionGranted = { false },
     )
 
     /**
-     * 创建 PermissionManager，并配置其依赖和运行参数。
+     * Creates a permission manager.
      *
-     * @param context 访问 Android 系统服务或媒体资源所需的上下文。
+     * @param context The Android context used for system services and media resources.
      */
     constructor(
-        context: Context
+        context: Context,
     ) : this(
         isCameraPermissionGranted = {
             context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -60,7 +60,7 @@ internal class PermissionManager(
     )
 
     /**
-     * 确认应用已取得相机权限，否则抛出相机权限错误。
+     * Checks camera permission and throws a camera permission error if missing.
      */
     override suspend fun ensureCameraPermission() {
         if (isCameraPermissionGranted()) return
@@ -71,7 +71,7 @@ internal class PermissionManager(
     }
 
     /**
-     * 确认应用已取得麦克风权限，否则抛出麦克风权限错误。
+     * Checks microphone permission and throws a microphone permission error if missing.
      */
     override suspend fun ensureMicrophonePermission() {
         if (isMicrophonePermissionGranted()) return

@@ -14,46 +14,46 @@ import ai.xmax.sdk.RealtimeVideoTrack
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 保存实时视频轨道与底层渲染能力之间的内部绑定关系。
+ * The registry connecting realtime tracks to their rendering capabilities.
  */
 internal object VideoRenderRegistry {
 
     /**
-     * 轨道与显示组件的绑定记录。
+     * Bindings between tracks and display components.
      */
     private val bindings = ConcurrentHashMap<RealtimeVideoTrack, VideoRenderBinding>()
 
     /**
-     * 为视频轨道登记对应的显示或交互绑定。
+     * Registers a track's display or interaction binding.
      *
-     * @param track 需要显示或绑定的视频轨道。
-     * @param binding 视频轨道对应的显示或交互绑定。
+     * @param track The video track to display or bind.
+     * @param binding The track's display or interaction binding.
      */
     fun register(
         track: RealtimeVideoTrack,
-        binding: VideoRenderBinding
+        binding: VideoRenderBinding,
     ) {
         bindings[track] = binding
     }
 
     /**
-     * 移除视频轨道的显示或交互绑定。
+     * Removes a track's display or interaction binding.
      *
-     * @param track 需要显示或绑定的视频轨道。
+     * @param track The video track to display or bind.
      */
     fun unregister(
-        track: RealtimeVideoTrack
+        track: RealtimeVideoTrack,
     ) {
         bindings.remove(track)
     }
 
     /**
-     * 查询视频轨道对应的显示或交互绑定。
+     * Returns a track's display or interaction binding.
      *
-     * @param track 需要显示或绑定的视频轨道。
-     * @return 轨道对应的视频显示绑定；未注册时为 null。
+     * @param track The video track to display or bind.
+     * @return The display binding, or null if unregistered.
      */
     fun binding(
-        track: RealtimeVideoTrack
+        track: RealtimeVideoTrack,
     ): VideoRenderBinding? = bindings[track]
 }

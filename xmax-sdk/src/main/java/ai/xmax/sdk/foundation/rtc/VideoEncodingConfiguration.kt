@@ -11,57 +11,58 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * RTC 主视频流编码参数。
+ * Encoding settings for the primary RTC video stream.
  */
 internal data class VideoEncodingConfiguration(
     /**
-     * 画面宽度，单位为像素。
+     * The frame width, in pixels.
      */
     val width: Int,
 
     /**
-     * 画面高度，单位为像素。
+     * The frame height, in pixels.
      */
     val height: Int,
 
     /**
-     * 视频帧率，单位为 fps。
+     * The video frame rate, in fps.
      */
     val frameRate: Int,
 
     /**
-     * 最低编码码率，单位为 kbps；默认值为 `0`。
+     * The minimum encoder bitrate, in kbps; defaults to 0.
      */
     val minimumBitrate: Int = 0,
 
     /**
-     * 最高编码码率，单位为 kbps。
+     * The maximum encoder bitrate, in kbps.
      */
     val maximumBitrate: Int = -1,
 
     /**
-     * 带宽不足时优先保帧率或保画质的编码策略；默认值为 `EncoderPreference.MAINTAIN_FRAMERATE`。
+     * The frame-rate or image-quality preference under bandwidth limits; defaults to
+     * `EncoderPreference.MAINTAIN_FRAMERATE`.
      */
     val encoderPreference: EncoderPreference = EncoderPreference.MAINTAIN_FRAMERATE,
 ) {
 
     /**
-     * 网络受限时上行编码保帧率或保画质的偏好。
+     * The uplink encoder's preference under limited bandwidth.
      */
     enum class EncoderPreference {
 
         /**
-         * 由 RTC 自动选择编码质量与帧率的取舍。
+         * Allows RTC to balance frame rate and image quality automatically.
          */
         AUTO,
 
         /**
-         * 带宽受限时优先维持视频帧率。
+         * Prioritizes frame rate under bandwidth limits.
          */
         MAINTAIN_FRAMERATE,
 
         /**
-         * 带宽受限时优先维持单帧画质。
+         * Prioritizes per-frame quality under bandwidth limits.
          */
         MAINTAIN_QUALITY,
     }

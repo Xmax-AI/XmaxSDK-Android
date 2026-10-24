@@ -13,16 +13,16 @@ package ai.xmax.sdk.stream.encoding
 import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
- * 定义实时视频编码参数的配置能力。
+ * The realtime encoder configuration capability.
  */
 internal interface EncodingControlling {
 
     /**
-     * 校验并应用实时视频编码格式。
+     * Validates and applies a realtime video encoding format.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
     fun configure(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     )
 }

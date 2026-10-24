@@ -11,26 +11,26 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * RTC 房间加入参数。
+ * Parameters for joining an RTC room.
  */
 internal data class RoomJoinConfiguration(
     /**
-     * RTC 房间标识。
+     * The RTC room identifier.
      */
     val roomId: String,
 
     /**
-     * 房间中的业务用户标识。
+     * The room's business user identifier.
      */
     val userId: String,
 
     /**
-     * RTC 进房鉴权 Token。
+     * The RTC room authentication token.
      */
     val token: String,
 
     /**
-     * RTC 应用标识，不是应用证书或房间 Token；默认值为 `RtcEngineManager.DEFAULT_APP_ID`。
+     * The RTC App ID, not an App Certificate or token; defaults to `RtcEngineManager.DEFAULT_APP_ID`.
      */
     val appId: String = RtcEngineManager.DEFAULT_APP_ID,
 )

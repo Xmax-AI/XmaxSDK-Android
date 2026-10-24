@@ -13,39 +13,40 @@ package ai.xmax.sdk.stream.quality
 import android.content.Context
 
 /**
- * 按 RTC 厂商、模型及方向保存一小时内成功提交的档位；无有效记录时使用 L2。
+ * Retains successful levels for one hour by RTC vendor, model, and direction; defaults to L1 without a valid
+ * record.
  */
 internal class QualityHistory(
     /**
-     * 根据方向键读取历史档位的函数。
+     * The function reading a direction's saved quality record.
      */
     private val readValue: (String) -> Entry? = { null },
 
     /**
-     * 保存方向键对应的历史档位和时间的函数。
+     * The function saving a direction's quality level and timestamp.
      */
     private val writeValue: (String, Entry) -> Unit = { _, _ -> },
 
     /**
-     * 返回 Unix 毫秒时间的函数，用于判断历史记录是否过期。
+     * The Unix millisecond clock used to expire history.
      */
     private val now: () -> Long = System::currentTimeMillis,
 ) {
 
     /**
-     * 按上下行方向保存的历史档位缓存。
+     * The cached history records by direction.
      */
     private val values = mutableMapOf<String, Entry>()
 
     /**
-     * 读取指定方向的历史档位；记录缺失、过期或无效时返回 L2。
+     * Reads a direction's history, returning L1 if absent, expired, or invalid.
      *
-     * @param downlink true 操作下行档位，false 操作上行档位。
-     * @return 有效历史档位；记录缺失或过期时为 L2。
+     * @param downlink True for downlink, false for uplink.
+     * @return The valid saved level, or L1 if absent or expired.
      */
     @Synchronized
     fun read(
-        downlink: Boolean
+        downlink: Boolean,
     ): Int {
         val key = if (downlink) "downlink" else "uplink"
         val entry = values[key] ?: runCatching { readValue(key) }.getOrNull() ?: return QualityTiers.INITIAL_LEVEL
@@ -58,72 +59,93 @@ internal class QualityHistory(
     }
 
     /**
-     * 保存指定方向已应用成功的档位，并从当前时间起计算一小时有效期。
+     * Saves a successfully applied level with a one-hour lifetime from now.
      *
-     * @param downlink true 操作下行档位，false 操作上行档位。
-     * @param level 需要应用或保存的质量档位，1 为最高档。
+     * @param downlink True for downlink, false for uplink.
+     * @param level The quality level to apply or retain; 1 is highest.
      */
     @Synchronized
     fun write(
         downlink: Boolean,
-        level: Int
+        level: Int,
     ) {
         if (level !in 1..QualityTiers.percentages.size) return
         val key = if (downlink) "downlink" else "uplink"
-        val entry = Entry(level, now())
+        val entry = Entry(
+            level,
+            now(),
+        )
         values[key] = entry
-        runCatching { writeValue(key, entry) }
+        runCatching { writeValue(
+            key,
+            entry,
+        ) }
     }
 
     /**
-     * 历史档位及其保存时间，时间单位为 Unix 毫秒。
+     * A quality history record and its Unix millisecond timestamp.
      */
     data class Entry(
         /**
-         * 需要应用或保存的质量档位，1 为最高档。
+         * The quality level to apply or retain; 1 is highest.
          */
         val level: Int,
 
         /**
-         * 成功保存档位时的 Unix 毫秒时间。
+         * The Unix millisecond timestamp when the level was saved.
          */
-        val savedAt: Long
+        val savedAt: Long,
     )
 
     /**
-     * 历史画质档位的存储入口与有效期。
+     * The quality history persistence and expiration settings.
      */
     companion object {
 
         /**
-         * 历史画质档位的最长保留时间，单位为毫秒。
+         * The maximum history age, in milliseconds.
          */
         private const val EXPIRATION_MILLIS = 60 * 60 * 1000L
 
         /**
-         * 创建按 RTC 厂商与模型隔离的本地档位存储。
+         * Creates local quality history isolated by RTC vendor and model.
          *
-         * @param context 访问 Android 系统服务或媒体资源所需的上下文。
-         * @param model 用于确定服务端能力、地址及输入规格的模型。
-         * @return 按模型和上下行方向隔离的历史档位存储。
+         * @param context The Android context used for system services and media resources.
+         * @param model The model defining server capabilities and input constraints.
+         * @return History isolated by model and transmission direction.
          */
         fun create(
             context: Context,
-            model: String
+            model: String,
         ): QualityHistory = runCatching {
-            val preferences = context.applicationContext.getSharedPreferences("xmax_quality_v1", Context.MODE_PRIVATE)
+            val preferences = context.applicationContext.getSharedPreferences(
+                "xmax_quality_v1",
+                Context.MODE_PRIVATE,
+            )
             val prefix = "agora:$model:"
             QualityHistory(
                 readValue = { direction ->
                     Entry(
-                        level = preferences.getInt(prefix + direction, QualityTiers.INITIAL_LEVEL),
-                        savedAt = preferences.getLong(prefix + direction + ":saved_at", 0L),
+                        level = preferences.getInt(
+                            prefix + direction,
+                            QualityTiers.INITIAL_LEVEL,
+                        ),
+                        savedAt = preferences.getLong(
+                            prefix + direction + ":saved_at",
+                            0L,
+                        ),
                     )
                 },
                 writeValue = { direction, entry ->
                     preferences.edit()
-                        .putInt(prefix + direction, entry.level)
-                        .putLong(prefix + direction + ":saved_at", entry.savedAt)
+                        .putInt(
+                            prefix + direction,
+                            entry.level,
+                        )
+                        .putLong(
+                            prefix + direction + ":saved_at",
+                            entry.savedAt,
+                        )
                         .apply()
                 },
             )

@@ -18,49 +18,51 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * 状态通知异步派发到主线程，远端帧使用独立后台串行队列；隔离接入方异常。
- * 排队时捕获注册版本，执行前再次校验，使已替换或注销监听器的待执行通知失效。
+ * Dispatches state notifications asynchronously on the main thread and remote frames on a separate serial
+ * background queue.
+ * Queued notifications are discarded if their listener registration has changed before delivery. App callback
+ * failures are isolated.
  *
- * @param dispatcher 派发主线程通知的协程调度器；默认值为 `Dispatchers.Main`。
+ * @param dispatcher The dispatcher for main-thread notifications; defaults to `Dispatchers.Main`.
  */
 internal class RealtimeCallbacks(
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
 
     /**
-     * 生命周期与 Manager 一致，运行时重建后仍使用同一串行队列。
+     * The serial queue shared across runtime recreation within this manager's lifetime.
      */
     val remoteVideoFrames: RealtimeVideoFrameDispatcher = RealtimeVideoFrameDispatcher(),
 ) {
 
     /**
-     * 回调注册的并发保护。
+     * The lock protecting callback registrations.
      */
     private val lock = Any()
 
     /**
-     * 状态通知的派发作用域。
+     * The scope for state notifications.
      */
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     /**
-     * 状态监听器及其注册版本。
+     * The state listener and its registration revision.
      */
     private var stateListener: RealtimeStateListener? = null
 
     /**
-     * 状态通知版本，用于丢弃已过期的回调。
+     * The revision used to discard outdated state notifications.
      */
     private var stateVersion = 0L
 
     /**
-     * 替换注册并排队发送当前快照；传 null 时只注销。
+     * Replaces the listener and queues the current snapshot; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
-     * @param state 当前状态快照。
+     * @param listener The event listener, or null to unregister it.
+     * @param state The current state snapshot.
      */
     fun setStateListener(
         listener: RealtimeStateListener?,
-        state: RealtimeState
+        state: RealtimeState,
     ) = synchronized(lock) {
         stateVersion++
         stateListener = listener
@@ -68,12 +70,12 @@ internal class RealtimeCallbacks(
     }
 
     /**
-     * 将快照交给排队时的监听器，执行前再次验证该注册仍然有效。
+     * Delivers a snapshot only if its captured listener registration is still current.
      *
-     * @param state 当前状态快照。
+     * @param state The current state snapshot.
      */
     fun state(
-        state: RealtimeState
+        state: RealtimeState,
     ) = synchronized(lock) {
         val version = stateVersion
         val listener = stateListener ?: return@synchronized
@@ -84,16 +86,18 @@ internal class RealtimeCallbacks(
     }
 
     /**
-     * 隔离接入方回调抛出的异常，并记录错误，保持后续通知可用。
+     * Logs and isolates app callback failures so later notifications remain deliverable.
      *
-     * @param action 需要执行的操作。
+     * @param action The operation to perform.
      */
     private inline fun protect(
-        action: () -> Unit
+        action: () -> Unit,
     ) {
         try {
             action()
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             XmaxLogger.realtime.warn(
                 message = { "Realtime listener failed: ${ErrorMessageFormatter.format(error)}" },
             )

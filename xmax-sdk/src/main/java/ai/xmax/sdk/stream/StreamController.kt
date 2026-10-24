@@ -56,74 +56,74 @@ import kotlinx.coroutines.withTimeout
 import kotlin.math.roundToInt
 
 /**
- * 统一协调 RTC 房间、媒体流、编码和质量事件。
+ * Coordinates RTC rooms, media streams, encoding, and quality events.
  */
 internal class StreamController(
     /**
-     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     * The manager for RTC capture, publication, subscription, and rendering.
      */
     private val rtcManager: RtcManaging,
 
     /**
-     * 负责 RTC 进房和业务信令的控制器。
+     * The controller for room membership and business signaling.
      */
     private val roomController: RoomControlling = RoomController(rtcManager),
 
     /**
-     * 负责计算并应用上行编码参数的控制器。
+     * The controller resolving and applying uplink encoding settings.
      */
     private val encodingController: EncodingControlling = EncodingController(rtcManager),
 
     /**
-     * 负责网络质量统计及自动档位建议的控制器。
+     * The controller providing network statistics and automatic quality samples.
      */
     private val qualityController: QualityControlling = QualityController(rtcManager),
 
     /**
-     * 接收媒体错误的回调。
+     * The media failure callback.
      */
     private val errorListener: (XmaxError) -> Unit = {},
 
     /**
-     * 当前远端流变化时的回调；null 流表示没有活动结果流。
+     * The remote stream change callback; null indicates no active result stream.
      */
     private val remoteStreamListener: (RemoteStream?) -> Unit = {},
 
     /**
-     * 生成启动的等待超时配置；默认值为 `StreamGenerationTiming.live`。
+     * The generation startup timeout configuration; defaults to `StreamGenerationTiming.live`.
      */
     private val generationTiming: StreamGenerationTiming = StreamGenerationTiming.live,
 
     /**
-     * 处理生成结果确认及完成通知的协程作用域。
+     * The scope handling generation confirmation and completion.
      */
     private val generationScope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default,
     ),
 
     /**
-     * 执行视图绑定和显示更新的协程调度器；默认值为 `Dispatchers.Main.immediate`。
+     * The dispatcher for view binding and display updates; defaults to `Dispatchers.Main.immediate`.
      */
     private val renderDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : StreamControlling, RtcEventListener {
 
     /**
-     * 发布订阅状态与 RTC 事件处理的并发保护。
+     * The lock protecting publication and subscription state.
      */
     private val stateLock = Any()
 
     /**
-     * 串行处理生成事件与完成通知的锁。
+     * The mutex serializing generation events and completion notification.
      */
     private val eventGate = ReentrantLock()
 
     /**
-     * 当前房间、媒体发布和生成任务状态。
+     * The current room and publication state.
      */
     private var state = State()
 
     /**
-     * 远端结果音频的播放音量。
+     * The playback volume for remote generation audio.
      */
     private val remoteAudioVolume = AtomicInteger(100)
 
@@ -132,94 +132,102 @@ internal class StreamController(
     }
 
     /**
-     * 更新上行视频的尺寸、帧率和编码码率配置。
+     * Updates uplink dimensions, frame rate, and encoder bitrate.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
     override fun setVideoEncoderConfig(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     ) {
         encodingController.configure(videoFormat)
     }
 
     /**
-     * 接收自动调档使用的网络质量样本，不占用公共监听器。
+     * Receives internal adaptation samples without occupying the public network listener.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     override fun setAdaptiveQualityListener(
-        listener: ((RealtimeNetworkQuality) -> Unit)?
+        listener: ((RealtimeNetworkQuality) -> Unit)?,
     ) {
         qualityController.setAdaptiveQualityListener(listener)
     }
 
     /**
-     * 设置上行视频统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
+     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
+     * disconnection.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     override fun setUplinkVideoStatisticsListener(
-        listener: UplinkVideoStatisticsListener?
+        listener: UplinkVideoStatisticsListener?,
     ) {
         qualityController.setUplinkVideoStatisticsListener(listener)
     }
 
     /**
-     * 设置下行结果流统计监听器，回调在主线程执行；传 null 注销，断开连接后仍保留监听器。
+     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
+     * disconnection.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     override fun setDownlinkVideoStatisticsListener(
-        listener: DownlinkVideoStatisticsListener?
+        listener: DownlinkVideoStatisticsListener?,
     ) {
         qualityController.setDownlinkVideoStatisticsListener(listener)
     }
 
     /**
-     * 设置 RTC 网络质量监听器；传 null 注销。
+     * Sets the RTC network quality listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     override fun setNetworkQualityListener(
-        listener: RealtimeNetworkQualityListener?
+        listener: RealtimeNetworkQualityListener?,
     ) {
         qualityController.setNetworkQualityListener(listener)
     }
 
     /**
-     * 设置 RTC 性能告警监听器；传 null 注销。
+     * Sets the RTC performance alarm listener; null unregisters it.
      *
-     * @param listener 接收对应事件的监听器；null 表示注销。
+     * @param listener The event listener, or null to unregister it.
      */
     override fun setPerformanceAlarmListener(
-        listener: RealtimePerformanceAlarmListener?
+        listener: RealtimePerformanceAlarmListener?,
     ) {
         qualityController.setPerformanceAlarmListener(listener)
     }
 
     /**
-     * 设置当前结果流的音频播放音量，范围为 0 到 1，并保留供后续订阅使用。
+     * Sets result audio volume from 0 to 1 and retains it for future subscriptions.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     override fun setRemoteAudioVolume(
-        volume: Float
+        volume: Float,
     ) {
-        val rtcVolume = (volume * 100f).roundToInt().coerceIn(0, 100)
+        val rtcVolume = (volume * 100f).roundToInt().coerceIn(
+            0,
+            100,
+        )
         val userIds = synchronized(stateLock) {
             state.subscribedRemoteAudioUserIds.toList()
         }
-        userIds.forEach { rtcManager.setRemoteAudioVolume(rtcVolume, it) }
+        userIds.forEach { rtcManager.setRemoteAudioVolume(
+            rtcVolume,
+            it,
+        ) }
         remoteAudioVolume.set(rtcVolume)
     }
 
     /**
-     * 加入 RTC 房间，按输入来源发布本地媒体并启用对应上行统计。
+     * Joins RTC, publishes media according to its source, and enables appropriate uplink statistics.
      *
-     * @param connection 服务端返回的 RTC 房间、用户、鉴权及结果流信息。
-     * @param includeLocalAudio 是否同时发布本地音频。
-     * @param publishLocalMedia 是否发布本地媒体；服务端直接读取网络视频时为 false。
-     * @param ensureActive 检查当前操作是否仍可继续的函数，取消时应抛出异常。
+     * @param connection The server-provided RTC room, user, credentials, and result publisher.
+     * @param includeLocalAudio Whether to publish local audio alongside video.
+     * @param publishLocalMedia Whether to publish local media; false for server-read video.
+     * @param ensureActive Checks operation validity and throws on cancellation.
      */
     override suspend fun connect(
         connection: RealtimeSessionConnection,
@@ -228,9 +236,15 @@ internal class StreamController(
         ensureActive: () -> Unit,
     ) {
         try {
-            // 入房完成时远端发布事件即可到达，必须先准备好订阅所需的房间信息。
-            configureRoom(connection.roomId, connection.botName)
-            roomController.join(connection, ensureActive)
+            // Prepare room identity before joining because remote publication can arrive as soon as entry completes.
+            configureRoom(
+                connection.roomId,
+                connection.botName,
+            )
+            roomController.join(
+                connection,
+                ensureActive,
+            )
             ensureActive()
             if (publishLocalMedia) {
                 val timing = currentCoroutineContext()[RealtimeTiming.Attempt]
@@ -239,44 +253,70 @@ internal class StreamController(
                 timing?.mark(RealtimeTiming.Stage.PUBLICATION_END)
             }
             qualityController.setUplinkVideoStatisticsEnabled(publishLocalMedia)
-        } catch (error: Throwable) {
-            cleanupAfterFailure(error, { resetStream() }, { roomController.leave() })
+        } catch (
+            error: Throwable,
+        ) {
+            cleanupAfterFailure(
+                error,
+                { resetStream() },
+                { roomController.leave() },
+            )
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * 解除媒体发布、远端订阅和生成等待，并离开当前 RTC 房间。
+     * Clears local publication, remote subscriptions, and generation waits, then leaves the room.
      */
     override suspend fun disconnect() {
-        cleanupResources({ resetStream() }, { roomController.leave() })
+        cleanupResources(
+            { resetStream() },
+            { roomController.leave() },
+        )
     }
 
     /**
-     * 当前生成对外部输入帧的需求。
+     * Whether the current generation requests external input frames.
      */
     internal val isRequestingExternalFrames: Boolean
         get() = synchronized(stateLock) { state.generationTask != null }
 
     /**
-     * 在生成需要输入帧时向 RTC 提交本地视频帧。
+     * Submits local video to RTC while generation requests input frames.
      *
-     * @param frame 待处理、显示或提交的视频帧。
+     * @param frame The video frame to process, display, or submit.
      */
     override fun pushLocalVideoFrame(
-        frame: VideoFrame
+        frame: VideoFrame,
     ) {
         if (!isRequestingExternalFrames) return
         try {
-            rtcManager.pushExternalVideoFrame(frame, null)
-        } catch (error: Throwable) {
+            rtcManager.pushExternalVideoFrame(
+                frame,
+                null,
+            )
+        } catch (
+            error: Throwable,
+        ) {
             XmaxLogger.rtc.error(
                 message = {
                     "推送 RTC 外部视频帧失败 (Failed to Push External RTC Video Frame)\n" +
-                        "├─ ${XmaxLogger.localized("格式：", "Format: ")}${frame.format.pixelFormat.value}\n" +
-                        "├─ ${XmaxLogger.localized("分辨率：", "Resolution: ")}${frame.format.width} × ${frame.format.height}\n" +
-                        "├─ ${XmaxLogger.localized("时间戳：", "Timestamp: ")}${frame.timestampUs} us\n" +
-                        "└─ ${XmaxLogger.localized("原因：", "Reason: ")}${ErrorMessageFormatter.format(error)}"
+                        "├─ ${XmaxLogger.localized(
+                            "格式：",
+                            "Format: ",
+                        )}${frame.format.pixelFormat.value}\n" +
+                        "├─ ${XmaxLogger.localized(
+                            "分辨率：",
+                            "Resolution: ",
+                        )}${frame.format.width} × ${frame.format.height}\n" +
+                        "├─ ${XmaxLogger.localized(
+                            "时间戳：",
+                            "Timestamp: ",
+                        )}${frame.timestampUs} us\n" +
+                        "└─ ${XmaxLogger.localized(
+                            "原因：",
+                            "Reason: ",
+                        )}${ErrorMessageFormatter.format(error)}"
                 },
             )
             throw error
@@ -284,27 +324,28 @@ internal class StreamController(
     }
 
     /**
-     * 在本地音频已发布时向 RTC 提交音频帧。
+     * Submits audio to RTC while local audio is published.
      *
-     * @param frame 待播放或提交的 PCM 音频帧。
+     * @param frame The PCM audio frame to play or submit.
      */
     override fun pushLocalAudioFrame(
-        frame: AudioFrame
+        frame: AudioFrame,
     ) {
         if (!synchronized(stateLock) { state.localAudioPublished }) return
         rtcManager.pushExternalAudioFrame(frame)
     }
 
     /**
-     * 启动生成并等待结果流确认；回传规格缺省时沿用生成规格，上传码率字段不影响下行。
+     * Starts generation and waits for result confirmation; output dimensions default to the generation
+     * format, and uplink bitrate fields do not control downlink.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`。
-     * @param targetVideoFormat 下行输出的视频规格。
-     * @param paddingContain 是否让服务端等比适配输入并在输出时移除补边。
-     * @return 生成结果流确认时完成的等待器，启动失败时以异常结束。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param context The generation prompt and reference media.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`.
+     * @param targetVideoFormat The downlink output format.
+     * @param paddingContain Whether the server fits input and removes padding from output.
+     * @return A waiter completed on result confirmation or failed if startup fails.
      */
     override suspend fun beginGeneration(
         taskId: String,
@@ -324,13 +365,25 @@ internal class StreamController(
         val timing = currentCoroutineContext()[RealtimeTiming.Attempt]
         val waiter = synchronized(stateLock) {
             if (state.roomId.isEmpty()) {
-                throw XmaxError(XmaxErrorCode.RTC_ERROR, "RTC room is not configured")
+                throw XmaxError(
+                    XmaxErrorCode.RTC_ERROR,
+                    "RTC room is not configured",
+                )
             }
             if (state.generationTask != null) {
-                throw XmaxError(XmaxErrorCode.RTC_ERROR, "Realtime generation is already active")
+                throw XmaxError(
+                    XmaxErrorCode.RTC_ERROR,
+                    "Realtime generation is already active",
+                )
             }
-            GenerationWaiter(normalizedTaskId, timing).also {
-                state.generationTask = GenerationTask(normalizedTaskId, context.referenceVideo != null)
+            GenerationWaiter(
+                normalizedTaskId,
+                timing,
+            ).also {
+                state.generationTask = GenerationTask(
+                    normalizedTaskId,
+                    context.referenceVideo != null,
+                )
                 state.generationWaiter = it
             }
         }
@@ -338,36 +391,59 @@ internal class StreamController(
             delay(generationTiming.timeoutMillis)
             rejectGenerationStart(
                 normalizedTaskId,
-                XmaxError(XmaxErrorCode.TIMEOUT, "Realtime generation start timed out"),
+                XmaxError(
+                    XmaxErrorCode.TIMEOUT,
+                    "Realtime generation start timed out",
+                ),
             )
         }
         try {
             timing?.beginSignal(normalizedTaskId)
-            roomController.startGeneration(normalizedTaskId, videoFormat, context, faceRestoration, targetVideoFormat, paddingContain)
+            roomController.startGeneration(
+                normalizedTaskId,
+                videoFormat,
+                context,
+                faceRestoration,
+                targetVideoFormat,
+                paddingContain,
+            )
             withTimeout(generationTiming.timeoutMillis) { rtcManager.awaitPendingMessages() }
             synchronized(stateLock) { waiter.signalSent = true }
-            // 声网机器人可能在 start 之前已发布，复用订阅并重新等待本轮首帧。
+            // The Agora bot may publish before start; reuse its subscription but await a fresh first frame for this task.
             withContext(renderDispatcher) {
                 eventGate.withLock {
                     val users = synchronized(stateLock) { state.subscribedRemoteUserIds.toList() }
-                    users.forEach { confirmRemoteStream(RemoteStream(state.roomId, it)) }
+                    users.forEach { confirmRemoteStream(
+                        RemoteStream(
+                            state.roomId,
+                            it,
+                        ),
+                    ) }
                 }
             }
             return waiter.result
-        } catch (error: Throwable) {
-            rejectGenerationStart(normalizedTaskId, error)
-            cleanupAfterFailure(error, { stopGeneration(normalizedTaskId) })
+        } catch (
+            error: Throwable,
+        ) {
+            rejectGenerationStart(
+                normalizedTaskId,
+                error,
+            )
+            cleanupAfterFailure(
+                error,
+                { stopGeneration(normalizedTaskId) },
+            )
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * 启用网络视频完成回调，满足生成首帧和服务端完成条件后通知。
+     * Enables network video completion notification after both the server completion event and first frame.
      *
-     * @param onFinish 网络视频任务完成的通知；null 表示不接收完成通知。
+     * @param onFinish The completion callback for the network video task, or null to omit it.
      */
     override fun activateNetworkVideoCompletion(
-        onFinish: (() -> Unit)?
+        onFinish: (() -> Unit)?,
     ) {
         val task = synchronized(stateLock) {
             state.generationTask?.takeIf { it.isNetworkVideo && !it.completionCancelled }?.also {
@@ -379,14 +455,14 @@ internal class StreamController(
     }
 
     /**
-     * 接收房间内远端用户的结构化任务通知。
+     * Receives structured task notifications from remote room users.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param message 待发送或记录的消息文本。
+     * @param stream The remote stream identified by room and user.
+     * @param message The message to send or log.
      */
     override fun onUserMessageReceived(
         stream: RemoteStream,
-        message: String
+        message: String,
     ) {
         val event = runCatching { org.json.JSONObject(message) }.getOrNull() ?: return
         if (event.optString("event") != "video_stopped") return
@@ -401,12 +477,12 @@ internal class StreamController(
     }
 
     /**
-     * 为当前网络视频任务安排完成通知。
+     * Schedules completion notification for the current network video task.
      *
-     * @param task 当前生成任务状态。
+     * @param task The current generation task state.
      */
     private fun scheduleNetworkVideoCompletion(
-        task: GenerationTask
+        task: GenerationTask,
     ) {
         val shouldSchedule = synchronized(stateLock) {
             if (state.generationTask !== task || task.completionCancelled || !task.finished || !task.completionReady ||
@@ -418,7 +494,7 @@ internal class StreamController(
         }
         if (!shouldSchedule) return
         generationScope.launch(renderDispatcher) {
-            // 主线程执行前再次核对任务，避免关闭或重试后的排队通知串入新任务。
+            // Recheck task ownership on the main thread so queued notifications cannot reach a task created after close or retry.
             val callback = synchronized(stateLock) {
                 task.onFinish.takeIf { state.generationTask === task && !task.completionCancelled }
             }
@@ -429,7 +505,7 @@ internal class StreamController(
     }
 
     /**
-     * 订阅当前结果流的音频并应用远端播放音量。
+     * Subscribes to result audio and applies remote playback volume.
      */
     override fun activateRemoteAudio() {
         eventGate.withLock {
@@ -444,13 +520,13 @@ internal class StreamController(
     }
 
     /**
-     * 更新当前任务的生成条件，不重新创建服务端会话。
+     * Updates the current task's conditions without creating another server session.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param context 生成提示词及参考素材。
-     * @param faceRestoration 是否启用人脸修复，对应生成参数 `face_replace`。
-     * @param paddingContain 是否让服务端等比适配输入并在输出时移除补边。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param context The generation prompt and reference media.
+     * @param faceRestoration Whether to enable face restoration through `face_replace`.
+     * @param paddingContain Whether the server fits input and removes padding from output.
      */
     override suspend fun updateGeneration(
         taskId: String,
@@ -459,16 +535,22 @@ internal class StreamController(
         faceRestoration: Boolean,
         paddingContain: Boolean,
     ) {
-        roomController.changeGenerationCondition(taskId, videoFormat, context, faceRestoration, paddingContain)
+        roomController.changeGenerationCondition(
+            taskId,
+            videoFormat,
+            context,
+            faceRestoration,
+            paddingContain,
+        )
     }
 
     /**
-     * 发送停止指定生成任务的信令。
+     * Sends a stop signal for the generation task.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
+     * @param taskId The identifier associating the generation request with its result stream.
      */
     override suspend fun stopGeneration(
-        taskId: String
+        taskId: String,
     ) {
         val result = stopStreamGeneration(taskId) ?: return
         if (taskId.isNotEmpty() && result.taskId.isEmpty()) return
@@ -476,11 +558,11 @@ internal class StreamController(
     }
 
     /**
-     * 更新当前任务的回传尺寸与码率；下行码率按固定 24 fps 估算。
+     * Updates downlink dimensions and bitrate, estimating bitrate at a fixed 24 fps.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param targetVideoFormat 下行输出的视频规格。
-     * @param ensureActive 检查当前操作是否仍可继续的函数，取消时应抛出异常。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param targetVideoFormat The downlink output format.
+     * @param ensureActive Checks operation validity and throws on cancellation.
      */
     override suspend fun updateDownlinkVideoResolution(
         taskId: String,
@@ -495,33 +577,40 @@ internal class StreamController(
                     throw CancellationException("Downlink video update requires the current active generation")
                 }
 
-                roomController.changeTargetSize(taskId, targetVideoFormat, ensureActive)
+                roomController.changeTargetSize(
+                    taskId,
+                    targetVideoFormat,
+                    ensureActive,
+                )
             }
         }
     }
 
     /**
-     * 向服务端发送当前任务的媒体归一化坐标轨迹。
+     * Submits media-normalized trajectories for the current task.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param points 媒体归一化坐标中的轨迹点集合，范围为 [0, 1]。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param points Normalized media trajectory points from 0 to 1.
      */
     override suspend fun sendTracks(
         taskId: String,
-        points: List<RealtimePoint>
+        points: List<RealtimePoint>,
     ) {
-        roomController.sendTracks(taskId, points)
+        roomController.sendTracks(
+            taskId,
+            points,
+        )
     }
 
     /**
-     * 处理指定房间内远端用户的视频发布状态变化，避免旧房间事件串入新连接。
+     * Handles remote publication changes only for the current room, excluding stale room events.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param published 远端视频是否处于发布状态。
+     * @param stream The remote stream identified by room and user.
+     * @param published Whether the remote video is published.
      */
     override fun onRemoteVideoPublished(
         stream: RemoteStream,
-        published: Boolean
+        published: Boolean,
     ) {
         eventGate.withLock {
             val normalizedUserId = stream.userId.trim()
@@ -552,38 +641,38 @@ internal class StreamController(
     }
 
     /**
-     * 报告当前 RTC 房间已不可继续使用的终止故障。
+     * Reports an unrecoverable failure in the current RTC room.
      *
-     * @param roomId RTC 房间标识。
-     * @param error 本次操作失败的异常或 SDK 错误。
+     * @param roomId The RTC room identifier.
+     * @param error The operation failure or SDK error.
      */
     override fun onRoomTerminated(
         roomId: String,
-        error: XmaxError
+        error: XmaxError,
     ) {
         if (synchronized(stateLock) { state.roomId == roomId }) reportError(error)
     }
 
     /**
-     * 处理远端视频流携带的 SEI 消息。
+     * Handles SEI carried by remote video.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
-     * @param message 待发送或记录的消息文本。
+     * @param stream The remote stream identified by room and user.
+     * @param message The message to send or log.
      */
     override fun onSeiMessageReceived(
         stream: RemoteStream,
-        message: String
+        message: String,
     ) {
-        // 声网按目标机器人发布确认，不使用 SEI 判断任务就绪。
+        // Agora readiness follows the target bot's publication, without SEI task matching.
     }
 
     /**
-     * 确认当前任务的结果流已可用，忽略其他任务的确认。
+     * Confirms result-stream readiness for the current task, ignoring other tasks.
      *
-     * @param stream 由房间和用户标识确定的远端媒体流。
+     * @param stream The remote stream identified by room and user.
      */
     private fun confirmRemoteStream(
-        stream: RemoteStream
+        stream: RemoteStream,
     ) {
         eventGate.withLock {
             val taskId: String
@@ -608,26 +697,34 @@ internal class StreamController(
                     if (state.generationTask?.id == taskId) state.activeRemoteStream = stream
                 }
                 resolveGenerationStart(taskId)
-            } catch (error: Throwable) {
-                if (waiter != null) rejectGenerationStart(taskId, XmaxError.from(error))
+            } catch (
+                error: Throwable,
+            ) {
+                if (waiter != null) rejectGenerationStart(
+                    taskId,
+                    XmaxError.from(error),
+                )
                 else reportError(XmaxError.from(error))
             }
         }
     }
 
     /**
-     * 设置订阅和信令路由使用的房间与机器人标识。
+     * Sets the room and bot identities used by subscription and signaling.
      *
-     * @param roomId RTC 房间标识。
-     * @param botName 生成结果发布者的用户标识。
+     * @param roomId The RTC room identifier.
+     * @param botName The user publishing generated results.
      */
     private fun configureRoom(
         roomId: String,
-        botName: String?
+        botName: String?,
     ) {
         val normalizedRoomId = roomId.trim()
         if (normalizedRoomId.isEmpty()) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "RTC room ID cannot be empty")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "RTC room ID cannot be empty",
+            )
         }
         synchronized(stateLock) {
             if (state.localVideoPublished || state.localAudioPublished ||
@@ -644,12 +741,12 @@ internal class StreamController(
     }
 
     /**
-     * 发布本地视频及可选音频，发布失败时撤销已完成的部分。
+     * Publishes local video and optional audio, rolling back partial publication on failure.
      *
-     * @param includeAudio 是否同时发布本地音频。
+     * @param includeAudio Whether to publish local audio.
      */
     private fun publishLocalStream(
-        includeAudio: Boolean
+        includeAudio: Boolean,
     ) {
         val currentState = synchronized(stateLock) { state.copy() }
         if (currentState.roomId.isEmpty()) {
@@ -669,7 +766,9 @@ internal class StreamController(
                 rtcManager.publishLocalAudio()
                 synchronized(stateLock) { state.localAudioPublished = true }
             }
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             if (publishedVideo) {
                 performCleanup(
                     "回滚 RTC 本地视频发布失败 " +
@@ -683,7 +782,7 @@ internal class StreamController(
     }
 
     /**
-     * 清空流状态并解除本地发布及远端订阅。
+     * Clears stream state, local publication, and remote subscriptions.
      */
     private suspend fun resetStream() {
         qualityController.setUplinkVideoStatisticsEnabled(false)
@@ -695,7 +794,10 @@ internal class StreamController(
             performCleanup(
                 "取消订阅 RTC 远端视频失败 (Failed to Unsubscribe RTC Remote Video)",
             ) {
-                rtcManager.subscribeRemoteVideo(it, false)
+                rtcManager.subscribeRemoteVideo(
+                    it,
+                    false,
+                )
             }
         }
         if (previous.localAudioPublished) {
@@ -715,15 +817,15 @@ internal class StreamController(
     }
 
     /**
-     * 移除当前生成任务及其等待器，保留需要清理的资源快照。
+     * Removes the current task and waiter, retaining a cleanup snapshot.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @return 已停止任务需要清理的资源；无匹配任务时为 null。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @return Resources to clean up for the stopped task, or null without a matching task.
      */
     private suspend fun stopStreamGeneration(
-        taskId: String
+        taskId: String,
     ): StopResult? {
-        // 切换主线程清理画面前，先使排队中的完成通知失效。
+        // Invalidate queued completion notifications before dispatching display cleanup to the main thread.
         synchronized(stateLock) {
             state.generationTask?.takeIf { taskId.isEmpty() || it.id == taskId }?.let {
                 it.completionCancelled = true
@@ -731,7 +833,7 @@ internal class StreamController(
             }
         }
         return withContext(NonCancellable + renderDispatcher) {
-            // 在主线程先切回本地预览再清空远端画布；线程切换时不持有事件或渲染锁。
+            // Restore local preview before clearing the remote canvas on the main thread; do not hold event or rendering locks during dispatch.
             eventGate.withLock {
                 val result = synchronized(stateLock) {
                     val currentTaskId = state.generationTask?.id.orEmpty()
@@ -757,7 +859,10 @@ internal class StreamController(
                     performCleanup(
                         "取消订阅 RTC 远端音频失败 (Failed to Unsubscribe RTC Remote Audio)",
                     ) {
-                        rtcManager.subscribeRemoteAudio(it, false)
+                        rtcManager.subscribeRemoteAudio(
+                            it,
+                            false,
+                        )
                     }
                 }
                 clearRemoteStream()
@@ -767,45 +872,59 @@ internal class StreamController(
     }
 
     /**
-     * 订阅当前生成结果发布者的视频。
+     * Subscribes to video from the current result publisher.
      *
-     * @param userId 房间中的业务用户标识。
+     * @param userId The room's business user identifier.
      */
     private fun subscribeRemoteVideo(
-        userId: String
+        userId: String,
     ) {
         if (synchronized(stateLock) { userId in state.subscribedRemoteUserIds }) return
         try {
-            rtcManager.subscribeRemoteVideo(userId, true)
+            rtcManager.subscribeRemoteVideo(
+                userId,
+                true,
+            )
             synchronized(stateLock) { state.subscribedRemoteUserIds += userId }
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             val xmaxError = XmaxError.from(error)
             val taskId = synchronized(stateLock) { state.generationWaiter?.taskId }
-            if (taskId != null) rejectGenerationStart(taskId, xmaxError) else reportError(xmaxError)
+            if (taskId != null) rejectGenerationStart(
+                taskId,
+                xmaxError,
+            ) else reportError(xmaxError)
         }
     }
 
     /**
-     * 订阅当前生成结果发布者的音频。
+     * Subscribes to audio from the current result publisher.
      *
-     * @param userId 房间中的业务用户标识。
+     * @param userId The room's business user identifier.
      */
     private fun subscribeRemoteAudio(
-        userId: String
+        userId: String,
     ) {
         if (synchronized(stateLock) { userId in state.subscribedRemoteAudioUserIds }) return
-        rtcManager.setRemoteAudioVolume(remoteAudioVolume.get(), userId)
-        rtcManager.subscribeRemoteAudio(userId, true)
+        rtcManager.setRemoteAudioVolume(
+            remoteAudioVolume.get(),
+            userId,
+        )
+        rtcManager.subscribeRemoteAudio(
+            userId,
+            true,
+        )
         synchronized(stateLock) { state.subscribedRemoteAudioUserIds += userId }
     }
 
     /**
-     * 取消指定用户的远端音频订阅。
+     * Unsubscribes from a remote user's audio.
      *
-     * @param userId 房间中的业务用户标识。
+     * @param userId The room's business user identifier.
      */
     private fun unsubscribeRemoteAudio(
-        userId: String
+        userId: String,
     ) {
         val subscribed = synchronized(stateLock) {
             state.subscribedRemoteAudioUserIds.remove(userId)
@@ -814,18 +933,21 @@ internal class StreamController(
             performCleanup(
                 "取消订阅 RTC 远端音频失败 (Failed to Unsubscribe RTC Remote Audio)",
             ) {
-                rtcManager.subscribeRemoteAudio(userId, false)
+                rtcManager.subscribeRemoteAudio(
+                    userId,
+                    false,
+                )
             }
         }
     }
 
     /**
-     * 完成匹配任务的生成启动等待。
+     * Completes the matching task's generation startup waiter.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
+     * @param taskId The identifier associating the generation request with its result stream.
      */
     private fun resolveGenerationStart(
-        taskId: String
+        taskId: String,
     ) {
         val waiter = synchronized(stateLock) {
             state.generationWaiter?.takeIf { it.taskId == taskId }?.also {
@@ -837,14 +959,14 @@ internal class StreamController(
     }
 
     /**
-     * 以指定错误结束匹配任务的生成启动等待。
+     * Fails the matching task's startup waiter with the supplied error.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param error 本次操作失败的异常或 SDK 错误。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param error The operation failure or SDK error.
      */
     private fun rejectGenerationStart(
         taskId: String,
-        error: Throwable
+        error: Throwable,
     ) {
         val waiter = synchronized(stateLock) {
             state.generationWaiter?.takeIf { it.taskId == taskId }?.also {
@@ -856,7 +978,7 @@ internal class StreamController(
     }
 
     /**
-     * 清除当前结果流并通知渲染层解除绑定。
+     * Clears the result stream and asks Render to unbind it.
      */
     private fun clearRemoteStream() {
         qualityController.setDownlinkVideoStatisticsUser(null)
@@ -866,202 +988,208 @@ internal class StreamController(
                     message = {
                         "清理 RTC 远端生成流失败 " +
                             "(Failed to Clean Up RTC Remote Generation Stream)\n" +
-                            "└─ ${XmaxLogger.localized("原因：", "Reason: ")}${ErrorMessageFormatter.format(it)}"
+                            "└─ ${XmaxLogger.localized(
+                                "原因：",
+                                "Reason: ",
+                            )}${ErrorMessageFormatter.format(it)}"
                     },
                 )
             }
     }
 
     /**
-     * 执行清理并记录失败，避免清理异常阻断其他资源释放。
+     * Attempts cleanup and logs failures without preventing other resource release.
      *
-     * @param title 日志条目的说明标题。
-     * @param action 需要执行的操作。
+     * @param title The log entry title.
+     * @param action The operation to perform.
      */
     private inline fun performCleanup(
         title: String,
-        action: () -> Unit
+        action: () -> Unit,
     ) {
         runCatching(action).onFailure { error ->
             XmaxLogger.stream.error(
                 message = {
-                    "$title\n└─ ${XmaxLogger.localized("原因：", "Reason: ")}${ErrorMessageFormatter.format(error)}"
+                    "$title\n└─ ${XmaxLogger.localized(
+                        "原因：",
+                        "Reason: ",
+                    )}${ErrorMessageFormatter.format(error)}"
                 },
             )
         }
     }
 
     /**
-     * 报告当前媒体输入或生成任务的失败。
+     * Reports a failure in the current media input or generation task.
      *
-     * @param error 本次操作失败的异常或 SDK 错误。
+     * @param error The operation failure or SDK error.
      */
     private fun reportError(
-        error: XmaxError
+        error: XmaxError,
     ) {
         runCatching { errorListener(error) }
     }
 
     /**
-     * 保存控制器当前的生命周期或发布订阅状态。
+     * The controller's lifecycle and publication state.
      */
     private data class State(
         /**
-         * RTC 房间标识。
+         * The RTC room identifier.
          */
         var roomId: String = "",
 
         /**
-         * 生成结果发布者的用户标识。
+         * The user publishing generated results.
          */
         var botName: String = "",
 
         /**
-         * 本地视频是否已发布；默认值为 `false`。
+         * Whether local video is published; defaults to false.
          */
         var localVideoPublished: Boolean = false,
 
         /**
-         * 本地音频是否已发布；默认值为 `false`。
+         * Whether local audio is published; defaults to false.
          */
         var localAudioPublished: Boolean = false,
 
         /**
-         * 已订阅视频的远端用户标识集合。
+         * Remote users whose video is subscribed.
          */
         val subscribedRemoteUserIds: MutableSet<String> = mutableSetOf(),
 
         /**
-         * 已订阅音频的远端用户标识集合。
+         * Remote users whose audio is subscribed.
          */
         val subscribedRemoteAudioUserIds: MutableSet<String> = mutableSetOf(),
 
         /**
-         * 当前生成任务；null 表示没有正在生成的任务。
+         * The current task, or null without active generation.
          */
         var generationTask: GenerationTask? = null,
 
         /**
-         * 当前生成启动的等待器；null 表示没有等待中的启动。
+         * The startup waiter, or null when no start is pending.
          */
         var generationWaiter: GenerationWaiter? = null,
 
         /**
-         * 当前结果流；null 表示尚无活动结果流。
+         * The current result stream, or null if absent.
          */
         var activeRemoteStream: RemoteStream? = null,
     )
 
     /**
-     * 保存当前任务的生成类型及完成通知状态。
+     * The generation kind and completion state of the current task.
      */
     private class GenerationTask(
         /**
-         * 用于关联生成请求、信令与结果帧的任务标识。
+         * The identifier associating generation requests, signals, and result frames.
          */
         val id: String,
 
         /**
-         * 是否为服务端直接读取网络视频的生成任务。
+         * Whether this task reads network video directly on the server.
          */
-        val isNetworkVideo: Boolean
+        val isNetworkVideo: Boolean,
     ) {
 
         /**
-         * 网络视频任务的完成条件与通知状态。
+         * Whether the network video task is ready to deliver completion.
          */
         var finished = false
 
         /**
-         * 本次生成的完成通知是否已取消。
+         * Whether this generation's completion notification was cancelled.
          */
         var completionCancelled = false
 
         /**
-         * 是否已满足本次生成的完成条件。
+         * Whether this generation has met its completion conditions.
          */
         var completionReady = false
 
         /**
-         * 是否已安排本次生成的完成回调。
+         * Whether this generation's completion callback is scheduled.
          */
         var completionScheduled = false
 
         /**
-         * 本次生成结束后的回调。
+         * The generation completion callback.
          */
         var onFinish: (() -> Unit)? = null
     }
 
     /**
-     * 关联当前生成任务及其启动结果等待器。
+     * A generation task and its startup waiter.
      */
     private class GenerationWaiter(
         /**
-         * 用于关联本次生成请求和结果流的任务标识。
+         * The task identifier associating generation requests with result streams.
          */
         val taskId: String,
 
         /**
-         * 记录本次生成启动耗时的统计对象。
+         * The recorder for generation startup timing.
          */
-        val timing: RealtimeTiming.Attempt?
+        val timing: RealtimeTiming.Attempt?,
     ) {
 
         /**
-         * 生成结果流确认、超时任务及信令提交状态。
+         * The waiter for generation result confirmation.
          */
         val result = CompletableDeferred<Unit>()
 
         /**
-         * 生成启动等待的超时任务。
+         * The generation startup timeout job.
          */
         var timeoutJob: Job? = null
 
         /**
-         * 生成请求信令是否已发送。
+         * Whether the start signal has been sent.
          */
         var signalSent = false
     }
 
     /**
-     * 保存终止任务后需要清理的等待器和音频订阅。
+     * A stopped task's waiter and audio subscriptions awaiting cleanup.
      */
     private data class StopResult(
         /**
-         * 用于关联本次生成请求和结果流的任务标识。
+         * The task identifier associating generation requests with result streams.
          */
         val taskId: String,
 
         /**
-         * 需要完成或取消的生成等待器。
+         * The generation waiter to complete or cancel.
          */
         val waiter: GenerationWaiter?,
 
         /**
-         * 需要取消音频订阅的远端用户标识集合。
+         * Remote users whose audio must be unsubscribed.
          */
         val remoteAudioUserIds: Set<String>,
     )
 }
 
 /**
- * 定义生成确认等待超时。
+ * The generation confirmation timeout.
  */
 internal data class StreamGenerationTiming(
     /**
-     * 等待操作完成的最大时长，单位为毫秒。
+     * The maximum operation wait, in milliseconds.
      */
-    val timeoutMillis: Long
+    val timeoutMillis: Long,
 ) {
 
     /**
-     * 生成启动的默认超时配置。
+     * The default generation startup timeout configuration.
      */
     companion object {
 
         /**
-         * 使用 30 秒启动超时的生成计时配置。
+         * A generation timing configuration with a 30-second startup timeout.
          */
         val live = StreamGenerationTiming(timeoutMillis = 30_000L)
     }

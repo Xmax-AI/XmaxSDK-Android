@@ -26,43 +26,43 @@ import android.graphics.Bitmap
 import android.net.Uri
 
 /**
- * 协调本地图片解码、循环帧输出和预览资源。
+ * Coordinates image decoding, repeated frame delivery, and local preview resources.
  */
 internal class ImageController(
     /**
-     * 提供 RTC 采集、发布、订阅和渲染能力的管理器。
+     * The manager for RTC capture, publication, subscription, and rendering.
      */
     private val rtcManager: RtcManaging,
 
     /**
-     * 负责图片解码及持续供帧的组件。
+     * The component decoding images and supplying repeated frames.
      */
     private val imageSourceController: ImageSourceControlling,
 ) {
 
     /**
-     * 图片轨道状态的并发保护。
+     * The lock protecting image track state.
      */
     private val stateLock = Any()
 
     /**
-     * 活动图片轨道及公开读取接口。
+     * The active image track.
      */
     private var activeTrack: RealtimeVideoTrack? = null
 
     /**
-     * 当前图片对应的本地视频轨道。
+     * The local video track representing the current image.
      */
     val currentTrack: RealtimeVideoTrack?
         get() = synchronized(stateLock) { activeTrack }
 
     /**
-     * 解码图片字节并创建保持媒体比例、持续输出图片帧的本地流。
-     * 使用方向校正后的图片尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率。
-     * 模型生成画布独立选择，服务端等比适配并裁去补边后输出。
+     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
+     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The model canvas is selected separately; the server fits the image and removes padding from output.
      *
-     * @param imageData 可解码的图片文件字节，不是裸像素数据。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param imageData Encoded image file bytes, not raw pixels.
      */
     suspend fun createLocalImageStream(
         imageData: ByteArray,
@@ -71,11 +71,11 @@ internal class ImageController(
     }
 
     /**
-     * 从 Bitmap 创建保持媒体比例的本地图片流。
-     * 使用 Bitmap 尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率，模型生成画布独立选择。
+     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
+     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
+     * rate and a separately selected model canvas.
      *
-     * @param bitmap 待处理或显示的 Android 图片。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param bitmap The Android image to process or display.
      */
     suspend fun createLocalImageStream(
         bitmap: Bitmap,
@@ -84,12 +84,12 @@ internal class ImageController(
     }
 
     /**
-     * 从可读取的 URI 创建本地图片流；读取权限由接入方保证。
-     * 使用方向校正后的图片尺寸（受模型面积上限约束并按 4 对齐）及模型默认帧率。
-     * 模型生成画布独立选择，服务端等比适配并裁去补边后输出。
+     * Creates a local image stream from a readable URI; your app owns read permissions.
+     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
+     * with the model's default frame rate.
+     * The model canvas is selected separately; the server fits the image and removes padding from output.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
      */
     suspend fun createLocalImageStream(
         uri: Uri,
@@ -98,7 +98,7 @@ internal class ImageController(
     }
 
     /**
-     * 停止当前图片流并释放其资源；当前源不是图片时不执行释放。
+     * Stops and releases the current image source; does nothing for other source types.
      */
     suspend fun stopLocalImageStream() {
         val track = synchronized(stateLock) {
@@ -112,10 +112,9 @@ internal class ImageController(
     }
 
     /**
-     * 准备图片输入并注册可预览、可生成的本地视频轨道。
+     * Prepares image input and registers a track for preview and generation.
      *
-     * @param prepare 解析输入规格并生成图片帧的挂起函数。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param prepare The suspending function resolving input format and image pixels.
      */
     private suspend fun createStream(
         prepare: suspend () -> Pair<RealtimeVideoFormat, VideoFrame>,
@@ -141,9 +140,15 @@ internal class ImageController(
             )
             imageSourceController.start()
             synchronized(stateLock) { activeTrack = localTrack }
-            return RealtimeMediaStream(StreamID.LOCAL.value, localTrack)
-        } catch (error: Throwable) {
-            cleanupAfterFailure(error,
+            return RealtimeMediaStream(
+                StreamID.LOCAL.value,
+                localTrack,
+            )
+        } catch (
+            error: Throwable,
+        ) {
+            cleanupAfterFailure(
+                error,
                 { imageSourceController.stop() },
                 { track?.let(VideoRenderRegistry::unregister) },
             )
@@ -152,12 +157,12 @@ internal class ImageController(
     }
 
     /**
-     * 本地图片视频轨道的标识约定。
+     * The local image track identifier.
      */
     private companion object {
 
         /**
-         * 本地图片输出的视频轨道标识。
+         * The video track identifier for local image output.
          */
         const val LOCAL_VIDEO_TRACK_ID = "video0"
     }

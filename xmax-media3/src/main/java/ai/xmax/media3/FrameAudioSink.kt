@@ -22,133 +22,151 @@ import java.nio.ByteBuffer
 import java.util.ArrayDeque
 
 /**
- * 复用 ExoPlayer 解码的 PCM，按 AudioTrack 播放时钟发送，不把预缓冲音频提前推给 RTC。
+ * Reuses ExoPlayer PCM on the AudioTrack playback clock without submitting prebuffered audio to RTC ahead of
+ * playback.
  *
- * @param delegate 负责实际音频播放的接收器。
+ * @param delegate The sink performing audio playback.
  */
 @UnstableApi
 internal class FrameAudioSink(
     delegate: AudioSink,
 
     /**
-     * 取得当前外部音视频帧接收器的函数。
+     * The function returning the current external media sink.
      */
-    private val input: () -> RealtimeExternalFrameSink?
+    private val input: () -> RealtimeExternalFrameSink?,
 ) : ForwardingAudioSink(delegate) {
 
     /**
-     * 一份可提交的 PCM 音频数据及其时间位置。
+     * A PCM packet and its timeline position.
      */
     private data class Packet(
         /**
-         * 待读取、传输或持有的二进制数据。
+         * The binary data to read, transfer, or retain.
          */
         val data: ByteArray,
 
         /**
-         * 音频包的媒体呈现时间，单位为微秒。
+         * The packet's media presentation timestamp, in microseconds.
          */
-        val ptsUs: Long
+        val ptsUs: Long,
     )
 
     /**
-     * 待提交 PCM 包及固定长度分包器。
+     * The pending PCM packet queue.
      */
     private val pending = ArrayDeque<Packet>()
 
     /**
-     * 将解码音频转换为固定规格 PCM 帧的分包器。
+     * The packetizer converting decoded audio into fixed-format PCM frames.
      */
     private val packetizer = PcmPacketizer { bytes, pts ->
         if (pending.size >= 100) pending.removeFirst()
-        pending.addLast(Packet(bytes, pts))
+        pending.addLast(
+            Packet(
+                bytes,
+                pts,
+            ),
+        )
     }
 
     /**
-     * 当前音频格式和外部帧接收器。
+     * The current input audio format.
      */
     private var format: Format? = null
 
     /**
-     * 当前接收外部音频帧的 SDK 接口。
+     * The SDK receiver for external audio frames.
      */
     private var binding: RealtimeExternalFrameSink? = null
 
     /**
-     * 判断音频接收器是否支持指定音频格式。
+     * Checks whether the sink supports an audio format.
      *
-     * @param format 音频采样编码、采样率和声道格式。
-     * @return 支持当前音频格式时为 true。
+     * @param format The audio encoding, sample rate, and channel configuration.
+     * @return True if the audio format is supported.
      */
     override fun supportsFormat(
-        format: Format
+        format: Format,
     ): Boolean =
         format.sampleMimeType == MimeTypes.AUDIO_RAW && super.supportsFormat(format)
 
     /**
-     * 取得音频接收器对指定格式的支持等级。
+     * Returns the sink's support level for an audio format.
      *
-     * @param format 音频采样编码、采样率和声道格式。
-     * @return Media3 的音频格式支持等级常量。
+     * @param format The audio encoding, sample rate, and channel configuration.
+     * @return The Media3 audio format support constant.
      */
     override fun getFormatSupport(
-        format: Format
+        format: Format,
     ): Int =
         if (format.sampleMimeType == MimeTypes.AUDIO_RAW) super.getFormatSupport(format) else AudioSink.SINK_FORMAT_UNSUPPORTED
 
     /**
-     * 设置 PCM16 音频格式和播放缓冲，并清空上一格式的待发送数据。
+     * Configures PCM16 playback and buffers, discarding pending data from the previous format.
      *
-     * @param inputFormat 输入音频的采样编码、采样率和声道配置。
-     * @param specifiedBufferSize 播放器要求的音频缓冲大小，单位为字节。
-     * @param outputChannels 输出声道映射；null 表示保留默认声道映射。
+     * @param inputFormat The input encoding, sample rate, and channels.
+     * @param specifiedBufferSize The player-requested buffer size, in bytes.
+     * @param outputChannels The output channel mapping, or null for the default.
      */
     override fun configure(
         inputFormat: Format,
         specifiedBufferSize: Int,
-        outputChannels: IntArray?
+        outputChannels: IntArray?,
     ) {
         require(inputFormat.pcmEncoding == C.ENCODING_PCM_16BIT) { "Media3 adapter requires PCM16 audio" }
         format = inputFormat
         clearPending()
-        super.configure(inputFormat, specifiedBufferSize, outputChannels)
+        super.configure(
+            inputFormat,
+            specifiedBufferSize,
+            outputChannels,
+        )
     }
 
     /**
-     * 将解码音频交给播放接收器，并缓冲可提交的外部 PCM 数据。
+     * Passes decoded audio to playback and buffers external PCM for submission.
      *
-     * @param buffer 包含待处理数据的字节缓冲区。
-     * @param presentationTimeUs 音视频数据的媒体呈现时间，单位为微秒。
-     * @param encodedAccessUnitCount 缓冲区内编码音频访问单元的数量。
-     * @return 缓冲区已由音频接收器完整消费时为 true。
+     * @param buffer The buffer containing the data to process.
+     * @param presentationTimeUs The media presentation timestamp, in microseconds.
+     * @param encodedAccessUnitCount The encoded audio access-unit count in the buffer.
+     * @return True if the audio sink consumed the entire buffer.
      */
     override fun handleBuffer(
         buffer: ByteBuffer,
         presentationTimeUs: Long,
-        encodedAccessUnitCount: Int
+        encodedAccessUnitCount: Int,
     ): Boolean {
         val start = buffer.position()
         val copy = buffer.duplicate()
-        val consumed = super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+        val consumed = super.handleBuffer(
+            buffer,
+            presentationTimeUs,
+            encodedAccessUnitCount,
+        )
         val sink = input()?.takeIf { it.isRequestingFrames }
         if (binding !== sink) { clearPending(); binding = sink }
         val f = format
         if (sink != null && f != null && buffer.position() > start) {
             copy.limit(buffer.position())
-            packetizer.append(copy, f.sampleRate, f.channelCount,
-                presentationTimeUs + start.toLong() / (2 * f.channelCount) * 1_000_000 / f.sampleRate)
+            packetizer.append(
+                copy,
+                f.sampleRate,
+                f.channelCount,
+                presentationTimeUs + start.toLong() / (2 * f.channelCount) * 1_000_000 / f.sampleRate,
+            )
             drain(sink)
         }
         return consumed
     }
 
     /**
-     * 按音频播放位置提交到期的 PCM 包，丢弃已严重过时的包。
+     * Submits due PCM packets according to playback position, dropping severely late packets.
      *
-     * @param sink SDK 提供的外部音视频帧接收器。
+     * @param sink The SDK receiver for external media frames.
      */
     private fun drain(
-        sink: RealtimeExternalFrameSink
+        sink: RealtimeExternalFrameSink,
     ) {
         val positionUs = super.getCurrentPositionUs(false)
         if (positionUs == Long.MIN_VALUE) return
@@ -156,12 +174,15 @@ internal class FrameAudioSink(
             val packet = pending.removeFirst()
             val ageUs = positionUs - packet.ptsUs
             if (ageUs > 100_000) continue
-            sink.pushAudio(packet.data, (SystemClock.elapsedRealtimeNanos() / 1000 - ageUs).coerceAtLeast(0))
+            sink.pushAudio(
+                packet.data,
+                (SystemClock.elapsedRealtimeNanos() / 1000 - ageUs).coerceAtLeast(0),
+            )
         }
     }
 
     /**
-     * 提交已缓冲的音频尾部并完成播放。
+     * Submits the buffered audio tail and completes playback.
      */
     override fun playToEndOfStream() {
         super.playToEndOfStream()
@@ -169,22 +190,22 @@ internal class FrameAudioSink(
     }
 
     /**
-     * 清空音频缓冲并重置播放进度。
+     * Clears audio buffers and resets playback progress.
      */
     override fun flush() { clearPending(); super.flush() }
 
     /**
-     * 重置音频接收器并清除待发送的 PCM 数据。
+     * Resets the audio sink and discards pending PCM.
      */
     override fun reset() { clearPending(); super.reset() }
 
     /**
-     * 在音频时间线不连续时清空待提交的旧音频。
+     * Discards pending old audio when the timeline becomes discontinuous.
      */
     override fun handleDiscontinuity() { clearPending(); super.handleDiscontinuity() }
 
     /**
-     * 清空待发送的 PCM 数据和分包状态。
+     * Clears pending PCM and packetization state.
      */
     private fun clearPending() { pending.clear(); packetizer.reset() }
 }

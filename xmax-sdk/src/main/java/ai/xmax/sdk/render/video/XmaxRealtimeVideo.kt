@@ -15,16 +15,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 
 /**
- * 实时生成画面的 Compose 组件，内部使用 [XmaxRealtimeVideoView]。
- * 保留本地预览，远端首帧显示后自动淡入；清空远端轨道后回到本地预览。
- * 参数随重组更新；离开组合时解绑轨道，不启动、停止或释放媒体流。
+ * A Compose realtime video component backed by [XmaxRealtimeVideoView].
+ * Retains local preview until the first remote frame fades in, returning to preview when the remote track is
+ * cleared.
+ * Recomposition updates parameters; leaving composition unbinds tracks without starting, stopping, or
+ * releasing media streams.
  *
- * @param localTrack 本地输入轨道；null 清空本地预览。
- * @param remoteTrack 远端生成轨道；null 显示本地预览。
- * @param modifier 控制组件的尺寸、布局及其他 Compose 修饰。
- * @param videoContentMode 同时应用于本地和远端的等比缩放模式，默认填充并裁切。
- * @param isInteractionEnabled 是否允许远端画面显示后的触控轨迹交互。
- * @param trajectoryRenderer 远端轨迹视觉效果；null 使用 SDK 内置效果。
+ * @param localTrack The local input track, or null to clear preview.
+ * @param remoteTrack The remote generation track, or null to show local preview.
+ * @param modifier Compose sizing, layout, and other modifiers.
+ * @param videoContentMode The aspect-preserving scaling applied to both tracks; defaults to fill and crop.
+ * @param isInteractionEnabled Whether to enable trajectory interaction once remote video is visible.
+ * @param trajectoryRenderer The remote trajectory effect, or null for the built-in renderer.
  */
 @Composable
 public fun XmaxRealtimeVideo(

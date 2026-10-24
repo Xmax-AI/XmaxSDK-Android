@@ -11,23 +11,24 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * 声网自动重连期间不终止业务会话；明确失败、鉴权或发送错误才结束连接。
+ * Keeps the business session alive during Agora reconnection, ending it only for explicit failure,
+ * authentication, or send errors.
  *
- * @param reason 引起状态变化或失败的原因。
- * @return RTC 可继续重连的状态为 true，否则为 false。
+ * @param reason The reason for the state transition or failure.
+ * @return True if RTC can continue reconnecting.
  */
 internal fun isRetryableRoomFailure(
-    reason: String?
+    reason: String?,
 ): Boolean = reason == "RECONNECT"
 
 /**
- * 判断房间状态原因是否表示必须终止连接的故障。
+ * Checks whether a room-state reason requires terminating the connection.
  *
- * @param reason 引起状态变化或失败的原因。
- * @return 需要结束当前 RTC 连接时为 true。
+ * @param reason The reason for the state transition or failure.
+ * @return True if the RTC connection must end.
  */
 internal fun isTerminalRoomFailure(
-    reason: String?
+    reason: String?,
 ): Boolean = reason in setOf(
     "AGORA_CONNECTION_FAILED",
     "AGORA_SEND_FAILED",

@@ -17,32 +17,38 @@ import ai.xmax.sdk.service.media.MediaService
 import ai.xmax.sdk.service.storage.StorageService
 
 /**
- * SDK 入口，持有全局配置和供各业务服务共享的 API 客户端。
+ * The SDK entry point, sharing client configuration and API access across services.
  *
- * 构造时设置日志选项并保存 Application Context，不发起网络请求或启动媒体采集。
- * 实时管理器的媒体、传输和渲染组件在首次操作时创建。
+ * Client construction configures logging and retains the application context without starting network or
+ * media operations.
+ * Realtime media, transport, and rendering components are created on first use.
  *
- * @param context Android 上下文，客户端仅保存 Application Context；未提供时不能创建依赖 Android 资源的管理器。
+ * @param context An Android context; only its application context is retained. Required for managers that use
+ * Android resources.
  */
 public class XmaxClient(
     /**
-     * SDK 鉴权信息、服务环境和日志配置。
+     * SDK credentials, service environment, and logging options.
      */
     public val configuration: XmaxConfiguration,
 
     context: Context? = null,
 ) {
+
     init {
-        XmaxLogger.configure(configuration.loggerOptions, configuration.environment)
+        XmaxLogger.configure(
+            configuration.loggerOptions,
+            configuration.environment,
+        )
     }
 
     /**
-     * Android 运行环境。
+     * The Android application context.
      */
     private val applicationContext: Context? = context?.applicationContext
 
     /**
-     * 共享 API 访问服务。
+     * The shared API service.
      */
     private val apiService = ApiService(
         apiKey = configuration.apiKey,
@@ -50,20 +56,24 @@ public class XmaxClient(
     )
 
     /**
-     * 便于 Android 接入的 Context 优先构造方式。
+     * Creates a client with the Android context first.
      *
-     * @param context Android 上下文，客户端仅保存 Application Context；未提供时不能创建依赖 Android 资源的管理器。
-     * @param configuration SDK 鉴权信息、服务环境和日志配置。
+     * @param context An Android context; only its application context is retained. Required for managers that
+     * use Android resources.
+     * @param configuration SDK credentials, service environment, and logging options.
      */
     public constructor(
         context: Context,
         configuration: XmaxConfiguration,
-    ) : this(configuration, context)
+    ) : this(
+        configuration,
+        context,
+    )
 
     /**
-     * 创建文件存储管理器；要求 API Key 非空且构造客户端时已提供 Context。
+     * Creates a storage manager; requires a nonempty API key and a client context.
      *
-     * @return 用于上传下载图片及视频的存储管理器。
+     * @return A manager for image and video uploads and downloads.
      */
     public fun createStorageManager(): XmaxStorageManaging {
         configuration.validate()
@@ -80,11 +90,11 @@ public class XmaxClient(
     }
 
     /**
-     * 创建具有独立生命周期的实时管理器；构造客户端时必须提供 Context。
-     * 创建会话、心跳和关闭会话请求使用客户端环境对应的实时服务地址。
+     * Creates a realtime manager with its own lifecycle; requires a client context.
+     * Session creation, heartbeats, and closure use the environment's realtime endpoint.
      *
-     * @param options 实时生成的模型与业务配置。
-     * @return 具有独立媒体和连接生命周期的实时管理器。
+     * @param options The model and realtime configuration.
+     * @return A realtime manager with independent media and connection ownership.
      */
     public fun createRealtimeManager(
         options: RealtimeConfiguration,
@@ -98,14 +108,18 @@ public class XmaxClient(
             baseUrl = configuration.environment.realtimeApiBaseUrl,
         )
 
-        return XmaxRealtimeManager(options, context, realtimeApiService)
+        return XmaxRealtimeManager(
+            options,
+            context,
+            realtimeApiService,
+        )
     }
 
     /**
-     * 创建指定模型的输入尺寸计算服务；计算尺寸不依赖 Context 或网络。
+     * Creates a model-specific media sizing service without requiring a context or network access.
      *
-     * @param model 用于确定服务端能力、地址及输入规格的模型；默认值为 `RealtimeModel.X2_1`。
-     * @return 使用指定模型规则的媒体尺寸服务。
+     * @param model The model whose input constraints apply; defaults to `RealtimeModel.X2_1`.
+     * @return A media sizing service for the specified model.
      */
     @JvmOverloads
     public fun createMediaService(

@@ -29,148 +29,159 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 验证版 Media3 适配器，支持 SDR、常速、PCM16 音频；播放器由调用方创建和释放。
- * 创建 ExoPlayer 时传入 renderersFactory，再调用 attachPlayer；同一播放器只能绑定一个视频输出。
- * SDK stop/close 仅解绑帧入口。最终先释放 ExoPlayer，再调用 release 释放 GL 资源。
+ * A Media3 adapter supporting SDR, normal-speed playback, and PCM16 audio; your app creates and releases the
+ * player.
+ * Pass renderersFactory when creating ExoPlayer, then call attachPlayer. A player can bind only one video
+ * output.
+ * SDK stop and close only detach frame delivery. Finally release ExoPlayer before calling release to free GL
+ * resources.
  *
- * @param context 访问 Android 系统服务或媒体资源所需的上下文。
+ * @param context The Android context used for system services and media resources.
  */
 @UnstableApi
 @MainThread
 public class XmaxMedia3Source(
-    context: Context
+    context: Context,
 ) : RealtimeExternalVideoSource {
 
     /**
-     * 外部帧接收器、视频纹理桥接和播放器。
+     * The current external frame sink.
      */
     @Volatile private var sink: RealtimeExternalFrameSink? = null
 
     /**
-     * 连接播放器解码输出、本地预览与 SDK 供帧的桥接器。
+     * The bridge connecting decoder output, local preview, and SDK frame input.
      */
     private val bridge = DecoderSurfaceBridge { sink }
 
     /**
-     * 负责外部视频解码与播放的 Media3 播放器。
+     * The Media3 player decoding and playing external media.
      */
     private var player: ExoPlayer? = null
 
     /**
-     * 本地预览视图及其容器。
+     * The local preview texture view.
      */
     private var preview: TextureView? = null
 
     /**
-     * 承载当前本地预览的容器。
+     * The container hosting local preview.
      */
     private var previewHost: FrameLayout? = null
 
     /**
-     * 本地音频预览的音量与静音配置。
+     * The local audio preview volume.
      */
     private var volume = 0.45f
 
     /**
-     * 本地音频预览是否静音。
+     * Whether local audio preview is muted.
      */
     private var muted = false
 
     /**
-     * 播放失败状态及预览首帧通知。
+     * The latest playback failure.
      */
     private var playbackFailure: PlaybackException? = null
 
     /**
-     * 当前本地预览的首帧已经呈现；用于接入层收起视频封面。主线程回调。
+     * A main-thread callback indicating the first local preview frame, allowing the app to hide its video
+     * cover.
      */
     public var onPreviewFrame: (() -> Unit)? = null
 
     /**
-     * 外部输入的视频规格和音轨能力。
+     * The external input video format.
      */
     override val videoFormat: RealtimeVideoFormat
         get() {
             val size = checkNotNull(player).videoSize
             require(size.width > 0 && size.height > 0) { "Prepare ExoPlayer before binding it to XmaxSDK" }
-            // 仅提供源视频的显示尺寸；生成输出尺寸由 SDK 按调用方配置和模型规则决定。
+            // Reports source display dimensions; XmaxSDK resolves generation dimensions from app configuration and model constraints.
             val width = kotlin.math.round(size.width * size.pixelWidthHeightRatio).toInt().coerceAtLeast(1)
-            return RealtimeVideoFormat(width, size.height, 30)
+            return RealtimeVideoFormat(
+                width,
+                size.height,
+                30,
+            )
         }
 
     /**
-     * 当前选中的媒体轨道是否包含音频。
+     * Whether the selected media tracks include audio.
      */
     override val hasAudio: Boolean get() = player?.currentTracks?.isTypeSelected(C.TRACK_TYPE_AUDIO) == true
 
     /**
-     * 播放器音视频接收组件和事件监听器。
+     * The player's audio/video renderer factory.
      */
     public val renderersFactory: DefaultRenderersFactory = object : DefaultRenderersFactory(context.applicationContext) {
 
         /**
-         * 创建同时支持本地播放与外部 PCM 帧输出的音频接收器。
+         * Creates an audio sink supporting both local playback and external PCM output.
          *
-         * @param context 访问 Android 系统服务或媒体资源所需的上下文。
-         * @param enableFloatOutput 是否允许播放器使用浮点音频输出。
-         * @param enableAudioOutputPlaybackParams 是否允许音频输出应用播放速度等参数。
-         * @return 支持 PCM 帧输出的本地音频播放接收器。
+         * @param context The Android context used for system services and media resources.
+         * @param enableFloatOutput Whether floating-point audio output is allowed.
+         * @param enableAudioOutputPlaybackParams Whether audio output may apply playback-speed parameters.
+         * @return A local playback sink supporting PCM frame delivery.
          */
         override fun buildAudioSink(
             context: Context,
             enableFloatOutput: Boolean,
-            enableAudioOutputPlaybackParams: Boolean
+            enableAudioOutputPlaybackParams: Boolean,
         ): AudioSink =
             FrameAudioSink(DefaultAudioSink.Builder(context).setEnableFloatOutput(false).build()) { sink }
     }
 
     /**
-     * 接收播放器准备、播放结束与错误事件的监听器。
+     * The listener for player readiness, completion, and errors.
      */
     private val listener = object : Player.Listener {
 
         /**
-         * 根据播放器状态完成媒体准备或播放状态更新。
+         * Updates preparation or playback state from player state.
          *
-         * @param playbackState Media3 播放器当前状态。
+         * @param playbackState The current Media3 playback state.
          */
         override fun onPlaybackStateChanged(
-            playbackState: Int
+            playbackState: Int,
         ) {
             if (playbackState == Player.STATE_READY) playbackFailure = null
         }
 
         /**
-         * 将播放器错误报告给外部视频源的使用方。
+         * Reports player failures to the external source consumer.
          *
-         * @param error 本次操作失败的异常或 SDK 错误。
+         * @param error The operation failure or SDK error.
          */
         override fun onPlayerError(
-            error: PlaybackException
+            error: PlaybackException,
         ) {
             playbackFailure = error
             sink?.reportError(error)
         }
 
         /**
-         * 更新视频预览和帧输出使用的显示尺寸。
+         * Updates display dimensions used by preview and frame output.
          *
-         * @param videoSize 视频经过旋转后的显示尺寸。
+         * @param videoSize The rotated display dimensions.
          */
         override fun onVideoSizeChanged(
-            videoSize: VideoSize
+            videoSize: VideoSize,
         ) {
-            bridge.videoSize((videoSize.width * videoSize.pixelWidthHeightRatio).toInt(), videoSize.height)
+            bridge.videoSize(
+                (videoSize.width * videoSize.pixelWidthHeightRatio).toInt(),
+                videoSize.height,
+            )
         }
     }
 
     /**
-     * 将播放器绑定到当前外部媒体源。
+     * Attaches a player to this external source.
      *
-     * @param player 用于本地媒体预览和解码的播放器。
+     * @param player The local preview and decoding player.
      */
     public suspend fun attachPlayer(
-        player: ExoPlayer
+        player: ExoPlayer,
     ): Unit = withContext(Dispatchers.Main.immediate) {
         check(this@XmaxMedia3Source.player == null)
         val surface = bridge.surface()
@@ -181,14 +192,16 @@ public class XmaxMedia3Source(
     }
 
     /**
-     * 绑定供帧入口，返回前完成绑定，不等待生成结束。
-     * 接入方负责旋转、裁剪和缩放，按 sink.videoFormat 输出；供帧不能等待 startGeneration 返回。
-     * 采集源结束或发生不可恢复错误时调用 sink.reportError；绑定失败时 SDK 仍可能调用 stop。
+     * Binds frame delivery before returning, without waiting for generation to finish.
+     * Your app rotates, crops, and scales frames to sink.videoFormat; delivery must not wait for
+     * startGeneration to return.
+     * Report source completion or unrecoverable failure through sink.reportError. The SDK may call stop even
+     * after start fails.
      *
-     * @param sink SDK 提供的外部音视频帧接收器。
+     * @param sink The SDK receiver for external media frames.
      */
     override suspend fun start(
-        sink: RealtimeExternalFrameSink
+        sink: RealtimeExternalFrameSink,
     ) {
         check(this.sink == null)
         bridge.failure?.let { throw it }
@@ -197,19 +210,19 @@ public class XmaxMedia3Source(
     }
 
     /**
-     * 停止向 SDK 供帧并清除 sink，必须幂等；不代表关闭接入方的摄像头或播放器。
+     * Stops frame delivery and clears the sink idempotently without closing your app's camera or player.
      */
     override suspend fun stop() { sink = null }
 
     /**
-     * 将播放器预览挂载到 SDK 视频容器。
+     * Attaches player preview to the SDK video container.
      *
-     * @param container 承载本地预览视图的 Android 容器。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param container The Android container hosting local preview.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     override fun attachPreview(
         container: FrameLayout,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ) {
         previewHost?.let(::detachPreview)
         val view = TextureView(container.context)
@@ -218,55 +231,65 @@ public class XmaxMedia3Source(
         view.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
 
             /**
-             * 在预览纹理可用后建立视频输出绑定。
+             * Binds video output once the preview texture is available.
              *
-             * @param texture 接收预览画面的纹理。
-             * @param width 画面宽度，单位为像素。
-             * @param height 画面高度，单位为像素。
+             * @param texture The texture receiving preview output.
+             * @param width The frame width, in pixels.
+             * @param height The frame height, in pixels.
              */
             override fun onSurfaceTextureAvailable(
                 texture: SurfaceTexture,
                 width: Int,
-                height: Int
+                height: Int,
             ) {
-                bridge.preview(texture, width, height, contentMode)
+                bridge.preview(
+                    texture,
+                    width,
+                    height,
+                    contentMode,
+                )
             }
 
             /**
-             * 在预览尺寸变化后更新视频布局。
+             * Updates video layout after preview dimensions change.
              *
-             * @param texture 接收预览画面的纹理。
-             * @param width 画面宽度，单位为像素。
-             * @param height 画面高度，单位为像素。
+             * @param texture The texture receiving preview output.
+             * @param width The frame width, in pixels.
+             * @param height The frame height, in pixels.
              */
             override fun onSurfaceTextureSizeChanged(
                 texture: SurfaceTexture,
                 width: Int,
-                height: Int
+                height: Int,
             ) {
-                bridge.preview(texture, width, height, contentMode)
+                bridge.preview(
+                    texture,
+                    width,
+                    height,
+                    contentMode,
+                )
             }
 
             /**
-             * 解除已销毁纹理的媒体绑定并决定纹理资源的释放归属。
+             * Detaches a destroyed texture and determines who releases it.
              *
-             * @param texture 接收预览画面的纹理。
-             * @return false，由纹理桥接器在解除 EGL 绑定后释放纹理。
+             * @param texture The texture receiving preview output.
+             * @return False; the texture bridge releases the texture after detaching EGL.
              */
             override fun onSurfaceTextureDestroyed(
-                texture: SurfaceTexture
+                texture: SurfaceTexture,
             ): Boolean {
                 bridge.destroyPreview(texture)
                 return false
             }
 
             /**
-             * 接收纹理内容更新通知。
+             * Receives a texture content update.
              *
-             * @param texture 接收预览画面的纹理。
+             * @param texture The texture receiving preview output.
              */
             override fun onSurfaceTextureUpdated(
-                texture: SurfaceTexture
+                texture: SurfaceTexture,
             ) {
                 if (!reported && preview === view) {
                     reported = true
@@ -274,16 +297,22 @@ public class XmaxMedia3Source(
                 }
             }
         }
-        container.addView(view, FrameLayout.LayoutParams(-1, -1))
+        container.addView(
+            view,
+            FrameLayout.LayoutParams(
+                -1,
+                -1,
+            ),
+        )
     }
 
     /**
-     * 移除对应容器中的播放器预览，不停止播放器。
+     * Removes player preview from its container without stopping playback.
      *
-     * @param container 承载本地预览视图的 Android 容器。
+     * @param container The Android container hosting local preview.
      */
     override fun detachPreview(
-        container: FrameLayout
+        container: FrameLayout,
     ) {
         if (previewHost !== container) return
         preview?.let(container::removeView)
@@ -291,21 +320,21 @@ public class XmaxMedia3Source(
     }
 
     /**
-     * 设置播放器的本地监听音量与静音状态，不改变交给 SDK 的 PCM 数据。
+     * Sets local monitoring volume and mute state without changing PCM supplied to XmaxSDK.
      *
-     * @param volume 播放音量，范围为 0 到 1。
-     * @param muted 是否静音。
+     * @param volume The playback volume, from 0 to 1.
+     * @param muted Whether audio is muted.
      */
     override fun setPreviewAudio(
         volume: Float,
-        muted: Boolean
+        muted: Boolean,
     ) {
         this.volume = volume; this.muted = muted
         player?.volume = if (muted) 0f else volume
     }
 
     /**
-     * 解除外部源与播放器、预览及解码纹理的绑定。
+     * Unbinds the source, player preview, and decoder texture.
      */
     public suspend fun release(): Unit = withContext(Dispatchers.Main.immediate) {
         sink = null
@@ -317,9 +346,9 @@ public class XmaxMedia3Source(
     }
 
     /**
-     * 供验证性能读取，不包含媒体数据。
+     * Processing metrics without media content.
      *
-     * @return 不包含媒体内容的处理性能统计文本。
+     * @return Processing statistics without media content.
      */
     public fun diagnostics(): String =
         "rendered=${bridge.renderedFrames}, captured=${bridge.capturedFrames}, maxCaptureMs=${bridge.maximumCaptureMs}, error=${bridge.failure?.javaClass?.simpleName}"

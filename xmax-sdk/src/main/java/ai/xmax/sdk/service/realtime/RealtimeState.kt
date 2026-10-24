@@ -11,113 +11,113 @@
 package ai.xmax.sdk
 
 /**
- * 实时业务连接状态。
+ * The realtime connection state.
  */
 public enum class RealtimeConnectionState(
     /**
-     * 需要规范化、校验或显示的文本。
+     * The string representation used for configuration or display.
      */
-    public val value: String
+    public val value: String,
 ) {
 
     /**
-     * 尚无可用本地媒体，或全部资源已关闭。
+     * No local media is available, or all resources are closed.
      */
     IDLE("Idle"),
 
     /**
-     * 正在准备本地媒体输入。
+     * Local input is being prepared.
      */
     PREPARING("Preparing"),
 
     /**
-     * 本地媒体已就绪，尚未连接生成服务。
+     * Local media is ready without a generation service connection.
      */
     READY("Ready"),
 
     /**
-     * 正在创建会话并加入 RTC 房间。
+     * A server session and RTC connection are being established.
      */
     CONNECTING("Connecting"),
 
     /**
-     * 连接已建立，可以启动生成。
+     * The connection is ready to start generation.
      */
     CONNECTED("Connected"),
 
     /**
-     * 当前生成结果已可显示。
+     * The current generation result is displayable.
      */
     GENERATING("Generating"),
 
     /**
-     * 正在终止生成并释放连接资源。
+     * Generation is stopping and connection resources are being released.
      */
     DISCONNECTING("Disconnecting"),
 }
 
 /**
- * 进入当前实时状态的原因。
+ * The reason for entering the current realtime state.
  */
 public sealed interface RealtimeReason {
 
     /**
-     * 主动停止或正常释放资源。
+     * An explicit stop or normal resource release.
      */
     public data object Normal : RealtimeReason
 
     /**
-     * 显示方向变化，需要重新配置生成。
+     * A display orientation change requiring generation reconfiguration.
      */
     public data object OrientationChanged : RealtimeReason
 
     /**
-     * 操作或运行异常导致当前流程结束。
+     * A call or runtime failure ended the current operation.
      */
     public data class Failure(
         /**
-         * 本次操作失败的异常或 SDK 错误。
+         * The operation failure or SDK error.
          */
-        public val error: XmaxError
+        public val error: XmaxError,
     ) : RealtimeReason
 }
 
 /**
- * 实时业务当前状态快照。
+ * A snapshot of realtime lifecycle state.
  */
 public data class RealtimeState(
     /**
-     * 当前媒体和生成连接的状态。
+     * The current media and generation connection state.
      */
     public val connectionState: RealtimeConnectionState,
 
     /**
-     * 服务端会话标识。
+     * The server session identifier.
      */
     public val sessionId: String? = null,
 
     /**
-     * 用于关联本次生成请求和结果流的任务标识。
+     * The task identifier associating generation requests with result streams.
      */
     public val taskId: String? = null,
 
     /**
-     * 进入当前状态的原因；开始新操作时清空。
+     * The reason for this state, cleared when a new operation begins.
      */
     public val reason: RealtimeReason? = null,
 )
 
 /**
- * 实时状态监听器。
+ * The realtime state listener.
  */
 public fun interface RealtimeStateListener {
 
     /**
-     * 通知管理器最新的实时状态快照。
+     * Reports the manager's latest realtime state.
      *
-     * @param state 当前状态快照。
+     * @param state The current state snapshot.
      */
     public fun onStateChanged(
-        state: RealtimeState
+        state: RealtimeState,
     )
 }

@@ -11,36 +11,36 @@
 package ai.xmax.sdk.stream.quality
 
 /**
- * 自动调档的连续样本阈值和时间窗口，时间单位为毫秒。
+ * Consecutive sample thresholds and adaptation intervals, in milliseconds.
  */
 internal data class QualityPolicy(
     /**
-     * 触发降档所需的连续差网络样本数；默认值为 `3`。
+     * The consecutive poor samples required to downgrade; defaults to 3.
      */
     val poorSamples: Int = 3,
 
     /**
-     * 触发升档所需的连续好网络样本数；默认值为 `5`。
+     * The consecutive good samples required to upgrade; defaults to 5.
      */
     val goodSamples: Int = 5,
 
     /**
-     * 调档后的稳定等待时间，单位为毫秒；默认值为 `4_000`。
+     * The post-adjustment stabilization interval in milliseconds; defaults to 4,000.
      */
     val stabilizationMs: Long = 4_000,
 
     /**
-     * 升档后的探测时间，单位为毫秒；默认值为 `20_000`。
+     * The upgrade probe duration in milliseconds; defaults to 20,000.
      */
     val probeMs: Long = 20_000,
 
     /**
-     * 再次尝试升档前的冷却时间，单位为毫秒；默认值为 `60_000`。
+     * The upgrade retry cooldown in milliseconds; defaults to 60,000.
      */
     val upgradeCooldownMs: Long = 60_000,
 
     /**
-     * 网络样本的最大有效间隔，单位为毫秒；默认值为 `5_000`。
+     * The maximum valid interval between samples in milliseconds; defaults to 5,000.
      */
     val sampleTimeoutMs: Long = 5_000,
 )

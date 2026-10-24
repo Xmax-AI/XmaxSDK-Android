@@ -39,51 +39,50 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 网络参考视频只用于本地预览，服务端独立读取同一个 URL 进行生成。
+ * A network video preview whose URL is independently read by the generation server.
  */
 internal class NetworkVideoController(
     /**
-     * 访问 Android 系统服务或媒体资源所需的上下文。
+     * The Android context for system services and media resources.
      */
     private val context: Context,
 
     /**
-     * 解析媒体尺寸及模型输入规则的服务。
+     * The service resolving media dimensions and model constraints.
      */
     private val mediaService: MediaServicing,
 ) {
 
     /**
-     * 网络视频轨道、服务端输入信息及完成通知。
+     * The current network video track.
      */
     @Volatile var currentTrack: RealtimeVideoTrack? = null
         private set
 
     /**
-     * 交由服务端读取的网络视频配置。
+     * The network video configuration read by the server.
      */
     @Volatile var reference: RealtimeReferenceVideo? = null
         private set
 
     /**
-     * 本次网络视频生成结束时的回调。
+     * The completion callback for the network video generation task.
      */
     @Volatile var onFinish: (() -> Unit)? = null
         private set
 
     /**
-     * 网络视频的本地预览播放器。
+     * The local network video preview player.
      */
     private var preview: NetworkVideoPreview? = null
 
     /**
-     * 创建由服务端读取的网络视频源及其静音本地预览。
+     * Creates a server-read network video source with a muted local preview.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param sampleMethod 服务端读取网络视频时采用的采样方式。
-     * @param onFinish 网络视频任务完成的通知；null 表示不接收完成通知。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param uri A media URI your app can read.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param sampleMethod The sampling method used when the server reads the network video.
+     * @param onFinish The completion callback for the network video task, or null to omit it.
      */
     suspend fun create(
         uri: Uri,
@@ -94,20 +93,47 @@ internal class NetworkVideoController(
         check(currentTrack == null)
         val path = validateNetworkVideoUrl(uri.toString())
         videoFormat.validate()
-        val size = mediaService.resolveMediaSize(IntSize(videoFormat.width, videoFormat.height), RealtimeMediaSource.CAMERA)
-        val format = videoFormat.copy(width = size.width, height = size.height).also { it.validate() }
-        val track = RealtimeVideoTrack("network-video", format)
-        val player = NetworkVideoPreview(context, uri)
+        val size = mediaService.resolveMediaSize(
+            IntSize(
+                videoFormat.width,
+                videoFormat.height,
+            ),
+            RealtimeMediaSource.CAMERA,
+        )
+        val format = videoFormat.copy(
+            width = size.width,
+            height = size.height,
+        ).also { it.validate() }
+        val track = RealtimeVideoTrack(
+            "network-video",
+            format,
+        )
+        val player = NetworkVideoPreview(
+            context,
+            uri,
+        )
         preview = player
-        reference = RealtimeReferenceVideo(path, sampleMethod)
+        reference = RealtimeReferenceVideo(
+            path,
+            sampleMethod,
+        )
         this@NetworkVideoController.onFinish = onFinish
         currentTrack = track
-        VideoRenderRegistry.register(track, VideoRenderBinding(player::attach, player::detach))
-        RealtimeMediaStream(StreamID.LOCAL.value, track)
+        VideoRenderRegistry.register(
+            track,
+            VideoRenderBinding(
+                player::attach,
+                player::detach,
+            ),
+        )
+        RealtimeMediaStream(
+            StreamID.LOCAL.value,
+            track,
+        )
     }
 
     /**
-     * 停止网络视频本地预览，注销当前轨道并清除服务端视频参考。
+     * Stops network preview, unregisters its track, and clears the server reference.
      */
     suspend fun stop() = withContext(Dispatchers.Main.immediate) {
         val track = currentTrack
@@ -124,92 +150,99 @@ internal class NetworkVideoController(
 }
 
 /**
- * 取得可供服务端读取的 HTTP 或 HTTPS 视频地址，无效时抛出配置错误。
+ * Validates an HTTP or HTTPS video URL for server access.
  *
- * @param value 需要规范化、校验或显示的文本。
- * @return 经校验的 HTTP 或 HTTPS 视频地址。
+ * @param value The text to normalize, validate, or display.
+ * @return The validated HTTP or HTTPS video URL.
  */
 internal fun validateNetworkVideoUrl(
-    value: String
+    value: String,
 ): String {
     val parsed = runCatching { URI(value) }.getOrNull()
-    if (parsed == null || parsed.scheme?.lowercase() !in setOf("http", "https") ||
+    if (parsed == null || parsed.scheme?.lowercase() !in setOf(
+        "http",
+        "https",
+    ) ||
         parsed.host.isNullOrBlank() || parsed.rawUserInfo != null
     ) {
-        throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Network video requires a valid HTTP or HTTPS URL")
+        throw XmaxError(
+            XmaxErrorCode.INVALID_CONFIGURATION,
+            "Network video requires a valid HTTP or HTTPS URL",
+        )
     }
     return value
 }
 
 /**
- * 所有播放器与 Surface 操作由主线程串行执行；预览异常不终止独立的服务端任务。
+ * Player and Surface operations run serially on the main thread; preview failure does not end the independent
+ * server task.
  */
 private class NetworkVideoPreview(
     /**
-     * 访问 Android 系统服务或媒体资源所需的上下文。
+     * The Android context for system services and media resources.
      */
     private val context: Context,
 
     /**
-     * 应用有读取权限的媒体地址。
+     * A media URI accessible to your app.
      */
-    private val uri: Uri
+    private val uri: Uri,
 ) {
 
     /**
-     * 播放器及其 Surface、纹理和视图绑定。
+     * The local preview player.
      */
     private var player: MediaPlayer? = null
 
     /**
-     * 播放器输出视频帧的绘制目标。
+     * The Surface receiving player video output.
      */
     private var surface: Surface? = null
 
     /**
-     * 承载本地网络视频预览的视图。
+     * The view hosting local network video preview.
      */
     private var view: XmaxVideoView? = null
 
     /**
-     * 承载播放器输出的纹理视图。
+     * The texture view receiving player output.
      */
     private var texture: TextureView? = null
 
     /**
-     * 预览的显示模式和播放状态。
+     * The preview scaling mode.
      */
     private var contentMode = VideoContentMode.FIT
 
     /**
-     * 网络视频播放器是否已准备完成。
+     * Whether the network player is prepared.
      */
     private var prepared = false
 
     /**
-     * 网络视频是否已播放结束。
+     * Whether network video playback has ended.
      */
     private var completed = false
 
     /**
-     * 视频显示尺寸，单位为像素。
+     * The video display dimensions, in pixels.
      */
     private var videoWidth = 0
 
     /**
-     * 网络视频的原始高度，单位为像素。
+     * The original network video height, in pixels.
      */
     private var videoHeight = 0
 
     /**
-     * 将网络视频预览绑定到指定视图并应用显示模式。
+     * Binds network video preview to a view with the requested scaling mode.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     fun attach(
         view: XmaxVideoView,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ) {
         this.view = view
         this.contentMode = contentMode
@@ -218,16 +251,16 @@ private class NetworkVideoPreview(
         texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
 
             /**
-             * 在预览纹理可用后建立视频输出绑定。
+             * Binds video output once the preview texture is available.
              *
-             * @param value 预览使用的 SurfaceTexture。
-             * @param width 画面宽度，单位为像素。
-             * @param height 画面高度，单位为像素。
+             * @param value The preview SurfaceTexture.
+             * @param width The frame width, in pixels.
+             * @param height The frame height, in pixels.
              */
             override fun onSurfaceTextureAvailable(
                 value: SurfaceTexture,
                 width: Int,
-                height: Int
+                height: Int,
             ) {
                 if (this@NetworkVideoPreview.texture !== texture) return
                 bindSurface(value)
@@ -235,52 +268,52 @@ private class NetworkVideoPreview(
             }
 
             /**
-             * 在预览尺寸变化后更新视频布局。
+             * Updates video layout after preview dimensions change.
              *
-             * @param value 预览使用的 SurfaceTexture。
-             * @param width 画面宽度，单位为像素。
-             * @param height 画面高度，单位为像素。
+             * @param value The preview SurfaceTexture.
+             * @param width The frame width, in pixels.
+             * @param height The frame height, in pixels.
              */
             override fun onSurfaceTextureSizeChanged(
                 value: SurfaceTexture,
                 width: Int,
-                height: Int
+                height: Int,
             ) {
                 updateTransform()
             }
 
             /**
-             * 解除已销毁纹理的媒体绑定并决定纹理资源的释放归属。
+             * Detaches a destroyed texture and determines who releases it.
              *
-             * @param value 预览使用的 SurfaceTexture。
-             * @return 是否由 TextureView 释放纹理的判定结果。
+             * @param value The preview SurfaceTexture.
+             * @return Whether TextureView should release the texture.
              */
             override fun onSurfaceTextureDestroyed(
-                value: SurfaceTexture
+                value: SurfaceTexture,
             ): Boolean {
                 if (this@NetworkVideoPreview.texture === texture) detachSurface()
                 return true
             }
 
             /**
-             * 接收纹理内容更新通知。
+             * Receives a texture content update.
              *
-             * @param value 预览使用的 SurfaceTexture。
+             * @param value The preview SurfaceTexture.
              */
             override fun onSurfaceTextureUpdated(
-                value: SurfaceTexture
+                value: SurfaceTexture,
             ) = Unit
         }
         texture.surfaceTexture?.let(::bindSurface)
     }
 
     /**
-     * 解除指定视图的网络视频预览绑定。
+     * Unbinds network video preview from a view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
+     * @param view The view to bind or unbind.
      */
     fun detach(
-        view: XmaxVideoView
+        view: XmaxVideoView,
     ) {
         if (this.view !== view) return
         detachSurface()
@@ -291,12 +324,12 @@ private class NetworkVideoPreview(
     }
 
     /**
-     * 将播放器输出绑定到指定预览纹理。
+     * Binds player output to a preview texture.
      *
-     * @param value 预览使用的 SurfaceTexture。
+     * @param value The preview SurfaceTexture.
      */
     private fun bindSurface(
-        value: SurfaceTexture
+        value: SurfaceTexture,
     ) {
         runCatching {
             surface?.release()
@@ -308,7 +341,10 @@ private class NetworkVideoPreview(
             } else {
                 val created = MediaPlayer()
                 player = created
-                created.setVolume(0f, 0f)
+                created.setVolume(
+                    0f,
+                    0f,
+                )
                 created.isLooping = false
                 created.setSurface(surface)
                 created.setOnPreparedListener {
@@ -330,46 +366,64 @@ private class NetworkVideoPreview(
                     previewFailed(IllegalStateException("Network preview error: $what/$extra"))
                     true
                 }
-                created.setDataSource(context, uri)
+                created.setDataSource(
+                    context,
+                    uri,
+                )
                 created.prepareAsync()
             }
         }.onFailure(::previewFailed)
     }
 
     /**
-     * 恢复本地视频预览播放。
+     * Resumes local video preview playback.
      *
-     * @param player 用于本地媒体预览和解码的播放器。
+     * @param player The local preview and decoding player.
      */
     private fun resumePreview(
-        player: MediaPlayer
+        player: MediaPlayer,
     ) {
         if (!prepared || surface == null) return
         if (completed) {
-            // 重绑视图时恢复尾帧，不重新播放整段视频。
-            player.seekTo((player.duration - 1).coerceAtLeast(0).toLong(), MediaPlayer.SEEK_CLOSEST)
+            // Restore the final frame when rebinding a view without replaying the entire video.
+            player.seekTo(
+                (player.duration - 1).coerceAtLeast(0).toLong(),
+                MediaPlayer.SEEK_CLOSEST,
+            )
         } else {
             player.start()
         }
     }
 
     /**
-     * 按视频尺寸和显示模式更新预览变换。
+     * Updates preview transforms from video dimensions and scaling mode.
      */
     private fun updateTransform() {
         val target = texture ?: return
         if (target.width <= 0 || target.height <= 0 || videoWidth <= 0 || videoHeight <= 0) return
         val widthRatio = target.width.toFloat() / videoWidth
         val heightRatio = target.height.toFloat() / videoHeight
-        val scale = if (contentMode == VideoContentMode.FIT) minOf(widthRatio, heightRatio) else maxOf(widthRatio, heightRatio)
-        target.setTransform(Matrix().apply {
-            setScale(videoWidth * scale / target.width, videoHeight * scale / target.height,
-                target.width / 2f, target.height / 2f)
-        })
+        val scale = if (contentMode == VideoContentMode.FIT) minOf(
+            widthRatio,
+            heightRatio,
+        ) else maxOf(
+            widthRatio,
+            heightRatio,
+        )
+        target.setTransform(
+            Matrix().apply {
+                setScale(
+                    videoWidth * scale / target.width,
+                    videoHeight * scale / target.height,
+                    target.width / 2f,
+                    target.height / 2f,
+                )
+            },
+        )
     }
 
     /**
-     * 解除播放器与预览 Surface 的绑定。
+     * Detaches the player from its preview Surface.
      */
     private fun detachSurface() {
         player?.let {
@@ -381,12 +435,12 @@ private class NetworkVideoPreview(
     }
 
     /**
-     * 报告本地预览播放失败。
+     * Reports local preview playback failure.
      *
-     * @param error 本次操作失败的异常或 SDK 错误。
+     * @param error The operation failure or SDK error.
      */
     private fun previewFailed(
-        error: Throwable
+        error: Throwable,
     ) {
         player?.release()
         player = null
@@ -395,7 +449,7 @@ private class NetworkVideoPreview(
     }
 
     /**
-     * 释放网络视频播放器和本地预览资源。
+     * Releases the network player and local preview resources.
      */
     fun release() {
         view?.let(::detach)

@@ -17,25 +17,27 @@ import ai.xmax.sdk.service.storage.StorageServicing
 import java.io.File
 
 /**
- * 文件存储公共接口的适配层，将底层结果和进度转换为 SDK 对外模型。
- * 上传校验、临时凭据和安全检查由 StorageService 负责，实际传输及取消由底层存储实现负责。
- * 路径重载统一委托给 File 重载；此层不拦截异常或切换进度回调线程。
+ * Adapts storage service results and progress to the public SDK models.
+ * StorageService validates uploads, requests credentials, and checks content safety; the transport owns
+ * transfer and cancellation.
+ * Path overloads delegate to File overloads without intercepting exceptions or changing progress callback
+ * threads.
  */
 internal class XmaxStorageManager(
     /**
-     * 校验并执行文件上传下载的业务服务。
+     * The service validating and executing file uploads and downloads.
      */
     private val storageService: StorageServicing,
 ) : XmaxStorageManaging {
 
     /**
-     * 上传图片二进制数据。
+     * Uploads encoded image bytes.
      *
-     * @param data 编码后的图片文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded image file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImage(
         data: ByteArray,
@@ -43,47 +45,60 @@ internal class XmaxStorageManager(
         contentType: String,
         progress: XmaxStorageProgressListener?,
     ): XmaxUploadedFile = storageService
-        .uploadImage(data, fileName, contentType, progress.toStorageProgressListener())
+        .uploadImage(
+            data,
+            fileName,
+            contentType,
+            progress.toStorageProgressListener(),
+        )
         .toPublicModel()
 
     /**
-     * 上传本地图片文件。
+     * Uploads a local image file.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImageFile(
         file: File,
         contentType: String?,
         progress: XmaxStorageProgressListener?,
     ): XmaxUploadedFile = storageService
-        .uploadImageFile(file, contentType, progress.toStorageProgressListener())
+        .uploadImageFile(
+            file,
+            contentType,
+            progress.toStorageProgressListener(),
+        )
         .toPublicModel()
 
     /**
-     * 上传本地图片文件路径。
+     * Uploads an image from a local file path.
      *
-     * @param filePath 可读取的本地文件路径。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param filePath A readable local file path.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImageFile(
         filePath: String,
         contentType: String?,
         progress: XmaxStorageProgressListener?,
-    ): XmaxUploadedFile = uploadImageFile(File(filePath), contentType, progress)
+    ): XmaxUploadedFile = uploadImageFile(
+        File(filePath),
+        contentType,
+        progress,
+    )
 
     /**
-     * 上传图片二进制数据并执行内容安全检查。
+     * Uploads encoded image bytes and checks content safety.
      *
-     * @param data 编码后的图片文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded image file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImageWithSafetyCheck(
         data: ByteArray,
@@ -100,12 +115,12 @@ internal class XmaxStorageManager(
         .toPublicModel()
 
     /**
-     * 上传本地图片文件并执行内容安全检查。
+     * Uploads a local image file and checks content safety.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImageFileWithSafetyCheck(
         file: File,
@@ -120,27 +135,31 @@ internal class XmaxStorageManager(
         .toPublicModel()
 
     /**
-     * 上传本地图片文件路径并执行内容安全检查。
+     * Uploads an image file path and checks content safety.
      *
-     * @param filePath 可读取的本地文件路径。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param filePath A readable local file path.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImageFileWithSafetyCheck(
         filePath: String,
         contentType: String?,
         progress: XmaxStorageProgressListener?,
-    ): XmaxUploadedFile = uploadImageFileWithSafetyCheck(File(filePath), contentType, progress)
+    ): XmaxUploadedFile = uploadImageFileWithSafetyCheck(
+        File(filePath),
+        contentType,
+        progress,
+    )
 
     /**
-     * 上传视频二进制数据。
+     * Uploads encoded video bytes.
      *
-     * @param data 编码后的视频文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded video file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadVideo(
         data: ByteArray,
@@ -148,120 +167,156 @@ internal class XmaxStorageManager(
         contentType: String,
         progress: XmaxStorageProgressListener?,
     ): XmaxUploadedFile = storageService
-        .uploadVideo(data, fileName, contentType, progress.toStorageProgressListener())
+        .uploadVideo(
+            data,
+            fileName,
+            contentType,
+            progress.toStorageProgressListener(),
+        )
         .toPublicModel()
 
     /**
-     * 上传本地视频文件。
+     * Uploads a local video file.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadVideoFile(
         file: File,
         contentType: String?,
         progress: XmaxStorageProgressListener?,
     ): XmaxUploadedFile = storageService
-        .uploadVideoFile(file, contentType, progress.toStorageProgressListener())
+        .uploadVideoFile(
+            file,
+            contentType,
+            progress.toStorageProgressListener(),
+        )
         .toPublicModel()
 
     /**
-     * 上传本地视频文件路径。
+     * Uploads a video from a local file path.
      *
-     * @param filePath 可读取的本地文件路径。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param filePath A readable local file path.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadVideoFile(
         filePath: String,
         contentType: String?,
         progress: XmaxStorageProgressListener?,
-    ): XmaxUploadedFile = uploadVideoFile(File(filePath), contentType, progress)
+    ): XmaxUploadedFile = uploadVideoFile(
+        File(filePath),
+        contentType,
+        progress,
+    )
 
     /**
-     * 下载远端图片到本地文件。
+     * Downloads a remote image to a local file.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地路径及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded local path and actual byte count.
      */
     override suspend fun downloadImage(
         remoteUrl: String,
         destination: File,
         progress: XmaxStorageProgressListener?,
     ): XmaxDownloadedFile = storageService
-        .downloadImage(remoteUrl, destination, progress.toStorageProgressListener())
+        .downloadImage(
+            remoteUrl,
+            destination,
+            progress.toStorageProgressListener(),
+        )
         .toPublicModel()
 
     /**
-     * 下载远端图片到本地文件路径。
+     * Downloads a remote image to a local file path.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destinationPath 下载成功后保存内容的目标文件路径。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地路径及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destinationPath The destination path replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded local path and actual byte count.
      */
     override suspend fun downloadImage(
         remoteUrl: String,
         destinationPath: String,
         progress: XmaxStorageProgressListener?,
-    ): XmaxDownloadedFile = downloadImage(remoteUrl, File(destinationPath), progress)
+    ): XmaxDownloadedFile = downloadImage(
+        remoteUrl,
+        File(destinationPath),
+        progress,
+    )
 
     /**
-     * 下载远端视频到本地文件。
+     * Downloads a remote video to a local file.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地路径及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded local path and actual byte count.
      */
     override suspend fun downloadVideo(
         remoteUrl: String,
         destination: File,
         progress: XmaxStorageProgressListener?,
     ): XmaxDownloadedFile = storageService
-        .downloadVideo(remoteUrl, destination, progress.toStorageProgressListener())
+        .downloadVideo(
+            remoteUrl,
+            destination,
+            progress.toStorageProgressListener(),
+        )
         .toPublicModel()
 
     /**
-     * 下载远端视频到本地文件路径。
+     * Downloads a remote video to a local file path.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destinationPath 下载成功后保存内容的目标文件路径。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地路径及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destinationPath The destination path replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded local path and actual byte count.
      */
     override suspend fun downloadVideo(
         remoteUrl: String,
         destinationPath: String,
         progress: XmaxStorageProgressListener?,
-    ): XmaxDownloadedFile = downloadVideo(remoteUrl, File(destinationPath), progress)
+    ): XmaxDownloadedFile = downloadVideo(
+        remoteUrl,
+        File(destinationPath),
+        progress,
+    )
 }
 
 /**
- * 只暴露上传结果，隔离底层存储实现类型。
+ * Returns public upload metadata without exposing transport implementation types.
  *
- * @return 上传后的访问地址、对象键及校验标识。
+ * @return The uploaded URL, object key, and entity tag.
  */
 private fun StoredFile.toPublicModel(): XmaxUploadedFile =
-    XmaxUploadedFile(url = url, objectKey = objectKey, etag = etag)
+    XmaxUploadedFile(
+        url = url,
+        objectKey = objectKey,
+        etag = etag,
+    )
 
 /**
- * 保留下载使用的目标路径及实际写入字节数。
+ * Retains the download destination and actual bytes written.
  *
- * @return 下载后的本地路径及实际字节数。
+ * @return The downloaded local path and actual byte count.
  */
 private fun DownloadedFile.toPublicModel(): XmaxDownloadedFile =
-    XmaxDownloadedFile(filePath = file.path, byteCount = byteCount)
+    XmaxDownloadedFile(
+        filePath = file.path,
+        byteCount = byteCount,
+    )
 
 /**
- * 仅适配进度模型，不改变回调的执行线程；未注册监听器时不创建适配器。
+ * Adapts progress without changing its callback thread; creates no adapter when no listener is supplied.
  *
- * @return 转换后的存储进度监听器；未提供公共监听器时为 null。
+ * @return The adapted progress listener, or null if no public listener was supplied.
  */
 private fun XmaxStorageProgressListener?.toStorageProgressListener(): StorageProgressListener? =
     this?.let { listener ->

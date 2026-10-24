@@ -16,27 +16,27 @@ import java.nio.ByteOrder
 import java.util.ArrayDeque
 
 /**
- * 将解码后的 PCM 样本整理为 RTC 所需的连续 10 ms 数据包。
+ * Packs decoded PCM samples into contiguous 10 ms frames for RTC.
  */
 internal class PCMFramePacketizer(
     /**
-     * 需要处理的总采样数。
+     * The total number of samples to process.
      */
     private val totalSamples: Int,
 ) {
 
     /**
-     * 音频采样缓冲与输入输出进度。
+     * The current audio packet buffer.
      */
     private val pendingSamples = ArrayDeque<Short>()
 
     /**
-     * 当前包已写入的采样点数。
+     * The number of samples written into the current packet.
      */
     private var writtenSampleCount = 0
 
     /**
-     * 已输出的采样点总数，用于计算音频时间戳。
+     * The total emitted sample count used for timestamps.
      */
     private var emittedSampleCount = 0
 
@@ -46,14 +46,14 @@ internal class PCMFramePacketizer(
     }
 
     /**
-     * 按媒体采样位置缓冲 PCM16 数据并组成固定长度音频包。
+     * Buffers timeline-positioned PCM16 samples into fixed-size packets.
      *
-     * @param samples 待分包的 PCM16 音频采样。
-     * @param atSample 该批数据在媒体时间线中的起始采样位置。
+     * @param samples The PCM16 samples to packetize.
+     * @param atSample The starting sample position on the media timeline.
      */
     fun append(
         samples: ShortArray,
-        atSample: Int
+        atSample: Int,
     ) {
         if (writtenSampleCount >= totalSamples || samples.isEmpty()) return
         val normalizedStart = atSample.coerceAtLeast(0)
@@ -71,7 +71,7 @@ internal class PCMFramePacketizer(
     }
 
     /**
-     * 用静音补齐尾部不足一帧的 PCM 数据。
+     * Pads the incomplete final audio frame with silence.
      */
     fun finishWithSilence() {
         while (writtenSampleCount < totalSamples) {
@@ -81,9 +81,9 @@ internal class PCMFramePacketizer(
     }
 
     /**
-     * 取出下一份完整的 PCM 音频包，数据不足时返回 null。
+     * Returns the next complete PCM packet, or null while more samples are needed.
      *
-     * @return 下一份完整音频包；数据不足时为 null。
+     * @return The next complete packet, or null if incomplete.
      */
     fun nextFrame(): Packet? {
         if (pendingSamples.size < AudioFrame.samplesPerFrame ||
@@ -105,16 +105,16 @@ internal class PCMFramePacketizer(
     }
 
     /**
-     * 一份可提交的 PCM 音频数据及其时间位置。
+     * A PCM packet and its timeline position.
      */
     internal data class Packet(
         /**
-         * 待读取、传输或持有的二进制数据。
+         * The binary data to read, transfer, or retain.
          */
         val data: ByteArray,
 
         /**
-         * 音频包在媒体时间线中的起始采样位置。
+         * The packet's starting sample position on the media timeline.
          */
         val sampleOffset: Int,
     )

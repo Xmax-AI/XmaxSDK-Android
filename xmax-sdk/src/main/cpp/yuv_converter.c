@@ -13,41 +13,41 @@
 #include <stdlib.h>
 
 /**
- * 描述可安全访问的像素平面及其内存布局。
+ * A pixel plane and its safely accessible memory layout.
  */
 typedef struct {
 
     /**
-     * 像素平面的起始内存地址。
+     * The pixel plane's starting memory address.
      */
     const uint8_t *data;
 
     /**
-     * 缓冲区可访问的字节容量。
+     * The accessible buffer capacity, in bytes.
      */
     jlong capacity;
 
     /**
-     * 有效像素数据的起始字节偏移。
+     * The valid data's starting byte offset.
      */
     jint offset;
 
     /**
-     * 相邻像素行起点之间的字节距离。
+     * The byte distance between consecutive row starts.
      */
     jint row_stride;
 
     /**
-     * 相邻像素之间的字节距离。
+     * The pixel stride, in bytes.
      */
     jint pixel_stride;
 } Plane;
 
 /**
- * 将颜色通道值限制在有效的八位范围内。
+ * Clamps a color channel to the valid eight-bit range.
  *
- * @param value 待限制的颜色通道值。
- * @return 位于 0 到 255 范围内的通道值。
+ * @param value The color channel value to clamp.
+ * @return A channel value from 0 to 255.
  */
 static jint clamp_color(
     jint value
@@ -58,12 +58,12 @@ static jint clamp_color(
 }
 
 /**
- * 检查像素平面是否能安全访问指定的最远坐标。
+ * Checks whether the furthest requested plane coordinate is safely accessible.
  *
- * @param plane 待校验的像素平面。
- * @param maximum_x 需要读取的最大横坐标，单位为像素。
- * @param maximum_y 需要读取的最大纵坐标，单位为像素。
- * @return 数据、步长和坐标均有效且未越界时为 JNI_TRUE，否则为 JNI_FALSE。
+ * @param plane The pixel plane to validate.
+ * @param maximum_x The furthest horizontal sample coordinate, in pixels.
+ * @param maximum_y The furthest vertical sample coordinate, in pixels.
+ * @return JNI_TRUE for valid, accessible data, strides, and coordinates; JNI_FALSE otherwise.
  */
 static jboolean valid_plane(
     const Plane *plane,
@@ -82,17 +82,17 @@ static jboolean valid_plane(
 }
 
 /**
- * 将显示坐标转换为应用裁剪和旋转前的源图像坐标。
+ * Maps display coordinates to the source before cropping and rotation.
  *
- * @param display_x 显示画面横坐标。
- * @param display_y 显示画面纵坐标。
- * @param crop_left 裁剪区域左边界。
- * @param crop_top 裁剪区域上边界。
- * @param crop_width 裁剪区域宽度。
- * @param crop_height 裁剪区域高度。
- * @param rotation 顺时针旋转角度，支持 0、90、180、270 度。
- * @param source_x 接收源图像横坐标的输出指针。
- * @param source_y 接收源图像纵坐标的输出指针。
+ * @param display_x The horizontal display coordinate.
+ * @param display_y The vertical display coordinate.
+ * @param crop_left The left crop edge.
+ * @param crop_top The top crop edge.
+ * @param crop_width The crop width.
+ * @param crop_height The crop height.
+ * @param rotation The clockwise rotation: 0, 90, 180, or 270 degrees.
+ * @param source_x Receives the horizontal source coordinate.
+ * @param source_y Receives the vertical source coordinate.
  */
 static inline void source_coordinate(
     jint display_x,
@@ -126,35 +126,35 @@ static inline void source_coordinate(
 }
 
 /**
- * 将直接缓冲区中的 YUV420 图像裁剪、旋转并等比填充到目标 I420 尺寸。
+ * Crops, rotates, and aspect-fills a direct-buffer YUV420 image into I420 output dimensions.
  *
- * @param env 当前线程的 JNI 环境。
- * @param instance 发起调用的 Kotlin 单例，本方法不访问该对象。
- * @param y_buffer Y 平面的直接缓冲区。
- * @param y_offset Y 平面有效数据的字节偏移。
- * @param y_row_stride Y 平面相邻行的字节距离。
- * @param y_pixel_stride Y 平面相邻像素的字节距离。
- * @param u_buffer U 平面的直接缓冲区。
- * @param u_offset U 平面有效数据的字节偏移。
- * @param u_row_stride U 平面相邻行的字节距离。
- * @param u_pixel_stride U 平面相邻像素的字节距离。
- * @param v_buffer V 平面的直接缓冲区。
- * @param v_offset V 平面有效数据的字节偏移。
- * @param v_row_stride V 平面相邻行的字节距离。
- * @param v_pixel_stride V 平面相邻像素的字节距离。
- * @param source_width 源图像宽度，单位为像素。
- * @param source_height 源图像高度，单位为像素。
- * @param crop_left 裁剪区域左边界，单位为像素。
- * @param crop_top 裁剪区域上边界，单位为像素。
- * @param crop_width 裁剪区域宽度，单位为像素。
- * @param crop_height 裁剪区域高度，单位为像素。
- * @param output_width 输出宽度，必须为正偶数。
- * @param output_height 输出高度，必须为正偶数。
- * @param rotation 顺时针旋转角度，支持 0、90、180、270 度。
- * @param output_y 接收连续 Y 平面数据的数组。
- * @param output_u 接收连续 U 平面数据的数组。
- * @param output_v 接收连续 V 平面数据的数组。
- * @return 转换成功时为 JNI_TRUE；参数无效、内存不足或缓冲不可访问时为 JNI_FALSE。
+ * @param env The current thread's JNI environment.
+ * @param instance The calling Kotlin singleton, unused by this function.
+ * @param y_buffer The direct Y-plane buffer.
+ * @param y_offset The valid Y-plane byte offset.
+ * @param y_row_stride The Y-plane row stride, in bytes.
+ * @param y_pixel_stride The Y-plane pixel stride, in bytes.
+ * @param u_buffer The direct U-plane buffer.
+ * @param u_offset The valid U-plane byte offset.
+ * @param u_row_stride The U-plane row stride, in bytes.
+ * @param u_pixel_stride The U-plane pixel stride, in bytes.
+ * @param v_buffer The direct V-plane buffer.
+ * @param v_offset The valid V-plane byte offset.
+ * @param v_row_stride The V-plane row stride, in bytes.
+ * @param v_pixel_stride The V-plane pixel stride, in bytes.
+ * @param source_width The source width, in pixels.
+ * @param source_height The source height, in pixels.
+ * @param crop_left The left crop edge, in pixels.
+ * @param crop_top The top crop edge, in pixels.
+ * @param crop_width The crop width, in pixels.
+ * @param crop_height The crop height, in pixels.
+ * @param output_width The output width; must be positive and even.
+ * @param output_height The output height; must be positive and even.
+ * @param rotation The clockwise rotation: 0, 90, 180, or 270 degrees.
+ * @param output_y The contiguous output Y-plane array.
+ * @param output_u The contiguous output U-plane array.
+ * @param output_v The contiguous output V-plane array.
+ * @return JNI_TRUE on success; JNI_FALSE for invalid input, insufficient memory, or inaccessible buffers.
  */
 JNIEXPORT jboolean JNICALL
 Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
@@ -323,20 +323,20 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
 }
 
 /**
- * 将 I420 像素转换为可供 Android Bitmap 使用的 ARGB 像素。
+ * Converts I420 pixels to ARGB for Android Bitmap output.
  *
- * @param env 当前线程的 JNI 环境。
- * @param instance 发起调用的 Kotlin 单例，本方法不访问该对象。
- * @param y_data Y 亮度平面数据。
- * @param y_stride Y 平面相邻行的字节距离。
- * @param u_data U 色度平面数据。
- * @param u_stride U 平面相邻行的字节距离。
- * @param v_data V 色度平面数据。
- * @param v_stride V 平面相邻行的字节距离。
- * @param width 图像宽度，单位为像素。
- * @param height 图像高度，单位为像素。
- * @param output_pixels 接收 ARGB 像素的数组，长度至少为 width × height。
- * @return 转换成功时为 JNI_TRUE，参数无效或数组不可访问时为 JNI_FALSE。
+ * @param env The current thread's JNI environment.
+ * @param instance The calling Kotlin singleton, unused by this function.
+ * @param y_data The Y luma plane.
+ * @param y_stride The Y-plane row stride, in bytes.
+ * @param u_data The U chroma plane.
+ * @param u_stride The U-plane row stride, in bytes.
+ * @param v_data The V chroma plane.
+ * @param v_stride The V-plane row stride, in bytes.
+ * @param width The image width, in pixels.
+ * @param height The image height, in pixels.
+ * @param output_pixels Receives ARGB pixels and must hold at least width times height elements.
+ * @return JNI_TRUE on success; JNI_FALSE for invalid input or inaccessible arrays.
  */
 JNIEXPORT jboolean JNICALL
 Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertI420ToArgbNative(

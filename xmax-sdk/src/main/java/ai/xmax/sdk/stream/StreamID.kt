@@ -11,22 +11,22 @@
 package ai.xmax.sdk.stream
 
 /**
- * SDK 内部使用的本地与远端媒体流标识。
+ * The internal local and remote media stream identifiers.
  */
 internal enum class StreamID(
     /**
-     * 需要规范化、校验或显示的文本。
+     * The string representation used for configuration or display.
      */
-    val value: String
+    val value: String,
 ) {
 
     /**
-     * 本地输入媒体流标识。
+     * The local input stream identifier.
      */
     LOCAL("stream-local"),
 
     /**
-     * 远端生成媒体流标识。
+     * The remote generation stream identifier.
      */
     REMOTE("stream-remote"),
 }

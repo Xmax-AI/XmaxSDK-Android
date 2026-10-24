@@ -26,68 +26,75 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 /**
- * 异步接收当前生成任务标识及媒体归一化轨迹坐标。
+ * Receives the active task identifier and media-normalized trajectories asynchronously.
  */
 internal typealias InteractionListener = suspend (String, List<RealtimePoint>) -> Unit
 
 /**
- * 将渲染容器中的交互行为转换为固定媒体基准的归一化坐标并发送。
+ * Maps viewport interaction to normalized coordinates using the fixed media baseline and submits
+ * trajectories.
  */
 internal class InteractionController(
     /**
-     * 接收对应事件的监听器。
+     * The event listener.
      */
     private val listener: InteractionListener = { _, _ -> },
 
     /**
-     * 执行后台任务的协程作用域。
+     * The scope for background tasks.
      */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : InteractionControlling {
 
     /**
-     * 交互任务与轨迹队列的并发保护。
+     * The lock protecting interaction tasks and pending trajectories.
      */
     private val stateLock = Any()
 
     /**
-     * 当前任务、待发送轨迹及派发代次。
+     * The current interaction task.
      */
     private var activeInteraction: ActiveInteraction? = null
 
     /**
-     * 等待发送的最新轨迹提交。
+     * The latest trajectory awaiting submission.
      */
     private var pendingSubmission: Submission? = null
 
     /**
-     * 发送待处理轨迹的协程。
+     * The coroutine sending pending trajectories.
      */
     private var drainJob: Job? = null
 
     /**
-     * 轨迹发送循环的版本，用于隔离过期任务。
+     * The sending revision used to reject stale interaction tasks.
      */
     private var drainGeneration = 0L
 
     /**
-     * 为指定生成任务启用交互轨迹提交。
+     * Enables interaction submission for a generation task.
      *
-     * @param taskId 用于关联本次生成请求和结果流的任务标识。
-     * @param videoFormat 处理后的固定本地媒体规格，用于确定归一化坐标基准。
+     * @param taskId The identifier associating the generation request with its result stream.
+     * @param videoFormat The fixed, resolved media format defining normalized coordinates.
      */
     override suspend fun startInteraction(
         taskId: String,
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     ) {
         stopInteraction()
         synchronized(stateLock) {
-            activeInteraction = ActiveInteraction(taskId, SizeF(videoFormat.width.toFloat(), videoFormat.height.toFloat()))
+            activeInteraction = ActiveInteraction(
+                taskId,
+                SizeF(
+                    videoFormat.width.toFloat(),
+                    videoFormat.height.toFloat(),
+                ),
+            )
         }
     }
 
     /**
-     * 停止当前任务的交互轨迹提交并丢弃未发送的数据。
+     * Stops interaction submission and discards pending trajectories.
      */
     override suspend fun stopInteraction() {
         val job = synchronized(stateLock) {
@@ -100,12 +107,12 @@ internal class InteractionController(
     }
 
     /**
-     * 提交当前显示画面对应的触控轨迹。
+     * Submits a trajectory for the currently displayed image.
      *
-     * @param frame 当前触控轨迹及显示画面尺寸。
+     * @param frame The current trajectory and displayed image dimensions.
      */
     override fun submitInteraction(
-        frame: InteractionFrame
+        frame: InteractionFrame,
     ) {
         val interaction = synchronized(stateLock) { activeInteraction } ?: return
         if (frame.points.isEmpty()) return
@@ -122,7 +129,10 @@ internal class InteractionController(
         synchronized(stateLock) {
             val current = activeInteraction
             if (current == null || current.taskId != interaction.taskId) return
-            pendingSubmission = Submission(current.taskId, points)
+            pendingSubmission = Submission(
+                current.taskId,
+                points,
+            )
             if (drainJob?.isActive == true) return
             val generation = drainGeneration
             drainJob = scope.launch { drainPendingFrames(generation) }
@@ -130,12 +140,12 @@ internal class InteractionController(
     }
 
     /**
-     * 依次发送当前交互任务的待提交轨迹，忽略失效任务。
+     * Sends pending trajectories for the current interaction task, ignoring invalidated tasks.
      *
-     * @param generation 用于识别当前生成请求或事件归属的标识。
+     * @param generation The identifier associating events with the current request.
      */
     private suspend fun drainPendingFrames(
-        generation: Long
+        generation: Long,
     ) {
         while (true) {
             val submission = synchronized(stateLock) {
@@ -153,16 +163,26 @@ internal class InteractionController(
             }
             try {
                 currentCoroutineContext().ensureActive()
-                listener(submission.taskId, submission.points)
-            } catch (error: CancellationException) {
+                listener(
+                    submission.taskId,
+                    submission.points,
+                )
+            } catch (
+                error: CancellationException,
+            ) {
                 throw error
-            } catch (error: Throwable) {
-                // 轨迹采用最新帧优先策略，单帧发送失败不终止后续交互。
+            } catch (
+                error: Throwable,
+            ) {
+                // Trajectories prefer the latest frame; an individual send failure does not stop later interaction.
                 XmaxLogger.interaction.warn(
                     message = {
                         "发送交互轨迹失败，已丢弃当前采样帧 " +
                             "(Failed to Send Interaction Trajectory; Current Sample Dropped)\n" +
-                            "└─ ${XmaxLogger.localized("原因：", "Reason: ")}${ErrorMessageFormatter.format(error)}"
+                            "└─ ${XmaxLogger.localized(
+                                "原因：",
+                                "Reason: ",
+                            )}${ErrorMessageFormatter.format(error)}"
                     },
                 )
             }
@@ -170,31 +190,31 @@ internal class InteractionController(
     }
 
     /**
-     * 保存当前允许发送轨迹的任务及坐标换算规格。
+     * The task and media format currently permitted to submit trajectories.
      */
     private data class ActiveInteraction(
         /**
-         * 用于关联本次生成请求和结果流的任务标识。
+         * The task identifier associating generation requests with result streams.
          */
         val taskId: String,
 
         /**
-         * 处理后的固定本地媒体尺寸，用于归一化轨迹坐标。
+         * The fixed, resolved media dimensions used for trajectory normalization.
          */
         val resolvedMediaSize: SizeF,
     )
 
     /**
-     * 准备发送给生成服务的任务标识与轨迹点集合。
+     * A task identifier and trajectory points ready for submission.
      */
     private data class Submission(
         /**
-         * 用于关联本次生成请求和结果流的任务标识。
+         * The task identifier associating generation requests with result streams.
          */
         val taskId: String,
 
         /**
-         * 媒体归一化坐标中的轨迹点集合，范围为 [0, 1]。
+         * Trajectory points in normalized media coordinates, from 0 to 1.
          */
         val points: List<RealtimePoint>,
     )

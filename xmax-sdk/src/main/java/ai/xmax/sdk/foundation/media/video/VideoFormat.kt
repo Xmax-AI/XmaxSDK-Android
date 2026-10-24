@@ -11,24 +11,25 @@
 package ai.xmax.sdk
 
 /**
- * 表示视频帧的固定尺寸和像素格式。
+ * The fixed dimensions and pixel format of a video frame.
  */
 internal data class VideoFormat(
     /**
-     * 画面宽度，单位为像素。
+     * The frame width, in pixels.
      */
     val width: Int,
 
     /**
-     * 画面高度，单位为像素。
+     * The frame height, in pixels.
      */
     val height: Int,
 
     /**
-     * 视频像素数据的排列格式。
+     * The arrangement of video pixels.
      */
     val pixelFormat: VideoPixelFormat,
 ) {
+
     init {
         if (width <= 0 || height <= 0) {
             throw XmaxError(

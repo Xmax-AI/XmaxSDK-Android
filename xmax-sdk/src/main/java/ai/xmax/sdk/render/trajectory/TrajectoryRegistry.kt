@@ -14,46 +14,49 @@ import ai.xmax.sdk.RealtimeVideoTrack
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 保存远端视频轨道与轨迹交互能力之间的绑定。
+ * The bindings between remote tracks and trajectory interaction.
  */
 internal object TrajectoryRegistry {
 
     /**
-     * 轨道与显示组件的绑定记录。
+     * Bindings between tracks and display components.
      */
     private val bindings = ConcurrentHashMap<RealtimeVideoTrack, TrajectoryBinding>()
 
     /**
-     * 为视频轨道登记对应的显示或交互绑定。
+     * Registers a track's display or interaction binding.
      *
-     * @param track 需要显示或绑定的视频轨道。
-     * @param binding 视频轨道对应的显示或交互绑定。
+     * @param track The video track to display or bind.
+     * @param binding The track's display or interaction binding.
      */
     fun register(
         track: RealtimeVideoTrack,
-        binding: TrajectoryBinding
+        binding: TrajectoryBinding,
     ) {
-        bindings.put(track, binding)?.invalidate()
+        bindings.put(
+            track,
+            binding,
+        )?.invalidate()
     }
 
     /**
-     * 移除视频轨道的显示或交互绑定。
+     * Removes a track's display or interaction binding.
      *
-     * @param track 需要显示或绑定的视频轨道。
+     * @param track The video track to display or bind.
      */
     fun unregister(
-        track: RealtimeVideoTrack
+        track: RealtimeVideoTrack,
     ) {
         bindings.remove(track)?.invalidate()
     }
 
     /**
-     * 查询视频轨道对应的显示或交互绑定。
+     * Returns a track's display or interaction binding.
      *
-     * @param track 需要显示或绑定的视频轨道。
-     * @return 轨道对应的轨迹绑定；未注册时为 null。
+     * @param track The video track to display or bind.
+     * @return The trajectory binding, or null if unregistered.
      */
     fun binding(
-        track: RealtimeVideoTrack
+        track: RealtimeVideoTrack,
     ): TrajectoryBinding? = bindings[track]
 }

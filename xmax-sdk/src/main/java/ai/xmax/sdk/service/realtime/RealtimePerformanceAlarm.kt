@@ -11,52 +11,52 @@
 package ai.xmax.sdk
 
 /**
- * 实时性能限制状态。
+ * The realtime device performance state.
  */
 public enum class RealtimePerformanceStatus(
     /**
-     * 需要规范化、校验或显示的文本。
+     * The string representation used for configuration or display.
      */
-    public val value: String
+    public val value: String,
 ) {
 
     /**
-     * 设备性能受限。
+     * Device performance is limited.
      */
     LIMITED("Limited"),
 
     /**
-     * 设备性能已恢复。
+     * Device performance has recovered.
      */
     RECOVERED("Recovered"),
 }
 
 /**
- * 实时性能告警信息。
+ * A realtime device performance alarm.
  */
 public data class RealtimePerformanceAlarm(
     /**
-     * 当前设备性能受限或恢复状态。
+     * The current device limitation or recovery state.
      */
     public val status: RealtimePerformanceStatus,
 
     /**
-     * 设备建议的视频规格；null 表示没有有效建议。
+     * The suggested video format, or null without a valid suggestion.
      */
     public val suggestedVideoFormat: RealtimeVideoFormat?,
 )
 
 /**
- * 实时性能告警监听器。
+ * The realtime performance alarm listener.
  */
 public fun interface RealtimePerformanceAlarmListener {
 
     /**
-     * 接收设备性能受限状态及建议的视频规格。
+     * Receives device performance limits and a suggested video format.
      *
-     * @param alarm 设备性能限制及建议规格快照。
+     * @param alarm The device limitation and suggested format snapshot.
      */
     public fun onPerformanceAlarm(
-        alarm: RealtimePerformanceAlarm
+        alarm: RealtimePerformanceAlarm,
     )
 }

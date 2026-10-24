@@ -15,97 +15,94 @@ import android.view.View
 import java.util.UUID
 
 /**
- * 一次活动轨迹的稳定标识。
+ * A stable identifier for one active trajectory.
  */
 public class TrajectoryID internal constructor(
     /**
-     * 用于构造值对象的底层值。
+     * The underlying value represented by this object.
      */
     internal val rawValue: UUID = UUID.randomUUID(),
 ) {
 
     /**
-     * 比较对象的值是否相等。
+     * Compares objects by value.
      *
-     * @param other 用于比较或组合的另一个对象。
-     * @return 对象的内容相等时为 true，否则为 false。
+     * @param other The object to compare or combine.
      */
     override fun equals(
-        other: Any?
+        other: Any?,
     ): Boolean = other is TrajectoryID && rawValue == other.rawValue
 
     /**
-     * 生成与值相等规则一致的哈希值。
-     *
-     * @return 与值相等规则一致的哈希值。
+     * Computes a hash consistent with value equality.
      */
     override fun hashCode(): Int = rawValue.hashCode()
 }
 
 /**
- * 交给轨迹效果渲染器的可视化触点。
+ * A visual touch point delivered to a trajectory effect renderer.
  */
 public class TrajectoryPoint internal constructor(
     /**
-     * 同一触点在一次连续拖拽中的轨迹标识。
+     * The stable identifier for one continuous drag.
      */
     public val id: TrajectoryID,
 
     /**
-     * 触点在视图中的位置，单位为像素。
+     * The touch position in view pixels.
      */
     public val location: PointF,
 
     /**
-     * 触点相对于处理后完整媒体区域的归一化位置。
+     * The normalized touch position within the complete resolved media area.
      */
     public val normalizedLocation: PointF,
 
     /**
-     * 触点的单调时间戳，单位为秒。
+     * The monotonic touch timestamp, in seconds.
      */
     public val timestamp: Double,
 )
 
 /**
- * 自定义轨迹效果的绘制接口。
+ * The drawing interface for custom trajectory effects.
  */
 public interface TrajectoryEffectRendering {
 
     /**
-     * 提供给容器的轨迹显示视图。
+     * The trajectory effect view hosted by the container.
      */
     public val view: View
 
     /**
-     * 开始绘制新加入的触控轨迹。
+     * Starts drawing newly added trajectories.
      *
-     * @param points 包含位置和时间戳的触控轨迹点。
+     * @param points Trajectory points with positions and timestamps.
      */
     public fun renderBegan(
-        points: List<TrajectoryPoint>
+        points: List<TrajectoryPoint>,
     )
 
     /**
-     * 更新正在显示的触控轨迹位置。
+     * Updates the positions of visible trajectories.
      *
-     * @param points 包含位置和时间戳的触控轨迹点。
+     * @param points Trajectory points with positions and timestamps.
      */
     public fun renderMoved(
-        points: List<TrajectoryPoint>
+        points: List<TrajectoryPoint>,
     )
 
     /**
-     * 结束指定轨迹的显示。
+     * Ends display of the specified trajectories.
      *
-     * @param identifiers 需要结束的轨迹标识集合。
+     * @param identifiers The trajectory identifiers to end.
      */
     public fun renderEnded(
-        identifiers: List<TrajectoryID>
+        identifiers: List<TrajectoryID>,
     )
 
     /**
-     * 清除所有轨迹及渲染效果。
+     * Clears all trajectories and rendering effects.
      */
     public fun reset()
 }

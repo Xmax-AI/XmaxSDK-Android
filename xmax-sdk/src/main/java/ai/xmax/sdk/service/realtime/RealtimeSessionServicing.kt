@@ -13,25 +13,25 @@ package ai.xmax.sdk.service.realtime
 import ai.xmax.sdk.RealtimeModel
 
 /**
- * 定义实时会话 API 与心跳生命周期能力。
+ * The realtime session API and heartbeat lifecycle capabilities.
  */
 internal interface RealtimeSessionServicing {
 
     /**
-     * 创建实时会话并返回 RTC 连接信息。
+     * Creates a realtime session and returns its RTC connection details.
      *
-     * @param model 用于确定服务端能力、地址及输入规格的模型。
-     * @return 服务端会话标识、状态及可用的 RTC 连接信息。
+     * @param model The model defining server capabilities and input constraints.
+     * @return The server session identifier, state, and available RTC connection details.
      */
     suspend fun createSession(
-        model: RealtimeModel
+        model: RealtimeModel,
     ): RealtimeSession
 
     /**
-     * 启动指定会话的周期心跳。
+     * Starts periodic heartbeats for a session.
      *
-     * @param sessionId 服务端会话标识。
-     * @param onFailure 会话续期失败时接收会话标识和错误的回调。
+     * @param sessionId The server session identifier.
+     * @param onFailure Receives the session identifier and error when renewal fails.
      */
     fun startHeartbeat(
         sessionId: String,
@@ -39,16 +39,16 @@ internal interface RealtimeSessionServicing {
     )
 
     /**
-     * 停止当前心跳；已经失效的迟到结果不会再触发失败回调。
+     * Stops the heartbeat, preventing invalidated late results from reporting failures.
      */
     suspend fun stopHeartbeat()
 
     /**
-     * 关闭指定实时会话。
+     * Closes a realtime session.
      *
-     * @param sessionId 服务端会话标识。
+     * @param sessionId The server session identifier.
      */
     suspend fun closeSession(
-        sessionId: String
+        sessionId: String,
     )
 }

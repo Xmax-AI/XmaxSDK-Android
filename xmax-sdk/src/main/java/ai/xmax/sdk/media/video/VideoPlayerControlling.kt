@@ -16,20 +16,20 @@ import ai.xmax.sdk.XmaxVideoView
 import android.net.Uri
 
 /**
- * 定义基于统一媒体时间轴的文件音视频输出能力。
+ * The file audio/video output capability using a shared timeline.
  */
 internal interface VideoPlayerControlling {
 
     /**
-     * 设置解码源、输出尺寸、旋转方向、帧率及播放时长。
+     * Sets the decoder source, output dimensions, rotation, frame rate, and duration.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
-     * @param rotation 应用到源画面的旋转方向。
-     * @param frameRate 视频帧率，单位为 fps。
-     * @param hasAudio 输入媒体是否包含可用音频。
-     * @param durationUs 媒体持续时间，单位为微秒。
+     * @param uri A media URI your app can read.
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
+     * @param rotation The rotation applied to the source image.
+     * @param frameRate The video frame rate, in fps.
+     * @param hasAudio Whether the input provides audio.
+     * @param durationUs The media duration, in microseconds.
      */
     suspend fun configure(
         uri: Uri,
@@ -42,50 +42,50 @@ internal interface VideoPlayerControlling {
     )
 
     /**
-     * 启动循环解码，并按统一播放时间线输出音视频帧。
+     * Starts looped decoding and supplies media frames on the shared timeline.
      */
     suspend fun start()
 
     /**
-     * 设置本地预览是否静音，不改变保存的音量值。
+     * Mutes or unmutes local preview without changing its stored volume.
      *
-     * @param muted 是否静音。
+     * @param muted Whether audio is muted.
      */
     suspend fun setLocalAudioPreviewMuted(
-        muted: Boolean
+        muted: Boolean,
     )
 
     /**
-     * 设置当前本地媒体的预览音量，范围为 0 到 1，不影响提交给 RTC 的音频数据。
+     * Sets local preview volume from 0 to 1 without changing audio submitted to RTC.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     suspend fun setLocalAudioVolume(
-        volume: Float
+        volume: Float,
     )
 
     /**
-     * 将本地媒体预览绑定到指定视图并应用显示模式。
+     * Binds local media preview to a view with the requested scaling mode.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     fun attachPreview(
         view: XmaxVideoView,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     )
 
     /**
-     * 解除指定视图的本地媒体预览绑定。
+     * Unbinds local media preview from a view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
+     * @param view The view to bind or unbind.
      */
     fun detachPreview(
-        view: XmaxVideoView
+        view: XmaxVideoView,
     )
 
     /**
-     * 停止解码播放并释放当前媒体资源。
+     * Stops decoding and releases the current media resources.
      */
     suspend fun stop()
 }

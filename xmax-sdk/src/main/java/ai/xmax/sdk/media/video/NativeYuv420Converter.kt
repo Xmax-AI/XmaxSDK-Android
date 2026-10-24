@@ -14,12 +14,12 @@ import ai.xmax.sdk.VideoRotation
 import java.nio.ByteBuffer
 
 /**
- * Android 平台内部的 YUV 热路径加速器；原生库不可用时由调用方回退到 Kotlin。
+ * The native Android YUV converter, with Kotlin fallback when the library is unavailable.
  */
 internal object NativeYuv420Converter {
 
     /**
-     * 本地转换器可用状态。
+     * Whether the native converter is available.
      */
     private val isAvailable = runCatching {
         System.loadLibrary("xmax_yuv")
@@ -27,16 +27,16 @@ internal object NativeYuv420Converter {
     }.getOrDefault(false)
 
     /**
-     * 通过本地转换器裁剪、旋转并缩放 YUV420 帧；不可用时返回 false 供调用方回退。
+     * Crops, rotates, and scales YUV420 natively, returning false when fallback is needed.
      *
-     * @param source 源图像的尺寸、裁剪区域及像素平面。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
-     * @param rotation 应用到源画面的旋转方向。
-     * @param y Y 像素平面数据。
-     * @param u U 像素平面数据。
-     * @param v V 像素平面数据。
-     * @return 转换成功时为 true；不可用或失败时为 false。
+     * @param source The source dimensions, crop region, and pixel planes.
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
+     * @param rotation The rotation applied to the source image.
+     * @param y The Y pixel plane.
+     * @param u The U pixel plane.
+     * @param v The V pixel plane.
+     * @return True on conversion success, false if unavailable or failed.
      */
     fun convert(
         source: Yuv420VideoFrameConverter.Source,
@@ -82,18 +82,18 @@ internal object NativeYuv420Converter {
     }
 
     /**
-     * 将 I420 像素转换到调用方提供的 ARGB 数组。
+     * Converts I420 pixels into the caller's ARGB array.
      *
-     * @param y Y 像素平面数据。
-     * @param yStride Y 平面相邻行的字节距离。
-     * @param u U 像素平面数据。
-     * @param uStride U 平面相邻行的字节距离。
-     * @param v V 像素平面数据。
-     * @param vStride V 平面相邻行的字节距离。
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
-     * @param pixels 接收 ARGB 像素结果的数组。
-     * @return 转换成功时为 true；不可用或失败时为 false。
+     * @param y The Y pixel plane.
+     * @param yStride The Y-plane row stride, in bytes.
+     * @param u The U pixel plane.
+     * @param uStride The U-plane row stride, in bytes.
+     * @param v The V pixel plane.
+     * @param vStride The V-plane row stride, in bytes.
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
+     * @param pixels The output ARGB pixel array.
+     * @return True on conversion success, false if unavailable or failed.
      */
     fun convertI420ToArgb(
         y: ByteArray,
@@ -120,33 +120,33 @@ internal object NativeYuv420Converter {
     }.getOrDefault(false)
 
     /**
-     * 按裁剪区域、旋转方向和输出尺寸转换 YUV420 数据。
+     * Converts YUV420 pixels using the crop region, rotation, and output dimensions.
      *
-     * @param yBuffer Y 亮度平面的直接字节缓冲区。
-     * @param yOffset Y 平面有效数据的起始字节偏移。
-     * @param yRowStride Y 平面相邻行起点的字节距离。
-     * @param yPixelStride Y 平面相邻像素的字节距离。
-     * @param uBuffer U 色度平面的直接字节缓冲区。
-     * @param uOffset U 平面有效数据的起始字节偏移。
-     * @param uRowStride U 平面相邻行起点的字节距离。
-     * @param uPixelStride U 平面相邻像素的字节距离。
-     * @param vBuffer V 色度平面的直接字节缓冲区。
-     * @param vOffset V 平面有效数据的起始字节偏移。
-     * @param vRowStride V 平面相邻行起点的字节距离。
-     * @param vPixelStride V 平面相邻像素的字节距离。
-     * @param sourceWidth 源图像宽度，单位为像素。
-     * @param sourceHeight 源图像高度，单位为像素。
-     * @param cropLeft 裁剪区域左边界，单位为像素。
-     * @param cropTop 裁剪区域上边界，单位为像素。
-     * @param cropWidth 裁剪区域宽度，单位为像素。
-     * @param cropHeight 裁剪区域高度，单位为像素。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
-     * @param rotationDegrees 顺时针旋转角度，单位为度。
-     * @param outputY 接收输出亮度数据的 Y 平面数组。
-     * @param outputU 接收输出色度数据的 U 平面数组。
-     * @param outputV 接收输出色度数据的 V 平面数组。
-     * @return 转换成功时为 true，否则为 false。
+     * @param yBuffer The direct Y luma buffer.
+     * @param yOffset The valid Y-plane byte offset.
+     * @param yRowStride The Y-plane row stride, in bytes.
+     * @param yPixelStride The Y-plane pixel stride, in bytes.
+     * @param uBuffer The direct U chroma buffer.
+     * @param uOffset The valid U-plane byte offset.
+     * @param uRowStride The U-plane row stride, in bytes.
+     * @param uPixelStride The U-plane pixel stride, in bytes.
+     * @param vBuffer The direct V chroma buffer.
+     * @param vOffset The valid V-plane byte offset.
+     * @param vRowStride The V-plane row stride, in bytes.
+     * @param vPixelStride The V-plane pixel stride, in bytes.
+     * @param sourceWidth The source width, in pixels.
+     * @param sourceHeight The source height, in pixels.
+     * @param cropLeft The left crop edge, in pixels.
+     * @param cropTop The top crop edge, in pixels.
+     * @param cropWidth The crop width, in pixels.
+     * @param cropHeight The crop height, in pixels.
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
+     * @param rotationDegrees The clockwise rotation angle, in degrees.
+     * @param outputY The output Y luma array.
+     * @param outputU The output U chroma array.
+     * @param outputV The output V chroma array.
+     * @return True if conversion succeeds.
      */
     private external fun convertNative(
         yBuffer: ByteBuffer,
@@ -176,18 +176,18 @@ internal object NativeYuv420Converter {
     ): Boolean
 
     /**
-     * 调用本地转换器将 I420 像素写入 ARGB 数组。
+     * Converts I420 pixels into an ARGB array using the native converter.
      *
-     * @param y Y 像素平面数据。
-     * @param yStride Y 平面相邻行的字节距离。
-     * @param u U 像素平面数据。
-     * @param uStride U 平面相邻行的字节距离。
-     * @param v V 像素平面数据。
-     * @param vStride V 平面相邻行的字节距离。
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
-     * @param pixels 接收 ARGB 像素结果的数组。
-     * @return 转换成功时为 true，否则为 false。
+     * @param y The Y pixel plane.
+     * @param yStride The Y-plane row stride, in bytes.
+     * @param u The U pixel plane.
+     * @param uStride The U-plane row stride, in bytes.
+     * @param v The V pixel plane.
+     * @param vStride The V-plane row stride, in bytes.
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
+     * @param pixels The output ARGB pixel array.
+     * @return True if conversion succeeds.
      */
     private external fun convertI420ToArgbNative(
         y: ByteArray,

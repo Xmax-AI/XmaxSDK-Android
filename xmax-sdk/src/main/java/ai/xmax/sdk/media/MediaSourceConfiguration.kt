@@ -13,16 +13,16 @@ package ai.xmax.sdk.media
 import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
- * 本地视频文件准备完成后的输出配置。
+ * The output configuration of a prepared local video file.
  */
 internal data class MediaSourceConfiguration(
     /**
-     * 视频尺寸、帧率及上行编码参数。
+     * The video dimensions, frame rate, and uplink encoding settings.
      */
     val videoFormat: RealtimeVideoFormat,
 
     /**
-     * 输入媒体是否包含可用音频。
+     * Whether the input provides audio.
      */
     val hasAudio: Boolean,
 )

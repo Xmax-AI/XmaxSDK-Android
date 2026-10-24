@@ -15,73 +15,73 @@ import java.nio.ByteOrder
 import kotlin.math.roundToInt
 
 /**
- * PCM16 的跨 buffer 重采样和 10ms 分包；保留相位，避免分块取整造成音频时钟漂移。
+ * Resamples PCM16 across buffers into 10 ms packets, retaining phase to prevent rounding-induced clock drift.
  */
 internal class PcmPacketizer(
     /**
-     * 接收完整音频包及其微秒时间戳的回调。
+     * The callback receiving complete audio packets and microsecond timestamps.
      */
-    private val emit: (ByteArray, Long) -> Unit
+    private val emit: (ByteArray, Long) -> Unit,
 ) {
 
     /**
-     * 输入采样率、声道数与媒体时间基准。
+     * The input sample rate.
      */
     private var rate = 0
 
     /**
-     * 输入 PCM 的声道数。
+     * The input PCM channel count.
      */
     private var channels = 0
 
     /**
-     * 当前音频时间线的起点，单位为微秒。
+     * The current audio timeline origin, in microseconds.
      */
     private var originUs = 0L
 
     /**
-     * 重采样输入输出进度及音频包缓冲。
+     * The total input sample count.
      */
     private var inputSamples = 0L
 
     /**
-     * 当前时间线已输出的采样点数。
+     * The sample count emitted on the current timeline.
      */
     private var outputSamples = 0L
 
     /**
-     * 当前 PCM 包已填充的采样点数。
+     * The number of samples buffered in the current packet.
      */
     private var packetSamples = 0
 
     /**
-     * 重采样插值所需的前一个单声道采样值。
+     * The previous mono sample used for resampling interpolation.
      */
     private var previous = 0.0
 
     /**
-     * 保存 10 ms、48 kHz 单声道 PCM 数据的缓冲区。
+     * The buffer holding 10 ms of 48 kHz mono PCM.
      */
     private val packet = ByteBuffer.allocate(960).order(ByteOrder.LITTLE_ENDIAN)
 
     /**
-     * 清空音频分包状态，为新的格式和媒体时间线重新计数。
+     * Resets packetization for a new format and media timeline.
      */
     fun reset() { rate = 0; channels = 0; inputSamples = 0; outputSamples = 0; packetSamples = 0; packet.clear() }
 
     /**
-     * 将解码 PCM 数据重采样并组合为 SDK 所需的音频包。
+     * Resamples decoded PCM into the SDK's audio packets.
      *
-     * @param data 包含有效 PCM 数据的缓冲区。
-     * @param sampleRate 音频采样率，单位为 Hz。
-     * @param channelCount 音频声道数。
-     * @param timestampUs 帧的单调时间戳，单位为微秒。
+     * @param data The buffer containing valid PCM bytes.
+     * @param sampleRate The sample rate, in Hz.
+     * @param channelCount The number of audio channels.
+     * @param timestampUs The monotonic frame timestamp, in microseconds.
      */
     fun append(
         data: ByteBuffer,
         sampleRate: Int,
         channelCount: Int,
-        timestampUs: Long
+        timestampUs: Long,
     ) {
         require(sampleRate > 0 && channelCount > 0)
         val expectedUs = originUs + inputSamples * 1_000_000L / sampleRate
@@ -93,17 +93,28 @@ internal class PcmPacketizer(
             var sum = 0L
             repeat(channelCount) { sum += input.short }
             val current = sum.toDouble() / channelCount
-            // 输出采样位置落在 [上一输入采样, 当前输入采样] 时进行线性插值。
+            // Interpolate when the output sample falls between the previous and current input samples.
             while (outputSamples.toDouble() * rate / 48_000 <= inputSamples) {
                 val position = outputSamples.toDouble() * rate / 48_000
                 val value = if (inputSamples == 0L) current else {
-                    val fraction = (position - (inputSamples - 1)).coerceIn(0.0, 1.0)
+                    val fraction = (position - (inputSamples - 1)).coerceIn(
+                        0.0,
+                        1.0,
+                    )
                     previous + (current - previous) * fraction
                 }
-                packet.putShort(value.roundToInt().coerceIn(-32768, 32767).toShort())
+                packet.putShort(
+                    value.roundToInt().coerceIn(
+                        -32768,
+                        32767,
+                    ).toShort(),
+                )
                 outputSamples++; packetSamples++
                 if (packetSamples == 480) {
-                    emit(packet.array().copyOf(), originUs + (outputSamples - 480) * 1_000_000 / 48_000)
+                    emit(
+                        packet.array().copyOf(),
+                        originUs + (outputSamples - 480) * 1_000_000 / 48_000,
+                    )
                     packet.clear(); packetSamples = 0
                 }
             }

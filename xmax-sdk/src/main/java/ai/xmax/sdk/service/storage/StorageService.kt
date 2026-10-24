@@ -33,43 +33,50 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
- * 提供媒体上传下载、格式校验及可选图片内容安全检查。
+ * Media upload, download, format validation, and optional image safety checks.
  */
 internal class StorageService(
     /**
-     * 发起服务端 API 请求的客户端。
+     * The server API client.
      */
     private val apiService: ApiServicing,
 
     /**
-     * 执行对象存储传输的组件。
+     * The object storage transport.
      */
     private val storageManager: StorageManaging,
 ) : StorageServicing {
 
     /**
-     * 上传图片字节并返回可访问的存储结果。
+     * Uploads image bytes and returns accessible storage metadata.
      *
-     * @param data 编码后的图片文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded image file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImage(
         data: ByteArray,
         fileName: String,
         contentType: String,
         progress: StorageProgressListener?,
-    ): StoredFile = upload(StorageSource.Bytes(data), fileName, contentType, MediaType.IMAGE, false, progress)
+    ): StoredFile = upload(
+        StorageSource.Bytes(data),
+        fileName,
+        contentType,
+        MediaType.IMAGE,
+        false,
+        progress,
+    )
 
     /**
-     * 上传本地图片文件并返回可访问的存储结果。
+     * Uploads a local image and returns accessible storage metadata.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImageFile(
         file: File,
@@ -85,28 +92,35 @@ internal class StorageService(
     )
 
     /**
-     * 上传图片字节并在内容安全检查通过后返回结果。
+     * Uploads image bytes and returns the result after content safety validation.
      *
-     * @param data 编码后的图片文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded image file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImageWithSafetyCheck(
         data: ByteArray,
         fileName: String,
         contentType: String,
         progress: StorageProgressListener?,
-    ): StoredFile = upload(StorageSource.Bytes(data), fileName, contentType, MediaType.IMAGE, true, progress)
+    ): StoredFile = upload(
+        StorageSource.Bytes(data),
+        fileName,
+        contentType,
+        MediaType.IMAGE,
+        true,
+        progress,
+    )
 
     /**
-     * 上传本地图片并在内容安全检查通过后返回结果。
+     * Uploads a local image and returns the result after content safety validation.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadImageFileWithSafetyCheck(
         file: File,
@@ -122,28 +136,35 @@ internal class StorageService(
     )
 
     /**
-     * 上传视频字节并返回可访问的存储结果。
+     * Uploads video bytes and returns accessible storage metadata.
      *
-     * @param data 编码后的视频文件字节。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param data Encoded video file bytes.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadVideo(
         data: ByteArray,
         fileName: String,
         contentType: String,
         progress: StorageProgressListener?,
-    ): StoredFile = upload(StorageSource.Bytes(data), fileName, contentType, MediaType.VIDEO, false, progress)
+    ): StoredFile = upload(
+        StorageSource.Bytes(data),
+        fileName,
+        contentType,
+        MediaType.VIDEO,
+        false,
+        progress,
+    )
 
     /**
-     * 上传本地视频文件并返回可访问的存储结果。
+     * Uploads a local video and returns accessible storage metadata.
      *
-     * @param file 可读取的本地文件。
-     * @param contentType 媒体的 MIME 类型；null 表示根据文件扩展名推断。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param file A readable local file.
+     * @param contentType The media MIME type, or null to infer it from the extension.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     override suspend fun uploadVideoFile(
         file: File,
@@ -159,43 +180,51 @@ internal class StorageService(
     )
 
     /**
-     * 下载远端图片并返回本地文件信息，失败时保留已有目标文件。
+     * Downloads an image and returns local file metadata, retaining the existing destination on failure.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地文件及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded file and actual byte count.
      */
     override suspend fun downloadImage(
         remoteUrl: String,
         destination: File,
         progress: StorageProgressListener?,
-    ): DownloadedFile = download(remoteUrl, destination, progress)
+    ): DownloadedFile = download(
+        remoteUrl,
+        destination,
+        progress,
+    )
 
     /**
-     * 下载远端视频并返回本地文件信息，失败时保留已有目标文件。
+     * Downloads a video and returns local file metadata, retaining the existing destination on failure.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地文件及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded file and actual byte count.
      */
     override suspend fun downloadVideo(
         remoteUrl: String,
         destination: File,
         progress: StorageProgressListener?,
-    ): DownloadedFile = download(remoteUrl, destination, progress)
+    ): DownloadedFile = download(
+        remoteUrl,
+        destination,
+        progress,
+    )
 
     /**
-     * 校验媒体并上传，按需执行图片内容安全检查后返回结果。
+     * Validates and uploads media, optionally checking image content safety before returning.
      *
-     * @param source 待上传的本地文件或字节数据。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param mediaType 允许上传的媒体类型。
-     * @param checksSafety 是否在上传后执行图片内容安全检查。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 上传后的访问地址、对象键及校验标识。
+     * @param source The local file or bytes to upload.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param mediaType The permitted upload media type.
+     * @param checksSafety Whether to check image safety after upload.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The uploaded URL, object key, and entity tag.
      */
     private suspend fun upload(
         source: StorageSource,
@@ -207,15 +236,35 @@ internal class StorageService(
     ): StoredFile {
         val startedAt = System.nanoTime()
         return try {
-            val safeName = validateUpload(source, fileName, contentType, mediaType)
-            val resolution = readResolution(source, mediaType)
+            val safeName = validateUpload(
+                source,
+                fileName,
+                contentType,
+                mediaType,
+            )
+            val resolution = readResolution(
+                source,
+                mediaType,
+            )
             XmaxLogger.storage.info(
                 message = {
                     "开始上传 (Upload Started)\n" +
-                        "├─ ${XmaxLogger.localized("类型：", "Type: ")}${mediaType.value}\n" +
-                        "├─ ${XmaxLogger.localized("分辨率：", "Resolution: ")}$resolution\n" +
-                        "├─ ${XmaxLogger.localized("大小：", "Size: ")}${formatByteCount(source.byteCount)}\n" +
-                        "└─ ${XmaxLogger.localized("安全检测：", "Safety Check: ")}$checksSafety"
+                        "├─ ${XmaxLogger.localized(
+                            "类型：",
+                            "Type: ",
+                        )}${mediaType.value}\n" +
+                        "├─ ${XmaxLogger.localized(
+                            "分辨率：",
+                            "Resolution: ",
+                        )}$resolution\n" +
+                        "├─ ${XmaxLogger.localized(
+                            "大小：",
+                            "Size: ",
+                        )}${formatByteCount(source.byteCount)}\n" +
+                        "└─ ${XmaxLogger.localized(
+                            "安全检测：",
+                            "Safety Check: ",
+                        )}$checksSafety"
                 },
             )
 
@@ -237,14 +286,24 @@ internal class StorageService(
             XmaxLogger.storage.info(
                 message = {
                     "上传完成 (Upload Completed)\n" +
-                        "├─ ${XmaxLogger.localized("地址：", "URL: ")}${result.url}\n" +
-                        "└─ ${XmaxLogger.localized("耗时：", "Duration: ")}${formatDuration(startedAt)}"
+                        "├─ ${XmaxLogger.localized(
+                            "地址：",
+                            "URL: ",
+                        )}${result.url}\n" +
+                        "└─ ${XmaxLogger.localized(
+                            "耗时：",
+                            "Duration: ",
+                        )}${formatDuration(startedAt)}"
                 },
             )
             result
-        } catch (error: kotlinx.coroutines.CancellationException) {
+        } catch (
+            error: kotlinx.coroutines.CancellationException,
+        ) {
             throw error
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             val resolvedError = if (error is XmaxError) {
                 error
             } else {
@@ -257,9 +316,18 @@ internal class StorageService(
             XmaxLogger.storage.error(
                 message = {
                     "上传失败 (Upload Failed)\n" +
-                        "├─ ${XmaxLogger.localized("错误码：", "Error Code: ")}${resolvedError.code}\n" +
-                        "├─ ${XmaxLogger.localized("原因：", "Reason: ")}${resolvedError.message}\n" +
-                        "└─ ${XmaxLogger.localized("耗时：", "Duration: ")}${formatDuration(startedAt)}"
+                        "├─ ${XmaxLogger.localized(
+                            "错误码：",
+                            "Error Code: ",
+                        )}${resolvedError.code}\n" +
+                        "├─ ${XmaxLogger.localized(
+                            "原因：",
+                            "Reason: ",
+                        )}${resolvedError.message}\n" +
+                        "└─ ${XmaxLogger.localized(
+                            "耗时：",
+                            "Duration: ",
+                        )}${formatDuration(startedAt)}"
                 },
             )
             throw resolvedError
@@ -267,12 +335,12 @@ internal class StorageService(
     }
 
     /**
-     * 下载指定类型的媒体并返回本地文件结果。
+     * Downloads media of the requested type and returns local file metadata.
      *
-     * @param remoteUrl 待下载文件的 HTTP 或 HTTPS 地址。
-     * @param destination 下载成功后保存内容的目标文件。
-     * @param progress 接收已传输和总字节数的进度回调；null 表示不接收进度。
-     * @return 下载后的本地文件及实际字节数。
+     * @param remoteUrl The HTTP or HTTPS URL to download.
+     * @param destination The destination file replaced after a successful download.
+     * @param progress The transferred-byte and total-byte callback, or null to omit progress.
+     * @return The downloaded file and actual byte count.
      */
     private suspend fun download(
         remoteUrl: String,
@@ -280,18 +348,28 @@ internal class StorageService(
         progress: StorageProgressListener?,
     ): DownloadedFile {
         if (!isHttpUrl(remoteUrl)) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Invalid download URL")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "Invalid download URL",
+            )
         }
         if (destination.path.isBlank()) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Download destination path cannot be empty")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "Download destination path cannot be empty",
+            )
         }
-        return storageManager.download(remoteUrl, destination, progress)
+        return storageManager.download(
+            remoteUrl,
+            destination,
+            progress,
+        )
     }
 
     /**
-     * 取得上传所需的临时存储凭据和对象前缀。
+     * Requests temporary storage credentials and an object prefix.
      *
-     * @return 服务端签发的临时存储凭据、访问配置及对象键前缀。
+     * @return The temporary credentials, storage configuration, and permitted object prefix.
      */
     private suspend fun fetchStorageConfiguration(): TemporaryStorageConfiguration {
         val value = apiService.get("/cos/sts")
@@ -317,34 +395,49 @@ internal class StorageService(
     }
 
     /**
-     * 请求图片内容安全检查，未通过时抛出不安全图片错误。
+     * Checks image content safety, throwing an unsafe-image error if rejected.
      *
-     * @param url 资源或请求的网络地址。
-     * @return 安全检查通过后的图片地址。
+     * @param url The resource or request URL.
+     * @return The image URL after successful safety validation.
      */
     private suspend fun checkImage(
-        url: String
+        url: String,
     ): String {
-        val value = apiService.post("/cos/image/check", JSONObject().put("url", url))
+        val value = apiService.post(
+            "/cos/image/check",
+            JSONObject().put(
+                "url",
+                url,
+            ),
+        )
         val safe = value.opt("safe")
         if (safe !is Boolean) {
-            throw XmaxError(XmaxErrorCode.API_ERROR, "Invalid image safety check payload")
+            throw XmaxError(
+                XmaxErrorCode.API_ERROR,
+                "Invalid image safety check payload",
+            )
         }
         if (!safe) {
-            throw XmaxError(XmaxErrorCode.UNSAFE_IMAGE, "The image did not pass the safety check")
+            throw XmaxError(
+                XmaxErrorCode.UNSAFE_IMAGE,
+                "The image did not pass the safety check",
+            )
         }
         return value.optString("url").takeIf(::isHttpUrl)
-            ?: throw XmaxError(XmaxErrorCode.API_ERROR, "Invalid image safety check payload")
+            ?: throw XmaxError(
+                XmaxErrorCode.API_ERROR,
+                "Invalid image safety check payload",
+            )
     }
 
     /**
-     * 校验上传数据、文件名及媒体类型，并生成有效对象名称。
+     * Validates upload data, filename, and media type, returning a usable object name.
      *
-     * @param source 待上传的本地文件或字节数据。
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param contentType 媒体的 MIME 类型。
-     * @param mediaType 允许上传的媒体类型。
-     * @return 通过校验的文件名。
+     * @param source The local file or bytes to upload.
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param contentType The media MIME type.
+     * @param mediaType The permitted upload media type.
+     * @return The validated filename.
      */
     private fun validateUpload(
         source: StorageSource,
@@ -354,7 +447,10 @@ internal class StorageService(
     ): String {
         when (source) {
             is StorageSource.Bytes -> if (source.data.isEmpty()) {
-                throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "${mediaType.label} data cannot be empty")
+                throw XmaxError(
+                    XmaxErrorCode.INVALID_CONFIGURATION,
+                    "${mediaType.label} data cannot be empty",
+                )
             }
             is StorageSource.LocalFile -> if (!source.file.isFile) {
                 throw XmaxError(
@@ -371,63 +467,83 @@ internal class StorageService(
         }
         val safeName = sanitizeFileName(fileName)
         if (safeName.isEmpty()) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "${mediaType.label} file name cannot be empty")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "${mediaType.label} file name cannot be empty",
+            )
         }
         return safeName
     }
 
     /**
-     * 根据文件扩展名推断图片 MIME 类型。
+     * Infers an image MIME type from its extension.
      *
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @return 图片扩展名对应的 MIME 类型。
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @return The MIME type for the image extension.
      */
     private fun inferImageContentType(
-        fileName: String
+        fileName: String,
     ): String = inferContentType(
         fileName,
         mapOf(
-            "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "jpe" to "image/jpeg",
-            "png" to "image/png", "gif" to "image/gif", "webp" to "image/webp",
-            "heic" to "image/heic", "heif" to "image/heif", "bmp" to "image/bmp",
-            "svg" to "image/svg+xml", "tif" to "image/tiff", "tiff" to "image/tiff",
+            "jpg" to "image/jpeg",
+            "jpeg" to "image/jpeg",
+            "jpe" to "image/jpeg",
+            "png" to "image/png",
+            "gif" to "image/gif",
+            "webp" to "image/webp",
+            "heic" to "image/heic",
+            "heif" to "image/heif",
+            "bmp" to "image/bmp",
+            "svg" to "image/svg+xml",
+            "tif" to "image/tiff",
+            "tiff" to "image/tiff",
             "avif" to "image/avif",
         ),
         "image",
     )
 
     /**
-     * 根据文件扩展名推断视频 MIME 类型。
+     * Infers a video MIME type from its extension.
      *
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @return 视频扩展名对应的 MIME 类型。
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @return The MIME type for the video extension.
      */
     private fun inferVideoContentType(
-        fileName: String
+        fileName: String,
     ): String = inferContentType(
         fileName,
         mapOf(
-            "mp4" to "video/mp4", "mov" to "video/quicktime", "m4v" to "video/x-m4v",
-            "webm" to "video/webm", "avi" to "video/x-msvideo", "mkv" to "video/x-matroska",
-            "3gp" to "video/3gpp", "3g2" to "video/3gpp2", "ts" to "video/mp2t",
+            "mp4" to "video/mp4",
+            "mov" to "video/quicktime",
+            "m4v" to "video/x-m4v",
+            "webm" to "video/webm",
+            "avi" to "video/x-msvideo",
+            "mkv" to "video/x-matroska",
+            "3gp" to "video/3gpp",
+            "3g2" to "video/3gpp2",
+            "ts" to "video/mp2t",
         ),
         "video",
     )
 
     /**
-     * 根据允许的扩展名映射推断媒体 MIME 类型。
+     * Infers a media MIME type using the allowed extension mapping.
      *
-     * @param fileName 用于构造存储对象名称的文件名，包含扩展名。
-     * @param types 文件扩展名到 MIME 类型的允许映射。
-     * @param mediaType 允许上传的媒体类型。
-     * @return 允许扩展名对应的 MIME 类型。
+     * @param fileName The filename, including its extension, used to form the object name.
+     * @param types The permitted filename extensions and MIME types.
+     * @param mediaType The permitted upload media type.
+     * @return The MIME type corresponding to an allowed extension.
      */
     private fun inferContentType(
         fileName: String,
         types: Map<String, String>,
-        mediaType: String
+        mediaType: String,
     ): String {
-        val extension = fileName.substringAfterLast('.', "").lowercase()
+        val extension = fileName.substringAfterLast(
+            '.',
+            "",
+        ).lowercase()
         return types[extension] ?: throw XmaxError(
             XmaxErrorCode.INVALID_CONFIGURATION,
             "Unable to infer $mediaType content type from file extension",
@@ -435,41 +551,55 @@ internal class StorageService(
     }
 
     /**
-     * 将文件名中的非法字符替换为下划线，并去掉首尾无效分隔符。
+     * Replaces invalid filename characters with underscores and strips invalid surrounding separators.
      *
-     * @param value 需要规范化、校验或显示的文本。
-     * @return 不包含目录路径的存储文件名。
+     * @param value The text to normalize, validate, or display.
+     * @return A storage filename without directory components.
      */
     private fun sanitizeFileName(
-        value: String
+        value: String,
     ): String = value.trim()
-        .replace(Regex("[^\\p{L}\\p{N}._-]"), "_")
-        .replace(Regex("_+"), "_")
+        .replace(
+            Regex("[^\\p{L}\\p{N}._-]"),
+            "_",
+        )
+        .replace(
+            Regex("_+"),
+            "_",
+        )
         .trim { it == '.' || it == '_' || it == '-' }
 
     /**
-     * 判断地址是否使用 HTTP 或 HTTPS 协议。
+     * Checks whether a URL uses HTTP or HTTPS.
      *
-     * @param value 需要规范化、校验或显示的文本。
-     * @return 使用 HTTP 或 HTTPS 协议时为 true。
+     * @param value The text to normalize, validate, or display.
+     * @return True for HTTP or HTTPS URLs.
      */
     private fun isHttpUrl(
-        value: String
+        value: String,
     ): Boolean = try {
         val uri = URI(value.trim())
-        (uri.scheme.equals("http", true) || uri.scheme.equals("https", true)) && !uri.host.isNullOrBlank()
-    } catch (_: Exception) {
+        (uri.scheme.equals(
+            "http",
+            true,
+        ) || uri.scheme.equals(
+            "https",
+            true,
+        )) && !uri.host.isNullOrBlank()
+    } catch (
+        _: Exception,
+    ) {
         false
     }
 
     /**
-     * 读取必须存在的字符串字段，缺失时抛出响应数据错误。
+     * Reads a required string, throwing a response-data error when absent.
      *
-     * @param key JSON 对象中的字段名称。
-     * @return 必填字段的字符串值。
+     * @param key The JSON field name.
+     * @return The required string value.
      */
     private fun JSONObject.requiredString(
-        key: String
+        key: String,
     ): String {
         val value = opt(key)
         if (value !is String) throw invalidCredentialPayload()
@@ -477,34 +607,35 @@ internal class StorageService(
     }
 
     /**
-     * 读取必须存在且非空的字符串字段。
+     * Reads a required nonempty string.
      *
-     * @param key JSON 对象中的字段名称。
-     * @return 必填字段的非空字符串值。
+     * @param key The JSON field name.
+     * @return The required nonempty string value.
      */
     private fun JSONObject.requiredNonEmptyString(
-        key: String
+        key: String,
     ): String =
         requiredString(key).takeIf { it.isNotEmpty() } ?: throw invalidCredentialPayload()
 
     /**
-     * 创建用于报告临时存储凭据不完整的错误。
-     *
-     * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+     * Creates an error for incomplete temporary storage credentials.
      */
     private fun invalidCredentialPayload(): XmaxError =
-        XmaxError(XmaxErrorCode.API_ERROR, "Invalid storage credential payload")
+        XmaxError(
+            XmaxErrorCode.API_ERROR,
+            "Invalid storage credential payload",
+        )
 
     /**
-     * 读取上传媒体的分辨率描述。
+     * Reads uploaded media resolution for logging.
      *
-     * @param source 待上传的本地文件或字节数据。
-     * @param mediaType 允许上传的媒体类型。
-     * @return 媒体尺寸的日志描述。
+     * @param source The local file or bytes to upload.
+     * @param mediaType The permitted upload media type.
+     * @return The media resolution description.
      */
     private suspend fun readResolution(
         source: StorageSource,
-        mediaType: MediaType
+        mediaType: MediaType,
     ): String =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -516,13 +647,13 @@ internal class StorageService(
         }
 
     /**
-     * 读取上传图片的分辨率描述。
+     * Reads uploaded image resolution for logging.
      *
-     * @param source 待上传的本地文件或字节数据。
-     * @return 图片尺寸的日志描述。
+     * @param source The local file or bytes to upload.
+     * @return The image resolution description.
      */
     private fun readImageResolution(
-        source: StorageSource
+        source: StorageSource,
     ): String {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         when (source) {
@@ -532,19 +663,25 @@ internal class StorageService(
                 source.data.size,
                 options,
             )
-            is StorageSource.LocalFile -> BitmapFactory.decodeFile(source.file.path, options)
+            is StorageSource.LocalFile -> BitmapFactory.decodeFile(
+                source.file.path,
+                options,
+            )
         }
-        return formatResolution(options.outWidth, options.outHeight)
+        return formatResolution(
+            options.outWidth,
+            options.outHeight,
+        )
     }
 
     /**
-     * 读取上传视频的分辨率描述。
+     * Reads uploaded video resolution for logging.
      *
-     * @param source 待上传的本地文件或字节数据。
-     * @return 视频尺寸的日志描述。
+     * @param source The local file or bytes to upload.
+     * @return The video resolution description.
      */
     private fun readVideoResolution(
-        source: StorageSource
+        source: StorageSource,
     ): String {
         val file = (source as? StorageSource.LocalFile)?.file ?: return "--"
         val retriever = MediaMetadataRetriever()
@@ -560,9 +697,15 @@ internal class StorageService(
                 MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION,
             )?.toIntOrNull() ?: 0
             if (rotation == 90 || rotation == 270) {
-                formatResolution(height, width)
+                formatResolution(
+                    height,
+                    width,
+                )
             } else {
-                formatResolution(width, height)
+                formatResolution(
+                    width,
+                    height,
+                )
             }
         } finally {
             retriever.release()
@@ -570,33 +713,41 @@ internal class StorageService(
     }
 
     /**
-     * 将宽高格式化为分辨率文本。
+     * Formats width and height as a resolution.
      *
-     * @param width 画面宽度，单位为像素。
-     * @param height 画面高度，单位为像素。
-     * @return 格式化后的宽高文本。
+     * @param width The frame width, in pixels.
+     * @param height The frame height, in pixels.
+     * @return The formatted dimensions.
      */
     private fun formatResolution(
         width: Int,
-        height: Int
+        height: Int,
     ): String =
         if (width > 0 && height > 0) "$width × $height" else "--"
 
     /**
-     * 将字节数格式化为易读的数据量文本。
+     * Formats a byte count in human-readable units.
      *
-     * @param byteCount 数据大小，单位为字节。
-     * @return 带数据量单位的字节数描述。
+     * @param byteCount The size, in bytes.
+     * @return The byte count with its size unit.
      */
     private fun formatByteCount(
-        byteCount: Long
+        byteCount: Long,
     ): String {
         val count = byteCount.toDouble()
         return when {
             byteCount < 1_024L -> "$byteCount B"
-            byteCount < 1_024L * 1_024L -> String.format(Locale.US, "%.1f KB", count / 1_024.0)
+            byteCount < 1_024L * 1_024L -> String.format(
+                Locale.US,
+                "%.1f KB",
+                count / 1_024.0,
+            )
             byteCount < 1_024L * 1_024L * 1_024L ->
-                String.format(Locale.US, "%.2f MB", count / (1_024.0 * 1_024.0))
+                String.format(
+                    Locale.US,
+                    "%.2f MB",
+                    count / (1_024.0 * 1_024.0),
+                )
             else -> String.format(
                 Locale.US,
                 "%.2f GB",
@@ -606,45 +757,55 @@ internal class StorageService(
     }
 
     /**
-     * 将从指定时刻开始的耗时格式化为日志文本。
+     * Formats elapsed time from a start timestamp for logging.
      *
-     * @param startedAt 操作开始时的单调时钟纳秒数。
-     * @return 带时间单位的耗时描述。
+     * @param startedAt The monotonic operation start time, in nanoseconds.
+     * @return The duration with its time unit.
      */
     private fun formatDuration(
-        startedAt: Long
+        startedAt: Long,
     ): String {
         val milliseconds = (System.nanoTime() - startedAt) / 1_000_000L
         return if (milliseconds < 1_000L) {
             "$milliseconds ms"
         } else {
-            String.format(Locale.US, "%.2f s", milliseconds / 1_000.0)
+            String.format(
+                Locale.US,
+                "%.2f s",
+                milliseconds / 1_000.0,
+            )
         }
     }
 
     /**
-     * 限定存储服务允许处理的图片或视频类型。
+     * The image or video types accepted by storage services.
      */
     private enum class MediaType(
         /**
-         * 需要规范化、校验或显示的文本。
+         * The string representation used for configuration or display.
          */
         val value: String,
 
         /**
-         * 用于日志或错误描述的可读名称。
+         * The readable name used in logs or errors.
          */
-        val label: String
+        val label: String,
     ) {
 
         /**
-         * 静态图片输入。
+         * A still image.
          */
-        IMAGE("image", "Image"),
+        IMAGE(
+            "image",
+            "Image",
+        ),
 
         /**
-         * 本地视频输入。
+         * A local video.
          */
-        VIDEO("video", "Video"),
+        VIDEO(
+            "video",
+            "Video",
+        ),
     }
 }

@@ -11,22 +11,22 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * 标识 RTC 房间中的一条远端主流。
+ * A remote primary stream within an RTC room.
  */
 internal data class RemoteStream(
     /**
-     * RTC 房间标识。
+     * The RTC room identifier.
      */
     val roomId: String,
 
     /**
-     * 房间中的业务用户标识。
+     * The room's business user identifier.
      */
     val userId: String,
 ) {
 
     /**
-     * 生成跨房间唯一的远端流键。
+     * Builds a remote stream key unique across rooms.
      */
     val key: String
         get() = "$roomId:$userId"

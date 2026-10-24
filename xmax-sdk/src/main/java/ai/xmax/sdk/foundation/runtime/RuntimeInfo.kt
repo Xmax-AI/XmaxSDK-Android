@@ -15,48 +15,60 @@ import android.os.Build
 import org.json.JSONObject
 
 /**
- * API 请求和房间信令共用的 SDK 运行环境快照。
+ * SDK runtime metadata shared by API requests and room signals.
  */
 internal data class RuntimeInfo(
     /**
-     * 客户端平台名称。
+     * The client platform name.
      */
     val platform: String,
 
     /**
-     * 操作系统版本。
+     * The operating system version.
      */
     val osVersion: String,
 
     /**
-     * XmaxSDK 版本。
+     * The XmaxSDK version.
      */
     val sdkVersion: String,
 
     /**
-     * 设备型号。
+     * The device model.
      */
     val deviceModel: String,
 ) {
 
     /**
-     * 将运行环境信息转换为供服务端请求携带的 JSON 对象。
+     * Encodes runtime metadata as JSON for server requests.
      *
-     * @return 供当前业务使用的 JSON 数据。
+     * @return JSON for the current operation.
      */
     fun toJson(): JSONObject = JSONObject()
-        .put("platform", platform)
-        .put("os_version", osVersion)
-        .put("sdk_version", sdkVersion)
-        .put("device_model", deviceModel)
+        .put(
+            "platform",
+            platform,
+        )
+        .put(
+            "os_version",
+            osVersion,
+        )
+        .put(
+            "sdk_version",
+            sdkVersion,
+        )
+        .put(
+            "device_model",
+            deviceModel,
+        )
 
     /**
-     * 当前运行设备与 SDK 信息的读取入口。
+     * The source of current device and SDK metadata.
      */
     companion object {
 
         /**
-         * 当前平台、系统版本、SDK 版本与设备型号。
+         * The current platform, operating system, SDK version, and device model.
          */
         val current: RuntimeInfo by lazy {
             RuntimeInfo(

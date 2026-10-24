@@ -25,118 +25,122 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 
 /**
- * 将服务端会话、RTC 房间、本地发布及远端轨道作为一组连接资源管理。
- * operationMutex 覆盖连接、断连和失败回滚，防止后一连接接管尚未释放的旧资源。
- * stateLock 仅保护当前会话和轨道快照，不在持锁期间执行挂起操作。
+ * Owns the server session, RTC room, local publication, and remote tracks as one connection.
+ * operationMutex serializes connection, disconnection, and rollback to prevent reuse of unreleased resources.
+ * stateLock protects session and track snapshots without suspending while held.
  */
 internal class XmaxRealtimeConnectionManager(
     /**
-     * 创建、续期和关闭服务端会话的服务。
+     * The service creating, renewing, and closing server sessions.
      */
     private val sessionService: RealtimeSessionServicing,
 
     /**
-     * 提交触控轨迹的控制器。
+     * The controller submitting interaction trajectories.
      */
     private val interactionController: InteractionControlling,
 
     /**
-     * 绑定视频轨道与预览视图的控制器。
+     * The controller binding video tracks to preview views.
      */
     private val renderController: RenderControlling,
 
     /**
-     * 控制 RTC 发布、订阅及生成信令的组件。
+     * The component managing RTC publication, subscriptions, and generation signaling.
      */
     private val streamController: StreamControlling,
 ) {
 
     /**
-     * 连接状态及生命周期操作的并发保护。
+     * The lock protecting connection state.
      */
     private val stateLock = Any()
 
     /**
-     * 串行执行连接与断开操作的互斥锁。
+     * The mutex serializing connection and disconnection.
      */
     private val operationMutex = Mutex()
 
     /**
-     * 当前会话、结果轨道及入房时的输入规格。
+     * The active server session.
      */
     private var activeRemoteTrack: RealtimeVideoTrack? = null
 
     /**
-     * 当前连接所使用的服务端会话。
+     * The server session used by the current connection.
      */
     private var activeSession: RealtimeSession? = null
 
     /**
-     * 发布本地流时使用的输入规格。
+     * The input format used for local publication.
      */
     private var inputFormat: RealtimeVideoFormat? = null
 
     /**
-     * 当前输入流是否包含音频。
+     * Whether the current input includes audio.
      */
     private var inputHasAudio = false
 
     /**
-     * 按实际入房配置判断能否复用，连续取消切流时不能依赖已解绑的媒体快照。
+     * Checks reuse against the actual room configuration rather than a media snapshot that may already be
+     * unbound.
      *
-     * @param format 视频尺寸、帧率及上行编码参数。
-     * @param hasAudio 输入媒体是否包含可用音频。
-     * @return 当前连接可复用该输入时为 true，否则为 false。
+     * @param format Video dimensions, frame rate, and uplink encoding options.
+     * @param hasAudio Whether the input provides audio.
+     * @return True if the current connection can accept the input.
      */
     fun acceptsInput(
         format: RealtimeVideoFormat,
-        hasAudio: Boolean
+        hasAudio: Boolean,
     ): Boolean = synchronized(stateLock) {
         activeSession != null && inputFormat == format && inputHasAudio == hasAudio
     }
 
     /**
-     * 供业务层读取的连接快照。
-     *
-     * 当前已建立连接的会话标识；尚未完成连接或已断开时为空。
+     * The connected session identifier; empty before connection completes or after disconnection.
      */
     val currentSessionId: String
         get() = synchronized(stateLock) { activeSession?.id.orEmpty() }
 
     /**
-     * 当前远端轨道容器；存在此对象不代表生成结果或远端首帧已就绪。
+     * The remote track container; its existence does not indicate generation or first-frame readiness.
      */
     val currentRemoteStream: RealtimeMediaStream?
         get() = synchronized(stateLock) {
             if (activeSession == null) null else activeRemoteTrack?.let {
-                RealtimeMediaStream(StreamID.REMOTE.value, it)
+                RealtimeMediaStream(
+                    StreamID.REMOTE.value,
+                    it,
+                )
             }
         }
 
     /**
-     * 将远端实际格式同步给视频轨道；无活动轨道时忽略。
+     * Updates the active remote track's actual video format; ignores updates when no track is active.
      *
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
     fun updateRemoteVideoFormat(
-        videoFormat: RealtimeVideoFormat
+        videoFormat: RealtimeVideoFormat,
     ) {
         val track = synchronized(stateLock) { activeRemoteTrack } ?: return
         track.updateVideoFormat(videoFormat)
     }
 
     /**
-     * 依次创建服务端会话、加入 RTC 并按输入类型决定是否发布媒体，再启动心跳和注册远端渲染。
-     * 每个异步边界后检查 isCurrent；失败时在同一操作锁内回滚，保留原始错误及取消语义。
-     * 心跳故障通过 onHeartbeatFailure 返回上层，不在心跳协程中等待整套连接清理。
+     * Creates a session, joins RTC, publishes media when required, and registers rendering and heartbeats.
+     * Each asynchronous result must still belong to the current operation. Failures roll back under the
+     * operation lock, preserving the original error and cancellation.
+     * Heartbeat failures return through onHeartbeatFailure without waiting for connection cleanup in the
+     * heartbeat coroutine.
      *
-     * @param model 用于确定服务端能力、地址及输入规格的模型。
-     * @param videoFormat 视频尺寸、帧率及上行编码参数。
-     * @param includeLocalAudio 是否同时发布本地音频。
-     * @param publishLocalMedia 是否发布本地媒体；服务端直接读取网络视频时为 false；默认值为 `true`。
-     * @param isCurrent 判断当前操作是否仍有效的函数。
-     * @param onHeartbeatFailure 服务端会话续期失败时接收会话标识和错误的回调。
-     * @return 可用于预览或生成的媒体流及其视频轨道。
+     * @param model The model defining server capabilities and input constraints.
+     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
+     * @param includeLocalAudio Whether to publish local audio alongside video.
+     * @param publishLocalMedia Whether to publish local media; false for server-read network video, true by
+     * default.
+     * @param isCurrent Checks whether this operation still owns the result.
+     * @param onHeartbeatFailure Receives the session identifier and error when renewal fails.
      */
     suspend fun connect(
         model: RealtimeModel,
@@ -146,7 +150,10 @@ internal class XmaxRealtimeConnectionManager(
         isCurrent: () -> Boolean,
         onHeartbeatFailure: suspend (String, XmaxError) -> Unit,
     ): RealtimeMediaStream = operationMutex.withLock {
-        if (currentSessionId.isNotEmpty()) throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Realtime connection is already open")
+        if (currentSessionId.isNotEmpty()) throw XmaxError(
+            XmaxErrorCode.INVALID_CONFIGURATION,
+            "Realtime connection is already open",
+        )
         val timing = currentCoroutineContext()[RealtimeTiming.Attempt]
         timing?.mark(RealtimeTiming.Stage.CONNECTION_START)
         var session: RealtimeSession? = null
@@ -159,17 +166,30 @@ internal class XmaxRealtimeConnectionManager(
                 XmaxErrorCode.SESSION_ERROR,
                 "Session does not contain complete RTC join information",
             )
-            streamController.connect(connection, includeLocalAudio, publishLocalMedia) {
+            streamController.connect(
+                connection,
+                includeLocalAudio,
+                publishLocalMedia,
+            ) {
                 ensureCurrent(isCurrent)
             }
             ensureCurrent(isCurrent)
 
-            sessionService.startHeartbeat(session.id, onHeartbeatFailure)
+            sessionService.startHeartbeat(
+                session.id,
+                onHeartbeatFailure,
+            )
             val remoteTrack = RealtimeVideoTrack(
                 id = connection.botName ?: "video-remote",
                 videoFormat = videoFormat,
             )
-            renderController.registerRemoteTrack(remoteTrack, IntSize(videoFormat.width, videoFormat.height)) { frame ->
+            renderController.registerRemoteTrack(
+                remoteTrack,
+                IntSize(
+                    videoFormat.width,
+                    videoFormat.height,
+                ),
+            ) { frame ->
                 interactionController.submitInteraction(frame)
             }
             synchronized(stateLock) {
@@ -180,10 +200,16 @@ internal class XmaxRealtimeConnectionManager(
             }
             ensureCurrent(isCurrent)
             timing?.mark(RealtimeTiming.Stage.CONNECTION_END)
-            return@withLock RealtimeMediaStream(StreamID.REMOTE.value, remoteTrack)
-        } catch (error: Throwable) {
-            // 回滚仍持有操作锁，此时旧连接的资源不可能已被后续 connect 接管。
-            cleanupAfterFailure(error,
+            return@withLock RealtimeMediaStream(
+                StreamID.REMOTE.value,
+                remoteTrack,
+            )
+        } catch (
+            error: Throwable,
+        ) {
+            // Rollback still holds the operation lock, so a later connection cannot yet own these resources.
+            cleanupAfterFailure(
+                error,
                 { sessionService.stopHeartbeat() },
                 { val track = synchronized(stateLock) {
                     activeRemoteTrack.also { activeSession = null; activeRemoteTrack = null }
@@ -196,13 +222,16 @@ internal class XmaxRealtimeConnectionManager(
     }
 
     /**
-     * 清空活动连接快照并逐项释放资源，返回刚关闭的会话标识；不停止本地媒体源。
+     * Clears the connection snapshot and releases its resources without stopping local media.
      *
-     * @return 已关闭的会话标识；没有活动会话时为 null。
+     * @return The closed session identifier, or null if no session was active.
      */
     suspend fun disconnect(): String? = operationMutex.withLock {
         val resources = synchronized(stateLock) {
-            ConnectionResources(activeSession, activeRemoteTrack).also {
+            ConnectionResources(
+                activeSession,
+                activeRemoteTrack,
+            ).also {
                 activeSession = null
                 activeRemoteTrack = null
             }
@@ -217,41 +246,50 @@ internal class XmaxRealtimeConnectionManager(
     }
 
     /**
-     * 服务端关闭最多等待 5 秒；失败记录日志，避免远端接口故障阻止本地资源回收。
+     * Server closure waits at most five seconds; failures are logged without blocking local cleanup
+     * indefinitely.
      *
-     * @param sessionId 服务端会话标识。
+     * @param sessionId The server session identifier.
      */
     private suspend fun closeSessionBestEffort(
-        sessionId: String
+        sessionId: String,
     ) {
         try { withTimeout(5_000L) { sessionService.closeSession(sessionId) } }
-        catch (error: Throwable) { logCleanupFailure("Failed to close realtime session $sessionId", error) }
+        catch (
+            error: Throwable,
+        ) { logCleanupFailure(
+            "Failed to close realtime session $sessionId",
+            error,
+        ) }
     }
 
     /**
-     * 记录资源清理失败的原因，不覆盖触发清理的原始错误。
+     * Records cleanup failures without replacing the error that initiated cleanup.
      *
-     * @param title 日志条目的说明标题。
-     * @param error 本次操作失败的异常或 SDK 错误。
+     * @param title The log entry title.
+     * @param error The operation failure or SDK error.
      */
     private fun logCleanupFailure(
         title: String,
-        error: Throwable
+        error: Throwable,
     ) {
         XmaxLogger.realtime.error(
             message = {
-                "$title\n└─ ${XmaxLogger.localized("原因：", "Reason: ")}${ErrorMessageFormatter.format(error)}"
+                "$title\n└─ ${XmaxLogger.localized(
+                    "原因：",
+                    "Reason: ",
+                )}${ErrorMessageFormatter.format(error)}"
             },
         )
     }
 
     /**
-     * 将失去业务所有权的连接结果视为取消，而非向用户报告新的业务故障。
+     * Treats connection results that lost ownership as cancellation rather than a new app-visible failure.
      *
-     * @param isCurrent 判断当前操作是否仍有效的函数。
+     * @param isCurrent Checks whether this operation still owns the result.
      */
     private fun ensureCurrent(
-        isCurrent: () -> Boolean
+        isCurrent: () -> Boolean,
     ) {
         if (!isCurrent()) {
             throw CancellationException("Realtime connection was cancelled")
@@ -259,16 +297,16 @@ internal class XmaxRealtimeConnectionManager(
     }
 
     /**
-     * 断连时从活动状态取出的资源快照，后续清理仅操作这一组资源。
+     * A disconnected connection snapshot whose resources remain owned by its cleanup operation.
      */
     private data class ConnectionResources(
         /**
-         * 服务端会话及其连接信息。
+         * The server session and its connection details.
          */
         val session: RealtimeSession?,
 
         /**
-         * 当前远端视频轨道。
+         * The active remote video track.
          */
         val remoteTrack: RealtimeVideoTrack?,
     )

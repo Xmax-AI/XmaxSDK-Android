@@ -28,56 +28,56 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * 协调本地视频元数据、输出格式和平台播放器。
+ * Coordinates local video metadata, output format, and platform playback.
  */
 internal class MediaSourceController(
     /**
-     * 读取媒体元数据的组件。
+     * The media metadata reader.
      */
     private val metadataManager: MediaFileMetadataManaging,
 
     /**
-     * 解析媒体尺寸及模型输入规则的服务。
+     * The service resolving media dimensions and model constraints.
      */
     private val mediaService: MediaServicing,
 
     /**
-     * 负责本地解码与播放时间线的组件。
+     * The component owning local decoding and playback timing.
      */
     private val playerController: VideoPlayerControlling,
 ) : MediaSourceControlling {
 
     /**
-     * 媒体准备和播放状态的并发保护。
+     * The mutex serializing media preparation and playback.
      */
     private val operationMutex = Mutex()
 
     /**
-     * 保护媒体准备与输出状态的锁。
+     * The lock protecting prepared media and output state.
      */
     private val stateLock = Any()
 
     /**
-     * 已准备媒体及播放状态。
+     * The prepared media configuration.
      */
     private var preparedMedia: PreparedMedia? = null
 
     /**
-     * 媒体帧输出是否正在运行。
+     * Whether media frame output is running.
      */
     private var isRunning = false
 
     /**
-     * 已准备的媒体是否包含音频。
+     * Whether the prepared media contains audio.
      */
     override val hasAudio: Boolean
         get() = synchronized(stateLock) { preparedMedia?.configuration?.hasAudio == true }
 
     /**
-     * 读取视频元数据并准备保持原始比例的本地视频输入。
+     * Reads video metadata and prepares local input with the original aspect ratio.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @return 可供媒体输入和解码使用的最终配置。
+     * @param uri A media URI your app can read.
+     * @return The resolved configuration for media input and decoding.
      */
     override suspend fun prepare(
         uri: Uri,
@@ -100,18 +100,26 @@ internal class MediaSourceController(
                 hasAudio = metadata.hasAudio,
                 durationUs = metadata.durationUs,
             )
-            val configuration = MediaSourceConfiguration(resolvedFormat, metadata.hasAudio)
+            val configuration = MediaSourceConfiguration(
+                resolvedFormat,
+                metadata.hasAudio,
+            )
             synchronized(stateLock) {
-                preparedMedia = PreparedMedia(metadata, configuration)
+                preparedMedia = PreparedMedia(
+                    metadata,
+                    configuration,
+                )
             }
             configuration
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * 启动已准备的视频输入，循环解码并输出音视频帧。
+     * Starts the prepared video, looping decoded audio and video frames.
      */
     override suspend fun start() = operationMutex.withLock {
         synchronized(stateLock) {
@@ -131,61 +139,69 @@ internal class MediaSourceController(
         }
         try {
             playerController.start()
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             synchronized(stateLock) { isRunning = false }
-            cleanupAfterFailure(error, { playerController.stop() })
+            cleanupAfterFailure(
+                error,
+                { playerController.stop() },
+            )
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * 设置本地预览是否静音，不改变保存的音量值。
+     * Mutes or unmutes local preview without changing its stored volume.
      *
-     * @param muted 是否静音。
+     * @param muted Whether audio is muted.
      */
     override suspend fun setLocalAudioPreviewMuted(
-        muted: Boolean
+        muted: Boolean,
     ) {
         if (hasAudio) playerController.setLocalAudioPreviewMuted(muted)
     }
 
     /**
-     * 设置当前本地媒体的预览音量，范围为 0 到 1，不影响提交给 RTC 的音频数据。
+     * Sets local preview volume from 0 to 1 without changing audio submitted to RTC.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     override suspend fun setLocalAudioVolume(
-        volume: Float
+        volume: Float,
     ) {
         playerController.setLocalAudioVolume(volume)
     }
 
     /**
-     * 将本地媒体预览绑定到指定视图并应用显示模式。
+     * Binds local media preview to a view with the requested scaling mode.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     override fun attachPreview(
         view: XmaxVideoView,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ) {
-        playerController.attachPreview(view, contentMode)
+        playerController.attachPreview(
+            view,
+            contentMode,
+        )
     }
 
     /**
-     * 解除指定视图的本地媒体预览绑定。
+     * Unbinds local media preview from a view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
+     * @param view The view to bind or unbind.
      */
     override fun detachPreview(
-        view: XmaxVideoView
+        view: XmaxVideoView,
     ) {
         playerController.detachPreview(view)
     }
 
     /**
-     * 停止本地视频输出并清除已准备的媒体信息。
+     * Stops local video output and clears prepared media metadata.
      */
     override suspend fun stop() = operationMutex.withLock {
         synchronized(stateLock) {
@@ -196,10 +212,10 @@ internal class MediaSourceController(
     }
 
     /**
-     * 根据方向校正后的素材尺寸计算保持媒体比例的视频输入规格。
+     * Resolves aspect-preserving input dimensions from orientation-corrected media metadata.
      *
-     * @param metadata 媒体原始尺寸、方向、时长及音轨信息。
-     * @return 解析或计算后的视频尺寸、帧率和编码配置。
+     * @param metadata The original dimensions, orientation, duration, and audio metadata.
+     * @return The resolved video dimensions, frame rate, and encoding settings.
      */
     internal fun resolveVideoFormat(
         metadata: MediaFileMetadata,
@@ -207,29 +223,45 @@ internal class MediaSourceController(
         val swapsDimensions = metadata.rotation == VideoRotation.ROTATION_90 ||
             metadata.rotation == VideoRotation.ROTATION_270
         val displaySize = if (swapsDimensions) {
-            IntSize(metadata.height, metadata.width)
+            IntSize(
+                metadata.height,
+                metadata.width,
+            )
         } else {
-            IntSize(metadata.width, metadata.height)
+            IntSize(
+                metadata.width,
+                metadata.height,
+            )
         }
         if (displaySize.width < 2 || displaySize.height < 2) {
-            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Video dimensions must be at least two pixels")
+            throw XmaxError(
+                XmaxErrorCode.INVALID_CONFIGURATION,
+                "Video dimensions must be at least two pixels",
+            )
         }
 
-        val resolvedMediaSize = mediaService.resolveMediaSize(displaySize, RealtimeMediaSource.VIDEO)
-        return RealtimeVideoFormat(resolvedMediaSize.width, resolvedMediaSize.height, mediaService.model.defaultFrameRate)
+        val resolvedMediaSize = mediaService.resolveMediaSize(
+            displaySize,
+            RealtimeMediaSource.VIDEO,
+        )
+        return RealtimeVideoFormat(
+            resolvedMediaSize.width,
+            resolvedMediaSize.height,
+            mediaService.model.defaultFrameRate,
+        )
     }
 
     /**
-     * 保存已解析的媒体信息和最终播放配置。
+     * The parsed media metadata and final playback configuration.
      */
     private data class PreparedMedia(
         /**
-         * 媒体原始尺寸、方向、时长及音轨信息。
+         * The original dimensions, orientation, duration, and audio metadata.
          */
         val metadata: MediaFileMetadata,
 
         /**
-         * 媒体输入尺寸、帧率、旋转方向及音轨配置。
+         * The media input dimensions, frame rate, rotation, and audio configuration.
          */
         val configuration: MediaSourceConfiguration,
     )

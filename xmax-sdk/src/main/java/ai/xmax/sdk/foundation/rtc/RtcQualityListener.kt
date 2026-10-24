@@ -14,74 +14,74 @@ import ai.xmax.sdk.UplinkVideoStatistics
 import ai.xmax.sdk.DownlinkVideoStatistics
 
 /**
- * 中性的 RTC 网络质量等级。
+ * A vendor-neutral RTC network quality rating.
  */
 internal enum class RtcQualityLevel {
 
     /**
-     * 尚无可用网络质量样本。
+     * No network quality sample is available.
      */
     UNKNOWN,
 
     /**
-     * 网络质量极佳。
+     * Excellent network quality.
      */
     EXCELLENT,
 
     /**
-     * 网络质量良好。
+     * Good network quality.
      */
     GOOD,
 
     /**
-     * 网络质量一般，可能影响实时传输。
+     * Fair network quality that may affect realtime transmission.
      */
     POOR,
 
     /**
-     * 网络质量较差，需要降低传输负载。
+     * Poor network quality requiring reduced transmission load.
      */
     BAD,
 
     /**
-     * 网络质量极差，实时传输明显受限。
+     * Very poor network quality that substantially limits realtime transmission.
      */
     VERY_BAD,
 
     /**
-     * 网络不可用或传输已中断。
+     * The network is unavailable or transmission is interrupted.
      */
     DOWN,
 }
 
 /**
- * 接收厂商中立的视频统计、网络质量和性能回退事件。
+ * Receives vendor-neutral video statistics, network quality, and performance fallback events.
  */
 internal interface RtcQualityListener {
 
     /**
-     * 接收上行统计快照；null 表示当前没有有效统计。
+     * Receives uplink statistics, or null when no valid statistics exist.
      *
-     * @param statistics 当前统计快照；null 表示没有可用统计。
+     * @param statistics The current statistics, or null when unavailable.
      */
     fun onUplinkVideoStatistics(
-        statistics: UplinkVideoStatistics?
+        statistics: UplinkVideoStatistics?,
     )
 
     /**
-     * 接收下行统计快照；null 表示当前没有有效统计。
+     * Receives downlink statistics, or null when no valid statistics exist.
      *
-     * @param statistics 当前统计快照；null 表示没有可用统计。
+     * @param statistics The current statistics, or null when unavailable.
      */
     fun onDownlinkVideoStatistics(
-        statistics: DownlinkVideoStatistics?
+        statistics: DownlinkVideoStatistics?,
     )
 
     /**
-     * 接收上下行网络质量样本。
+     * Receives uplink and downlink network quality samples.
      *
-     * @param uplink 上行网络质量等级。
-     * @param downlink 下行网络质量等级。
+     * @param uplink The uplink network quality rating.
+     * @param downlink The downlink network quality rating.
      */
     fun onNetworkQuality(
         uplink: RtcQualityLevel,
@@ -89,12 +89,12 @@ internal interface RtcQualityListener {
     )
 
     /**
-     * 接收设备性能受限状态及建议的视频规格。
+     * Receives device performance limits and a suggested video format.
      *
-     * @param limited 设备是否受到性能限制。
-     * @param suggestedWidth 建议的视频宽度，单位为像素。
-     * @param suggestedHeight 建议的视频高度，单位为像素。
-     * @param suggestedFrameRate 建议的视频帧率，单位为 fps。
+     * @param limited Whether device performance is limited.
+     * @param suggestedWidth The suggested width, in pixels.
+     * @param suggestedHeight The suggested height, in pixels.
+     * @param suggestedFrameRate The suggested frame rate, in fps.
      */
     fun onPerformanceAlarm(
         limited: Boolean,

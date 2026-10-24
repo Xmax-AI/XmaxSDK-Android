@@ -11,32 +11,32 @@
 package ai.xmax.sdk
 
 /**
- * 视频帧需要顺时针旋转的角度。
+ * The clockwise rotation of a video frame.
  */
 internal enum class VideoRotation(
     /**
-     * 旋转角度，单位为度。
+     * The rotation angle, in degrees.
      */
-    val degrees: Int
+    val degrees: Int,
 ) {
 
     /**
-     * 画面无需旋转。
+     * No rotation.
      */
     ROTATION_0(0),
 
     /**
-     * 画面顺时针旋转 90 度。
+     * A 90-degree clockwise rotation.
      */
     ROTATION_90(90),
 
     /**
-     * 画面旋转 180 度。
+     * A 180-degree rotation.
      */
     ROTATION_180(180),
 
     /**
-     * 画面顺时针旋转 270 度。
+     * A 270-degree clockwise rotation.
      */
     ROTATION_270(270),
 }

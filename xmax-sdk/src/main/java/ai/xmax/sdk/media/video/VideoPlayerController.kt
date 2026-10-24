@@ -57,30 +57,30 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 /**
- * 使用 Android 媒体框架循环解码共享时间轴上的本地音视频帧。
+ * Decodes looped local audio and video on a shared timeline using Android media APIs.
  *
- * @param context 访问 Android 系统服务或媒体资源所需的上下文。
+ * @param context The Android context used for system services and media resources.
  */
 internal class VideoPlayerController(
     context: Context,
 
     /**
-     * 接收解码视频帧的监听器。
+     * The decoded video frame listener.
      */
     private val videoFrameListener: MediaVideoFrameListener,
 
     /**
-     * 接收解码音频帧的监听器。
+     * The decoded audio frame listener.
      */
     private val audioFrameListener: MediaAudioFrameListener,
 
     /**
-     * 接收媒体错误的回调。
+     * The media failure callback.
      */
     private val errorListener: (XmaxError) -> Unit,
 
     /**
-     * 执行持续解码播放的协程作用域。
+     * The scope running continuous playback decoding.
      */
     private val playbackScope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default,
@@ -88,50 +88,50 @@ internal class VideoPlayerController(
 ) : VideoPlayerControlling {
 
     /**
-     * 媒体读取所需的 Android 运行环境。
+     * The Android context for reading media.
      */
     private val applicationContext = context.applicationContext
 
     /**
-     * 解码播放状态的并发保护。
+     * The mutex serializing playback decoding operations.
      */
     private val operationMutex = Mutex()
 
     /**
-     * 保护播放器与解码状态的锁。
+     * The lock protecting player and decoder state.
      */
     private val stateLock = Any()
 
     /**
-     * 本地音频播放及视频预览派发组件。
+     * The local audio preview player.
      */
     private val audioPreviewPlayer = LocalAudioPreviewPlayer()
 
     /**
-     * 向本地预览投递已解码画面的分发器。
+     * The dispatcher delivering decoded images to local preview.
      */
     private val previewDispatcher = DecodedVideoPreviewDispatcher()
 
     /**
-     * 当前播放配置与循环解码任务。
+     * The current playback configuration.
      */
     private var configuration: PlaybackConfiguration? = null
 
     /**
-     * 驱动音视频解码与循环播放的协程。
+     * The coroutine driving looped audio and video decoding.
      */
     private var playbackJob: Job? = null
 
     /**
-     * 设置解码源、输出尺寸、旋转方向、帧率及播放时长。
+     * Sets the decoder source, output dimensions, rotation, frame rate, and duration.
      *
-     * @param uri 应用有读取权限的媒体地址。
-     * @param outputWidth 输出画面宽度，单位为像素。
-     * @param outputHeight 输出画面高度，单位为像素。
-     * @param rotation 应用到源画面的旋转方向。
-     * @param frameRate 视频帧率，单位为 fps。
-     * @param hasAudio 输入媒体是否包含可用音频。
-     * @param durationUs 媒体持续时间，单位为微秒。
+     * @param uri A media URI your app can read.
+     * @param outputWidth The output width, in pixels.
+     * @param outputHeight The output height, in pixels.
+     * @param rotation The rotation applied to the source image.
+     * @param frameRate The video frame rate, in fps.
+     * @param hasAudio Whether the input provides audio.
+     * @param durationUs The media duration, in microseconds.
      */
     override suspend fun configure(
         uri: Uri,
@@ -149,7 +149,10 @@ internal class VideoPlayerController(
         ) {
             throw mediaError("Video player configuration is invalid")
         }
-        applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { Unit }
+        applicationContext.contentResolver.openAssetFileDescriptor(
+            uri,
+            "r",
+        )?.use { Unit }
             ?: throw mediaError("The media file cannot be opened")
         synchronized(stateLock) {
             configuration = PlaybackConfiguration(
@@ -165,7 +168,7 @@ internal class VideoPlayerController(
     }
 
     /**
-     * 启动循环解码，并按统一播放时间线输出音视频帧。
+     * Starts looped decoding and supplies media frames on the shared timeline.
      */
     override suspend fun start() = operationMutex.withLock {
         val resolvedConfiguration = synchronized(stateLock) {
@@ -178,79 +181,100 @@ internal class VideoPlayerController(
                 coroutineScope {
                     val jobs = mutableListOf(
                         launch {
-                            produceVideoFrames(resolvedConfiguration, timeline)
+                            produceVideoFrames(
+                                resolvedConfiguration,
+                                timeline,
+                            )
                         },
                     )
                     if (resolvedConfiguration.hasAudio) {
                         jobs += launch {
-                            produceAudioFrames(resolvedConfiguration, timeline)
+                            produceAudioFrames(
+                                resolvedConfiguration,
+                                timeline,
+                            )
                         }
                     }
                     jobs.joinAll()
                 }
-            } catch (_: CancellationException) {
+            } catch (
+                _: CancellationException,
+            ) {
                 Unit
-            } catch (error: Throwable) {
+            } catch (
+                error: Throwable,
+            ) {
                 XmaxLogger.media.error(
                     message = {
                         "本地视频播放停止 (Local Video Playback Stopped)\n" +
-                            "└─ ${XmaxLogger.localized("原因：", "Reason: ")}${playbackErrorDescription(error)}"
+                            "└─ ${XmaxLogger.localized(
+                                "原因：",
+                                "Reason: ",
+                            )}${playbackErrorDescription(error)}"
                     },
                 )
-                errorListener(mediaError("Local video playback failed", error))
+                errorListener(
+                    mediaError(
+                        "Local video playback failed",
+                        error,
+                    ),
+                )
             }
         }
         synchronized(stateLock) { playbackJob = job }
     }
 
     /**
-     * 设置本地预览是否静音，不改变保存的音量值。
+     * Mutes or unmutes local preview without changing its stored volume.
      *
-     * @param muted 是否静音。
+     * @param muted Whether audio is muted.
      */
     override suspend fun setLocalAudioPreviewMuted(
-        muted: Boolean
+        muted: Boolean,
     ) {
         audioPreviewPlayer.setMuted(muted)
     }
 
     /**
-     * 设置当前本地媒体的预览音量，范围为 0 到 1，不影响提交给 RTC 的音频数据。
+     * Sets local preview volume from 0 to 1 without changing audio submitted to RTC.
      *
-     * @param volume 播放音量，范围为 0 到 1。
+     * @param volume The playback volume, from 0 to 1.
      */
     override suspend fun setLocalAudioVolume(
-        volume: Float
+        volume: Float,
     ) {
         audioPreviewPlayer.setVolume(volume)
     }
 
     /**
-     * 将本地媒体预览绑定到指定视图并应用显示模式。
+     * Binds local media preview to a view with the requested scaling mode.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
-     * @param contentMode 视频等比适配或等比裁切的显示方式。
+     * @param view The view to bind or unbind.
+     * @param contentMode Aspect-preserving fit or fill scaling.
      */
     override fun attachPreview(
         view: XmaxVideoView,
-        contentMode: VideoContentMode
+        contentMode: VideoContentMode,
     ) {
-        previewDispatcher.attach(view, contentMode)
+        previewDispatcher.attach(
+            view,
+            contentMode,
+        )
     }
 
     /**
-     * 解除指定视图的本地媒体预览绑定。
+     * Unbinds local media preview from a view.
      *
-     * @param view 需要绑定或解除绑定的显示视图。
+     * @param view The view to bind or unbind.
      */
     override fun detachPreview(
-        view: XmaxVideoView
+        view: XmaxVideoView,
     ) {
         previewDispatcher.detach(view)
     }
 
     /**
-     * 停止解码和音频预览，清除待发送及待显示的媒体帧。
+     * Stops decoding and audio preview, discarding pending media frames.
      */
     override suspend fun stop() = operationMutex.withLock {
         val job = synchronized(stateLock) {
@@ -265,10 +289,10 @@ internal class VideoPlayerController(
     }
 
     /**
-     * 按播放时间线持续解码并提交视频帧。
+     * Continuously decodes and submits video frames on the playback timeline.
      *
-     * @param configuration 本地媒体解码和播放输出配置。
-     * @param timeline 协调音视频帧输出时刻的播放时间线。
+     * @param configuration The local media decoding and playback configuration.
+     * @param timeline The shared timeline scheduling audio and video output.
      */
     private suspend fun produceVideoFrames(
         configuration: PlaybackConfiguration,
@@ -277,21 +301,30 @@ internal class VideoPlayerController(
         var loopIndex = 0
         while (true) {
             coroutineContext.ensureActive()
-            if (!decodeVideoCycle(configuration, timeline, loopIndex)) {
+            if (!decodeVideoCycle(
+                configuration,
+                timeline,
+                loopIndex,
+            )) {
                 throw mediaError("The media file produced no video frames")
             }
             loopIndex += 1
-            sleepUntil(timeline.target(loopIndex, 0L))
+            sleepUntil(
+                timeline.target(
+                    loopIndex,
+                    0L,
+                ),
+            )
         }
     }
 
     /**
-     * 解码一次视频循环并按时间线提交帧。
+     * Decodes one video loop and submits frames on the timeline.
      *
-     * @param configuration 本地媒体解码和播放输出配置。
-     * @param timeline 协调音视频帧输出时刻的播放时间线。
-     * @param loopIndex 从零开始的媒体循环次数。
-     * @return 本轮已经输出视频帧时为 true，否则为 false。
+     * @param configuration The local media decoding and playback configuration.
+     * @param timeline The shared timeline scheduling audio and video output.
+     * @param loopIndex The zero-based playback loop number.
+     * @return True if this loop output any video frames.
      */
     private suspend fun decodeVideoCycle(
         configuration: PlaybackConfiguration,
@@ -303,7 +336,11 @@ internal class VideoPlayerController(
         var decodingFailure: Throwable? = null
         var yieldedFrame = false
         try {
-            extractor.setDataSource(applicationContext, configuration.uri, null)
+            extractor.setDataSource(
+                applicationContext,
+                configuration.uri,
+                null,
+            )
             val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
                 extractor.getTrackFormat(index)
                     .getString(MediaFormat.KEY_MIME)
@@ -318,7 +355,12 @@ internal class VideoPlayerController(
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible,
             )
             codec = MediaCodec.createDecoderByType(mime)
-            codec.configure(sourceFormat, null, null, 0)
+            codec.configure(
+                sourceFormat,
+                null,
+                null,
+                0,
+            )
             codec.start()
             val firstPresentationTimeUs = extractor.sampleTime.coerceAtLeast(0L)
             val frameIntervalUs = MICROSECONDS_PER_SECOND / configuration.frameRate
@@ -336,7 +378,10 @@ internal class VideoPlayerController(
                     if (inputIndex >= 0) {
                         val input = codec.getInputBuffer(inputIndex)
                             ?: throw mediaError("The video decoder input buffer is unavailable")
-                        val sampleSize = extractor.readSampleData(input, 0)
+                        val sampleSize = extractor.readSampleData(
+                            input,
+                            0,
+                        )
                         if (sampleSize < 0) {
                             codec.queueInputBuffer(
                                 inputIndex,
@@ -359,7 +404,10 @@ internal class VideoPlayerController(
                     }
                 }
 
-                when (val outputIndex = codec.dequeueOutputBuffer(bufferInfo, CODEC_TIMEOUT_US)) {
+                when (val outputIndex = codec.dequeueOutputBuffer(
+                    bufferInfo,
+                    CODEC_TIMEOUT_US,
+                )) {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED,
                     MediaCodec.INFO_TRY_AGAIN_LATER,
                     -> Unit
@@ -370,7 +418,10 @@ internal class VideoPlayerController(
                             ).coerceAtLeast(0L)
                         val hasFrameIntervalElapsed = lastYieldedTimeUs == Long.MIN_VALUE ||
                             relativeTimeUs - lastYieldedTimeUs >= frameIntervalUs * 3 / 4
-                        val target = timeline.target(loopIndex, relativeTimeUs)
+                        val target = timeline.target(
+                            loopIndex,
+                            relativeTimeUs,
+                        )
                         val isOnTime = SystemClock.elapsedRealtimeNanos() - target <=
                             frameIntervalNanoseconds
                         if (bufferInfo.size > 0 && hasFrameIntervalElapsed && isOnTime) {
@@ -391,9 +442,17 @@ internal class VideoPlayerController(
                             yieldedFrame = true
                         }
                         outputEnded = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                        codec.releaseOutputBuffer(outputIndex, false)
+                        codec.releaseOutputBuffer(
+                            outputIndex,
+                            false,
+                        )
                         if (frame != null) {
-                            pendingFrames.addLast(ScheduledVideoFrame(frame, target))
+                            pendingFrames.addLast(
+                                ScheduledVideoFrame(
+                                    frame,
+                                    target,
+                                ),
+                            )
                             if (pendingFrames.size >= VIDEO_DECODE_BUFFER_SIZE) {
                                 emitVideoFrame(pendingFrames.removeFirst())
                             }
@@ -405,24 +464,35 @@ internal class VideoPlayerController(
                 emitVideoFrame(pendingFrames.removeFirst())
             }
             return yieldedFrame
-        } catch (error: Throwable) {
+        } catch (
+            error: Throwable,
+        ) {
             decodingFailure = error
             throw error
         } finally {
             val failure = decodingFailure
             if (failure == null) {
-                cleanupResources({ codec?.stop() }, { codec?.release() }, { extractor.release() })
+                cleanupResources(
+                    { codec?.stop() },
+                    { codec?.release() },
+                    { extractor.release() },
+                )
             } else {
-                cleanupAfterFailure(failure, { codec?.stop() }, { codec?.release() }, { extractor.release() })
+                cleanupAfterFailure(
+                    failure,
+                    { codec?.stop() },
+                    { codec?.release() },
+                    { extractor.release() },
+                )
             }
         }
     }
 
     /**
-     * 按播放时间线持续解码并提交音频帧。
+     * Continuously decodes and submits audio on the playback timeline.
      *
-     * @param configuration 本地媒体解码和播放输出配置。
-     * @param timeline 协调音视频帧输出时刻的播放时间线。
+     * @param configuration The local media decoding and playback configuration.
+     * @param timeline The shared timeline scheduling audio and video output.
      */
     private suspend fun produceAudioFrames(
         configuration: PlaybackConfiguration,
@@ -431,18 +501,22 @@ internal class VideoPlayerController(
         var loopIndex = 0
         while (true) {
             coroutineContext.ensureActive()
-            decodeAudioCycle(configuration, timeline, loopIndex)
+            decodeAudioCycle(
+                configuration,
+                timeline,
+                loopIndex,
+            )
             loopIndex += 1
         }
     }
 
     /**
-     * 在计划时间提交视频帧并更新本地预览。
+     * Submits a video frame at its deadline and updates local preview.
      *
-     * @param scheduledFrame 视频帧及其计划输出时刻。
+     * @param scheduledFrame The video frame and its output deadline.
      */
     private suspend fun emitVideoFrame(
-        scheduledFrame: ScheduledVideoFrame
+        scheduledFrame: ScheduledVideoFrame,
     ) {
         sleepUntil(scheduledFrame.targetNanoseconds)
         previewDispatcher.enqueue(scheduledFrame.frame)
@@ -450,11 +524,11 @@ internal class VideoPlayerController(
     }
 
     /**
-     * 解码一次音频循环并按固定 PCM 包大小提交。
+     * Decodes one audio loop into fixed-size PCM packets.
      *
-     * @param configuration 本地媒体解码和播放输出配置。
-     * @param timeline 协调音视频帧输出时刻的播放时间线。
-     * @param loopIndex 从零开始的媒体循环次数。
+     * @param configuration The local media decoding and playback configuration.
+     * @param timeline The shared timeline scheduling audio and video output.
+     * @param loopIndex The zero-based playback loop number.
      */
     private suspend fun decodeAudioCycle(
         configuration: PlaybackConfiguration,
@@ -465,7 +539,11 @@ internal class VideoPlayerController(
         var codec: MediaCodec? = null
         var decodingFailure: Throwable? = null
         try {
-            extractor.setDataSource(applicationContext, configuration.uri, null)
+            extractor.setDataSource(
+                applicationContext,
+                configuration.uri,
+                null,
+            )
             val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
                 extractor.getTrackFormat(index)
                     .getString(MediaFormat.KEY_MIME)
@@ -475,9 +553,17 @@ internal class VideoPlayerController(
             val sourceFormat = extractor.getTrackFormat(trackIndex)
             val mime = sourceFormat.getString(MediaFormat.KEY_MIME)
                 ?: throw mediaError("The media audio track has no MIME type")
-            sourceFormat.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+            sourceFormat.setInteger(
+                MediaFormat.KEY_PCM_ENCODING,
+                AudioFormat.ENCODING_PCM_16BIT,
+            )
             codec = MediaCodec.createDecoderByType(mime)
-            codec.configure(sourceFormat, null, null, 0)
+            codec.configure(
+                sourceFormat,
+                null,
+                null,
+                0,
+            )
             codec.start()
             val firstPresentationTimeUs = extractor.sampleTime.coerceAtLeast(0L)
             val packetizer = PCMFramePacketizer(timeline.cycleSampleCount)
@@ -495,7 +581,10 @@ internal class VideoPlayerController(
                     if (inputIndex >= 0) {
                         val input = codec.getInputBuffer(inputIndex)
                             ?: throw mediaError("The audio decoder input buffer is unavailable")
-                        val sampleSize = extractor.readSampleData(input, 0)
+                        val sampleSize = extractor.readSampleData(
+                            input,
+                            0,
+                        )
                         if (sampleSize < 0) {
                             codec.queueInputBuffer(
                                 inputIndex,
@@ -518,7 +607,10 @@ internal class VideoPlayerController(
                     }
                 }
 
-                when (val outputIndex = codec.dequeueOutputBuffer(bufferInfo, CODEC_TIMEOUT_US)) {
+                when (val outputIndex = codec.dequeueOutputBuffer(
+                    bufferInfo,
+                    CODEC_TIMEOUT_US,
+                )) {
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         val outputFormat = codec.outputFormat
                         outputSampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
@@ -534,7 +626,10 @@ internal class VideoPlayerController(
                     else -> if (outputIndex >= 0) {
                         val output = codec.getOutputBuffer(outputIndex)
                         if (bufferInfo.size > 0 && output != null) {
-                            val bytes = output.selectedBytes(bufferInfo.offset, bufferInfo.size)
+                            val bytes = output.selectedBytes(
+                                bufferInfo.offset,
+                                bufferInfo.size,
+                            )
                             val samples = convertToRtcSamples(
                                 bytes = bytes,
                                 encoding = outputEncoding,
@@ -548,35 +643,60 @@ internal class VideoPlayerController(
                                 relativePresentationUs * AudioFrame.sampleRate /
                                     MICROSECONDS_PER_SECOND
                                 ).toInt()
-                            packetizer.append(samples, sampleOffset)
-                            emitAvailableAudioFrames(packetizer, timeline, loopIndex)
+                            packetizer.append(
+                                samples,
+                                sampleOffset,
+                            )
+                            emitAvailableAudioFrames(
+                                packetizer,
+                                timeline,
+                                loopIndex,
+                            )
                         }
                         outputEnded = bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
-                        codec.releaseOutputBuffer(outputIndex, false)
+                        codec.releaseOutputBuffer(
+                            outputIndex,
+                            false,
+                        )
                     }
                 }
             }
             packetizer.finishWithSilence()
-            emitAvailableAudioFrames(packetizer, timeline, loopIndex)
-        } catch (error: Throwable) {
+            emitAvailableAudioFrames(
+                packetizer,
+                timeline,
+                loopIndex,
+            )
+        } catch (
+            error: Throwable,
+        ) {
             decodingFailure = error
             throw error
         } finally {
             val failure = decodingFailure
             if (failure == null) {
-                cleanupResources({ codec?.stop() }, { codec?.release() }, { extractor.release() })
+                cleanupResources(
+                    { codec?.stop() },
+                    { codec?.release() },
+                    { extractor.release() },
+                )
             } else {
-                cleanupAfterFailure(failure, { codec?.stop() }, { codec?.release() }, { extractor.release() })
+                cleanupAfterFailure(
+                    failure,
+                    { codec?.stop() },
+                    { codec?.release() },
+                    { extractor.release() },
+                )
             }
         }
     }
 
     /**
-     * 提交已缓冲的完整 PCM 音频包。
+     * Submits complete buffered PCM packets.
      *
-     * @param packetizer 将 PCM 采样组合为固定长度帧的分包器。
-     * @param timeline 协调音视频帧输出时刻的播放时间线。
-     * @param loopIndex 从零开始的媒体循环次数。
+     * @param packetizer The packetizer grouping PCM samples into fixed-size frames.
+     * @param timeline The shared timeline scheduling audio and video output.
+     * @param loopIndex The zero-based playback loop number.
      */
     private suspend fun emitAvailableAudioFrames(
         packetizer: PCMFramePacketizer,
@@ -585,7 +705,10 @@ internal class VideoPlayerController(
     ) {
         while (true) {
             val packet = packetizer.nextFrame() ?: return
-            val target = timeline.target(loopIndex, packet.sampleOffset)
+            val target = timeline.target(
+                loopIndex,
+                packet.sampleOffset,
+            )
             val now = SystemClock.elapsedRealtimeNanos()
             if (now < target) {
                 sleepUntil(target)
@@ -602,13 +725,13 @@ internal class VideoPlayerController(
     }
 
     /**
-     * 将解码音频转换为 RTC 所需的采样率、声道数和 PCM 采样格式。
+     * Converts decoded audio to the sample rate, channels, and PCM format required by RTC.
      *
-     * @param bytes 需要解码或传输的字节数据。
-     * @param encoding Android 音频采样编码格式。
-     * @param channelCount 音频声道数。
-     * @param sampleRate 音频采样率，单位为 Hz。
-     * @return 符合 RTC 音频采样格式的 PCM16 数据。
+     * @param bytes The bytes to decode or transfer.
+     * @param encoding The Android audio sample encoding.
+     * @param channelCount The number of audio channels.
+     * @param sampleRate The sample rate, in Hz.
+     * @return PCM16 data matching RTC audio input.
      */
     private fun convertToRtcSamples(
         bytes: ByteArray,
@@ -627,7 +750,10 @@ internal class VideoPlayerController(
             AudioFormat.ENCODING_PCM_FLOAT -> {
                 val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
                 ShortArray(bytes.size / Float.SIZE_BYTES) {
-                    (buffer.float.coerceIn(-1f, 1f) * Short.MAX_VALUE).roundToInt().toShort()
+                    (buffer.float.coerceIn(
+                        -1f,
+                        1f,
+                    ) * Short.MAX_VALUE).roundToInt().toShort()
                 }
             }
             else -> throw mediaError("The decoded audio PCM format is unsupported")
@@ -651,18 +777,21 @@ internal class VideoPlayerController(
             val fraction = sourcePosition - leftIndex
             (mono[leftIndex] + (mono[rightIndex] - mono[leftIndex]) * fraction)
                 .roundToInt()
-                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                .coerceIn(
+                    Short.MIN_VALUE.toInt(),
+                    Short.MAX_VALUE.toInt(),
+                )
                 .toShort()
         }
     }
 
     /**
-     * 挂起至指定的单调时钟时刻，支持协程取消。
+     * Suspends until a monotonic deadline, supporting coroutine cancellation.
      *
-     * @param targetNanoseconds 等待到达的单调时钟时刻，单位为纳秒。
+     * @param targetNanoseconds The monotonic deadline, in nanoseconds.
      */
     private suspend fun sleepUntil(
-        targetNanoseconds: Long
+        targetNanoseconds: Long,
     ) {
         while (true) {
             val remaining = targetNanoseconds - SystemClock.elapsedRealtimeNanos()
@@ -672,15 +801,15 @@ internal class VideoPlayerController(
     }
 
     /**
-     * 复制缓冲区当前有效范围内的字节。
+     * Copies the buffer's current valid byte range.
      *
-     * @param offset 有效数据的起始偏移。
-     * @param size 有效数据的字节数。
-     * @return 有效数据对应的字节数组。
+     * @param offset The valid data's starting offset.
+     * @param size The valid byte count.
+     * @return An array containing the valid bytes.
      */
     private fun ByteBuffer.selectedBytes(
         offset: Int,
-        size: Int
+        size: Int,
     ): ByteArray =
         duplicate().apply {
             position(offset)
@@ -690,26 +819,29 @@ internal class VideoPlayerController(
         }
 
     /**
-     * 创建包含媒体处理原因的 SDK 错误。
+     * Creates a media error with the processing failure description.
      *
-     * @param message 待发送或记录的消息文本。
-     * @param cause 触发当前错误的底层异常。
-     * @return 包含错误类别、描述和可用底层原因的 SDK 错误。
+     * @param message The message to send or log.
+     * @param cause The underlying exception that caused this error.
      */
     private fun mediaError(
         message: String,
-        cause: Throwable? = null
+        cause: Throwable? = null,
     ): XmaxError =
-        XmaxError(XmaxErrorCode.MEDIA_ERROR, message, cause = cause)
+        XmaxError(
+            XmaxErrorCode.MEDIA_ERROR,
+            message,
+            cause = cause,
+        )
 
     /**
-     * 生成包含播放错误原因的描述文本。
+     * Formats a playback failure description.
      *
-     * @param error 本次操作失败的异常或 SDK 错误。
-     * @return 包含播放失败原因的描述文本。
+     * @param error The operation failure or SDK error.
+     * @return Text describing the playback failure.
      */
     private fun playbackErrorDescription(
-        error: Throwable
+        error: Throwable,
     ): String =
         generateSequence(error) { it.cause }
             .map { cause ->
@@ -721,124 +853,124 @@ internal class VideoPlayerController(
             .joinToString(" <- ")
 
     /**
-     * 控制本地媒体解码、旋转、帧输出和循环播放的配置。
+     * Local decoding, rotation, frame output, and playback loop settings.
      */
     private data class PlaybackConfiguration(
         /**
-         * 应用有读取权限的媒体地址。
+         * A media URI accessible to your app.
          */
         val uri: Uri,
 
         /**
-         * 输出画面宽度，单位为像素。
+         * The output width, in pixels.
          */
         val outputWidth: Int,
 
         /**
-         * 输出画面高度，单位为像素。
+         * The output height, in pixels.
          */
         val outputHeight: Int,
 
         /**
-         * 应用到源画面的旋转方向。
+         * The rotation applied to the source image.
          */
         val rotation: VideoRotation,
 
         /**
-         * 视频帧率，单位为 fps。
+         * The video frame rate, in fps.
          */
         val frameRate: Int,
 
         /**
-         * 输入媒体是否包含可用音频。
+         * Whether the input provides audio.
          */
         val hasAudio: Boolean,
 
         /**
-         * 媒体持续时间，单位为微秒。
+         * The media duration, in microseconds.
          */
         val durationUs: Long,
     )
 
     /**
-     * 保存视频帧及其应提交的播放时间。
+     * A video frame and its playback submission deadline.
      */
     private data class ScheduledVideoFrame(
         /**
-         * 待处理、显示或提交的视频帧。
+         * The video frame to process, display, or submit.
          */
         val frame: VideoFrame,
 
         /**
-         * 等待到达的单调时钟时刻，单位为纳秒。
+         * The monotonic deadline, in nanoseconds.
          */
         val targetNanoseconds: Long,
     )
 
     /**
-     * 保存当前预览视图、显示模式及绑定代次。
+     * A preview view, scaling mode, and binding revision.
      */
     private data class PreviewTarget(
         /**
-         * 需要绑定或解除绑定的显示视图。
+         * The view to bind or unbind.
          */
         val view: XmaxVideoView?,
 
         /**
-         * 视频等比适配或等比裁切的显示方式。
+         * Aspect-preserving fit or fill scaling.
          */
         val contentMode: VideoContentMode,
 
         /**
-         * 用于识别当前生成请求或事件归属的标识。
+         * The identifier associating a request or event with its generation task.
          */
         val generation: Long,
     )
 
     /**
-     * 将最新解码帧派发到预览视图，避免慢显示积压旧帧。
+     * Delivers the latest decoded frame to preview without accumulating stale frames behind a slow display.
      */
     private inner class DecodedVideoPreviewDispatcher {
 
         /**
-         * 待显示的最新帧及派发标记。
+         * The latest frame awaiting display.
          */
         private val pendingFrame = AtomicReference<VideoFrame?>(null)
 
         /**
-         * 是否已安排主线程预览投递。
+         * Whether a main-thread preview delivery is scheduled.
          */
         private val deliveryScheduled = AtomicBoolean(false)
 
         /**
-         * 预览视图绑定的并发保护。
+         * The lock protecting preview bindings.
          */
         private val previewLock = Any()
 
         /**
-         * 当前预览视图、显示模式及绑定代次。
+         * The active preview view.
          */
         private var view: WeakReference<XmaxVideoView>? = null
 
         /**
-         * 本地预览的等比缩放与裁剪方式。
+         * The local preview fit or fill mode.
          */
         private var contentMode = VideoContentMode.FILL
 
         /**
-         * 预览绑定版本，用于忽略旧绑定的待显示画面。
+         * The binding revision used to discard stale preview frames.
          */
         private var generation = 0L
 
         /**
-         * 将本地解码视频预览绑定到指定视图。
+         * Binds decoded local video preview to a view.
          *
-         * @param view 需要绑定或解除绑定的显示视图。
-         * @param contentMode 视频等比适配或等比裁切的显示方式。
+         * @param view The view to bind or unbind.
+         * @param contentMode Aspect-preserving fit or fill scaling.
          */
         fun attach(
             view: XmaxVideoView,
-            contentMode: VideoContentMode
+            contentMode: VideoContentMode,
         ) {
             synchronized(previewLock) {
                 this.view = WeakReference(view)
@@ -849,12 +981,12 @@ internal class VideoPlayerController(
         }
 
         /**
-         * 解除指定视图的本地解码预览绑定。
+         * Unbinds decoded local preview from a view.
          *
-         * @param view 需要绑定或解除绑定的显示视图。
+         * @param view The view to bind or unbind.
          */
         fun detach(
-            view: XmaxVideoView
+            view: XmaxVideoView,
         ) {
             synchronized(previewLock) {
                 if (this.view?.get() === view) {
@@ -866,12 +998,12 @@ internal class VideoPlayerController(
         }
 
         /**
-         * 用最新视频帧更新待显示预览，替换尚未显示的旧帧。
+         * Replaces the pending preview frame with the latest decoded frame.
          *
-         * @param frame 待处理、显示或提交的视频帧。
+         * @param frame The video frame to process, display, or submit.
          */
         suspend fun enqueue(
-            frame: VideoFrame
+            frame: VideoFrame,
         ) {
             if (synchronized(previewLock) { view?.get() == null }) return
             pendingFrame.set(frame)
@@ -879,7 +1011,7 @@ internal class VideoPlayerController(
         }
 
         /**
-         * 清空待显示预览帧并解除当前预览目标。
+         * Clears pending preview frames and detaches the display target.
          */
         fun clear() {
             pendingFrame.set(null)
@@ -891,36 +1023,48 @@ internal class VideoPlayerController(
         }
 
         /**
-         * 安排本地预览帧派发，避免重复启动派发任务。
+         * Schedules preview delivery without starting duplicate dispatch tasks.
          *
-         * @param owner 运行异步派发任务的协程作用域。
+         * @param owner The scope running asynchronous delivery.
          */
         private fun scheduleDelivery(
-            owner: CoroutineScope
+            owner: CoroutineScope,
         ) {
-            if (owner.isActive && deliveryScheduled.compareAndSet(false, true)) {
+            if (owner.isActive && deliveryScheduled.compareAndSet(
+                false,
+                true,
+            )) {
                 owner.launch { deliverLatestFrames() }
             }
         }
 
         /**
-         * 向预览视图派发最新帧，跳过已经过时的待显示帧。
+         * Delivers the latest preview frame, skipping stale queued frames.
          */
         private suspend fun deliverLatestFrames() {
             try {
                 while (true) {
                     val frame = pendingFrame.getAndSet(null) ?: return
                     val preview = synchronized(previewLock) {
-                        PreviewTarget(view?.get(), contentMode, generation)
+                        PreviewTarget(
+                            view?.get(),
+                            contentMode,
+                            generation,
+                        )
                     }
                     if (preview.view == null) continue
                     val bitmap = try {
                         Yuv420VideoFrameConverter.makePreviewBitmap(frame)
-                    } catch (error: Throwable) {
+                    } catch (
+                        error: Throwable,
+                    ) {
                         XmaxLogger.media.warn(
                             message = {
                                 "本地视频预览帧转换失败 (Failed to Convert Local Video Preview)\n" +
-                                    "└─ ${XmaxLogger.localized("原因：", "Reason: ")}${playbackErrorDescription(error)}"
+                                    "└─ ${XmaxLogger.localized(
+                                        "原因：",
+                                        "Reason: ",
+                                    )}${playbackErrorDescription(error)}"
                             },
                         )
                         continue
@@ -932,7 +1076,10 @@ internal class VideoPlayerController(
                                 generation == preview.generation && view?.get() === preview.view
                             }
                             if (remainsAttached) {
-                                preview.view.displayDecodedVideoBitmap(bitmap, preview.contentMode)
+                                preview.view.displayDecodedVideoBitmap(
+                                    bitmap,
+                                    preview.contentMode,
+                                )
                                 delivered = true
                             }
                         }
@@ -948,37 +1095,37 @@ internal class VideoPlayerController(
     }
 
     /**
-     * 音视频解码与播放同步的时间和缓冲限制。
+     * Audio/video playback timing and buffering limits.
      */
     private companion object {
 
         /**
-         * 等待解码器输入或输出缓冲区的超时时长，单位为微秒。
+         * The decoder input or output buffer timeout, in microseconds.
          */
         const val CODEC_TIMEOUT_US = 10_000L
 
         /**
-         * 秒换算为微秒的倍率。
+         * The number of microseconds per second.
          */
         const val MICROSECONDS_PER_SECOND = 1_000_000L
 
         /**
-         * 微秒换算为纳秒的倍率。
+         * The number of nanoseconds per microsecond.
          */
         const val NANOSECONDS_PER_MICROSECOND = 1_000L
 
         /**
-         * 毫秒换算为纳秒的倍率。
+         * The number of nanoseconds per millisecond.
          */
         const val NANOSECONDS_PER_MILLISECOND = 1_000_000L
 
         /**
-         * 允许音频帧落后播放时钟的最大时长，单位为纳秒。
+         * The maximum permitted audio lateness, in nanoseconds.
          */
         const val MAXIMUM_AUDIO_LATENESS_NANOSECONDS = 30_000_000L
 
         /**
-         * 视频解码与输出之间最多缓存的帧数。
+         * The maximum buffered frames between video decoding and output.
          */
         const val VIDEO_DECODE_BUFFER_SIZE = 2
     }
