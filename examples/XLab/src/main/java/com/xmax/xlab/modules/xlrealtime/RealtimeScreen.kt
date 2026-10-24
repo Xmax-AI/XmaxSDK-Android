@@ -197,7 +197,7 @@ private data class PromptReference(
 public fun RealtimeScreen(
     apiKey: String,
     environment: XmaxEnvironment = XmaxEnvironment.CHINA,
-    model: RealtimeModel = RealtimeModel.X2_1,
+    model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN,
     source: RealtimeSource,
     trajectoryStyle: RealtimeTrajectoryStyle = RealtimeTrajectoryStyle.SDK_DEFAULT,
     onBack: () -> Unit,

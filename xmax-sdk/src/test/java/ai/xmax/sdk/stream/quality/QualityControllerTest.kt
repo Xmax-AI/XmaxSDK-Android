@@ -30,6 +30,90 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 public class QualityControllerTest {
     @Test
+    public fun `disabled adaptation starts at L1 and keeps manual changes out of history`() = runTest {
+        var reads = 0
+        var writes = 0
+        val history = QualityHistory(
+            readValue = { direction ->
+                reads++
+                QualityHistory.Entry(if (direction == "uplink") 2 else 4, 1_000L)
+            },
+            writeValue = { _, _ -> writes++ },
+            now = { 1_000L },
+        )
+        val controller = QualityController(
+            RtcManagingStub(),
+            callbackScope = this,
+            history = history,
+            now = { testScheduler.currentTime },
+        )
+        val baseline = RealtimeVideoFormat(1024, 1920, 30)
+        val initial = controller.prepareQuality(baseline, isAdaptiveQualityEnabled = false)
+        assertEquals(1, initial.uplinkLevel)
+        assertEquals(1, initial.downlinkLevel)
+        controller.completeInitialQuality(downlink = false)
+        controller.completeInitialQuality(downlink = true)
+
+        controller.completeQuality(downlink = false, level = 3, success = true)
+        controller.completeQuality(downlink = true, level = 5, success = true)
+        assertEquals(3, controller.qualityConfiguration?.uplinkLevel)
+        assertEquals(5, controller.qualityConfiguration?.downlinkLevel)
+        repeat(10) {
+            assertEquals(QualityChange(null, null), controller.proposeQuality(
+                RealtimeNetworkQuality(RealtimeNetworkQualityLevel.BAD, RealtimeNetworkQualityLevel.BAD),
+                testScheduler.currentTime,
+            ))
+            testScheduler.advanceTimeBy(1_000)
+        }
+        assertEquals(0, reads)
+        assertEquals(0, writes)
+
+        controller.resetQuality()
+        val reconnected = controller.prepareQuality(baseline, isAdaptiveQualityEnabled = false)
+        assertEquals(1, reconnected.uplinkLevel)
+        assertEquals(1, reconnected.downlinkLevel)
+        assertEquals(0, reads)
+        assertEquals(0, writes)
+
+        controller.resetQuality()
+        val automatic = controller.prepareQuality(baseline, isAdaptiveQualityEnabled = true)
+        assertEquals(2, automatic.uplinkLevel)
+        assertEquals(4, automatic.downlinkLevel)
+        assertEquals(2, reads)
+        assertEquals(0, writes)
+    }
+
+    @Test
+    public fun `disabled adaptation preserves public quality performance and video statistics`() = runTest {
+        val rtc = RtcManagingStub()
+        val controller = QualityController(rtc, callbackScope = this)
+        val network = mutableListOf<RealtimeNetworkQuality>()
+        val performance = mutableListOf<RealtimePerformanceAlarm>()
+        val uplink = mutableListOf<UplinkVideoStatistics?>()
+        val downlink = mutableListOf<DownlinkVideoStatistics?>()
+        controller.prepareQuality(RealtimeVideoFormat(1024, 1920, 30), isAdaptiveQualityEnabled = false)
+        controller.setNetworkQualityListener(network::add)
+        controller.setPerformanceAlarmListener(performance::add)
+        controller.setUplinkVideoStatisticsListener(uplink::add)
+        controller.setDownlinkVideoStatisticsListener(downlink::add)
+        controller.setUplinkVideoStatisticsEnabled(true)
+        controller.setDownlinkVideoStatisticsUser("bot")
+
+        rtc.emitNetworkQuality(RtcQualityLevel.BAD, RtcQualityLevel.GOOD)
+        rtc.emitPerformanceAlarm(true, 540, 960, 15)
+        val sent = UplinkVideoStatistics(width = 1024, height = 1920)
+        val received = DownlinkVideoStatistics(userId = "bot", width = 1024, height = 1920)
+        controller.onUplinkVideoStatistics(sent)
+        controller.onDownlinkVideoStatistics(received)
+        runCurrent()
+
+        assertEquals(listOf(RealtimeNetworkQuality(RealtimeNetworkQualityLevel.BAD, RealtimeNetworkQualityLevel.GOOD)), network)
+        assertEquals(RealtimePerformanceStatus.LIMITED, performance.single().status)
+        assertEquals(sent, uplink.last())
+        assertEquals(received, downlink.last())
+    }
+
+    @Test
     public fun `quality reset discards queued callbacks while retaining public registrations`() = runTest {
         val rtc = RtcManagingStub()
         val controller = QualityController(rtc, callbackScope = this)

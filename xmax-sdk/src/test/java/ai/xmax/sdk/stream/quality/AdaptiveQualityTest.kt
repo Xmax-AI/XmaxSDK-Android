@@ -208,7 +208,7 @@ class AdaptiveQualityTest {
 
     @Test
     fun `uplink levels preserve media aspect and minimum area without changing the baseline`() {
-        val model = RealtimeModel.X2_1
+        val model = RealtimeModel.X2_1_1_PREVIEW_CN
         for (input in model.supportedVideoFormats + listOf(
             RealtimeVideoFormat(1200, 800, 24),
             RealtimeVideoFormat(1004, 600, 30),

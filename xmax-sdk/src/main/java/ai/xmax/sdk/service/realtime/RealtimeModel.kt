@@ -23,9 +23,14 @@ public enum class RealtimeModel(
 ) {
 
     /**
-     * The X2.1 realtime generation model.
+     * The China preview of the X2.1.1 realtime generation model.
      */
-    X2_1("x2.1"),
+    X2_1_1_PREVIEW_CN("x2.1.1-preview-cn"),
+
+    /**
+     * The global preview of the X2.1.1 realtime generation model.
+     */
+    X2_1_1_PREVIEW_US("x2.1.1-preview-us"),
 
     ;
 
@@ -34,7 +39,8 @@ public enum class RealtimeModel(
      */
     public val displayName: String
         get() = when (this) {
-            X2_1 -> "X2.1"
+            X2_1_1_PREVIEW_CN -> "X2.1.1-preview-cn"
+            X2_1_1_PREVIEW_US -> "X2.1.1-preview-us"
         }
 
     /**
@@ -47,28 +53,13 @@ public enum class RealtimeModel(
     public val supportedVideoFormats: List<RealtimeVideoFormat>
         get() = listOf(
             RealtimeVideoFormat(
-                width = 1_920,
-                height = 1_080,
-                fps = defaultFrameRate,
-            ),
-            RealtimeVideoFormat(
-                width = 1_080,
+                width = 1_024,
                 height = 1_920,
                 fps = defaultFrameRate,
             ),
             RealtimeVideoFormat(
-                width = 1_408,
-                height = 1_408,
-                fps = defaultFrameRate,
-            ),
-            RealtimeVideoFormat(
-                width = 1_152,
-                height = 1_536,
-                fps = defaultFrameRate,
-            ),
-            RealtimeVideoFormat(
-                width = 1_536,
-                height = 1_152,
+                width = 1_920,
+                height = 1_024,
                 fps = defaultFrameRate,
             ),
         )
@@ -102,7 +93,7 @@ public enum class RealtimeModel(
      */
     public val defaultCameraVideoFormat: RealtimeVideoFormat
         get() = RealtimeVideoFormat(
-            width = 1_080,
+            width = 1_024,
             height = 1_920,
             fps = defaultFrameRate,
         )

@@ -21,23 +21,48 @@ import org.junit.Test
 
 public class RealtimeModelTest {
     @Test
-    public fun `x21 uses environment routing and five resolution buckets`() {
-        assertEquals(listOf("x2.1"), RealtimeModel.entries.map { it.id })
-        assertEquals(listOf("X2.1"), RealtimeModel.entries.map { it.displayName })
-        assertEquals(RealtimeModel.X2_1, RealtimeConfiguration().model)
+    public fun `preview models use environment routing and two resolution buckets`() {
+        assertEquals(
+            listOf("x2.1.1-preview-cn", "x2.1.1-preview-us"),
+            RealtimeModel.entries.map { it.id },
+        )
+        assertEquals(
+            listOf("X2.1.1-preview-cn", "X2.1.1-preview-us"),
+            RealtimeModel.entries.map { it.displayName },
+        )
+        assertEquals(RealtimeModel.X2_1_1_PREVIEW_CN, RealtimeConfiguration().model)
         assertEquals("https://cloud.xmax.22duck.cn/open/api/v1", XmaxEnvironment.CHINA.realtimeApiBaseUrl)
         assertEquals("https://api.xmax.ai/open/api/v1", XmaxEnvironment.GLOBAL.realtimeApiBaseUrl)
         assertEquals("https://api.xmax.cloud/open/api/v1", XmaxEnvironment.GLOBAL.apiBaseUrl)
         RealtimeModel.entries.forEach { model ->
-            assertEquals(listOf(IntSize(1920, 1080), IntSize(1080, 1920), IntSize(1408, 1408),
-                IntSize(1152, 1536), IntSize(1536, 1152)), model.supportedVideoFormats.map { IntSize(it.width, it.height) })
+            assertEquals(
+                listOf(IntSize(1024, 1920), IntSize(1920, 1024)),
+                model.supportedVideoFormats.map { IntSize(it.width, it.height) },
+            )
             assertTrue(model.supportedVideoFormats.all { it.fps == model.defaultFrameRate })
-            assertEquals(model.supportedVideoFormats.map { IntSize(it.width, it.height) }, RealtimeCameraPreset.entries.map { it.size })
-            assertEquals(RealtimeVideoFormat(1080, 1920, 30), model.defaultCameraVideoFormat)
+            assertEquals(RealtimeVideoFormat(1024, 1920, 30), model.defaultCameraVideoFormat)
+            assertTrue(model.defaultCameraVideoFormat in model.supportedVideoFormats)
             assertEquals(500_000, model.minimumInputPixels)
             assertEquals(2_100_000, model.maximumInputPixels)
             assertEquals(32, model.inputSizeAlignment)
         }
+    }
+
+    @Test
+    public fun `x21 is not exposed as a selectable model`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            RealtimeModel.valueOf("X2_1")
+        }
+    }
+
+    @Test
+    public fun `adaptive quality is enabled by default and can be disabled at creation`() {
+        val defaults = RealtimeConfiguration()
+        assertTrue(defaults.isAdaptiveQualityEnabled)
+        val manual = RealtimeConfiguration(isAdaptiveQualityEnabled = false)
+        assertEquals(defaults.model, manual.model)
+        assertEquals(false, manual.isAdaptiveQualityEnabled)
+        assertEquals(defaults, manual.copy(isAdaptiveQualityEnabled = true))
     }
 
     @Test

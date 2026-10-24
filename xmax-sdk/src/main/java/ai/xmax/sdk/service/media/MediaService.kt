@@ -29,9 +29,9 @@ import kotlin.math.ln
  */
 internal class MediaService(
     /**
-     * The model defining input constraints; defaults to `RealtimeModel.X2_1`.
+     * The model defining input constraints; defaults to `RealtimeModel.X2_1_1_PREVIEW_CN`.
      */
-    override val model: RealtimeModel = RealtimeModel.X2_1,
+    override val model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN,
 ) : MediaServicing {
 
     /**

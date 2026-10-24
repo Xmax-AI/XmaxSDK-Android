@@ -151,16 +151,19 @@ internal class StreamController(
      * @param baseline The fixed, resolved media format.
      * @param minimumInputPixels The minimum uplink pixel area.
      * @param publishLocalMedia Whether the connection publishes local video.
+     * @param isAdaptiveQualityEnabled Whether to use automatic adaptation and saved quality history.
      * @return The prepared directional quality configuration.
      */
     override fun prepareQuality(
         baseline: RealtimeVideoFormat,
         minimumInputPixels: Int,
         publishLocalMedia: Boolean,
+        isAdaptiveQualityEnabled: Boolean,
     ): QualityConfiguration = qualityController.prepareQuality(
         baseline,
         minimumInputPixels,
         publishLocalMedia,
+        isAdaptiveQualityEnabled,
     )
 
     /**

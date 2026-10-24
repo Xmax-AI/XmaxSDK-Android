@@ -34,12 +34,15 @@ internal interface QualityControlling {
      * @param baseline The fixed, resolved local media format.
      * @param minimumInputPixels The minimum uplink pixel area.
      * @param publishLocalMedia Whether the connection publishes local video.
+     * @param isAdaptiveQualityEnabled Whether to adapt quality; disabled connections start at L1 without
+     * reading or updating history.
      * @return The initial directional transport configuration.
      */
     fun prepareQuality(
         baseline: RealtimeVideoFormat,
         minimumInputPixels: Int = 0,
         publishLocalMedia: Boolean = true,
+        isAdaptiveQualityEnabled: Boolean = true,
     ): QualityConfiguration
 
     /**

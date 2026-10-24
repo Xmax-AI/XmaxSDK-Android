@@ -27,7 +27,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExternalVideoControllerTest {
     private val media = object : MediaServicing by MediaService() {
-        override val model = RealtimeModel.X2_1
+        override val model = RealtimeModel.X2_1_1_PREVIEW_CN
         override fun resolveMediaSize(size: IntSize, source: RealtimeMediaSource) = size
     }
 
@@ -195,7 +195,7 @@ class ExternalVideoControllerTest {
     @Test fun `external media does not require a camera bucket but rejects undersized frames before binding`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val rtc = RtcManagingStub()
-        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1), { true }, {}, {}, {})
+        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN), { true }, {}, {}, {})
         try {
             val small = Source(videoFormat = RealtimeVideoFormat(640, 480, 30))
             try { controller.create(small); fail("Expected undersized input") } catch (_: XmaxError) { }

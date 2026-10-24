@@ -89,12 +89,12 @@ class CameraControllerTest {
     @Test
     fun `format update preserves track preview binding and camera position`() = runTest {
         val rtc = CameraRtcStub()
-        val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1))
-        val initial = RealtimeVideoFormat(1080, 1920, 24, 1500, 3000)
+        val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN))
+        val initial = RealtimeVideoFormat(1024, 1920, 24, 1500, 3000)
         val stream = controller.createLocalCameraStream(initial, CameraPosition.BACK)
         val track = stream.videoTrack!!
         val binding = VideoRenderRegistry.binding(track)
-        val updated = initial.copy(width = 1408, height = 1408, fps = 30)
+        val updated = initial.copy(width = 1920, height = 1024, fps = 30)
 
         controller.updateVideoFormat(updated)
 
@@ -102,7 +102,7 @@ class CameraControllerTest {
         assertSame(binding, VideoRenderRegistry.binding(track))
         assertEquals(updated, track.videoFormat)
         assertEquals(CameraPosition.BACK, track.position)
-        assertEquals(Triple(1408, 1408, 30), rtc.captureFormats.last())
+        assertEquals(Triple(1920, 1024, 30), rtc.captureFormats.last())
         assertEquals(0, rtc.stopCount)
         assertEquals(0, rtc.unbindCount)
         controller.updateVideoFormat(updated)
@@ -113,8 +113,8 @@ class CameraControllerTest {
     @Test
     fun `invalid or failed format update leaves camera preview intact`() = runTest {
         val rtc = CameraRtcStub()
-        val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1))
-        val initial = RealtimeModel.X2_1.defaultCameraVideoFormat
+        val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN))
+        val initial = RealtimeModel.X2_1_1_PREVIEW_CN.defaultCameraVideoFormat
         val track = controller.createLocalCameraStream(initial, CameraPosition.FRONT).videoTrack!!
         val binding = VideoRenderRegistry.binding(track)
 
@@ -124,7 +124,7 @@ class CameraControllerTest {
 
         val failure = XmaxError(XmaxErrorCode.RTC_ERROR, "capture configuration failed")
         rtc.startFailure = failure
-        assertSame(failure, runCatching { controller.updateVideoFormat(initial.copy(width = 1408, height = 1408)) }.exceptionOrNull())
+        assertSame(failure, runCatching { controller.updateVideoFormat(initial.copy(width = 1920, height = 1024)) }.exceptionOrNull())
         assertEquals(initial, track.videoFormat)
         assertSame(binding, VideoRenderRegistry.binding(track))
         assertEquals(0, rtc.stopCount)
@@ -134,12 +134,12 @@ class CameraControllerTest {
 
     @Test
     fun `bucket camera preserves resolution and encoding options`() = runTest {
-        RealtimeModel.X2_1.supportedVideoFormats.map { IntSize(it.width, it.height) }.forEach { (width, height) ->
+        RealtimeModel.X2_1_1_PREVIEW_CN.supportedVideoFormats.map { IntSize(it.width, it.height) }.forEach { (width, height) ->
             val rtc = CameraRtcStub()
             val controller = CameraController(
                 rtcManager = rtc,
                 permissionManager = GrantedPermissionManager,
-                mediaService = MediaService(RealtimeModel.X2_1),
+                mediaService = MediaService(RealtimeModel.X2_1_1_PREVIEW_CN),
             )
             val requested = RealtimeVideoFormat(
                 width = width,
@@ -172,7 +172,7 @@ class CameraControllerTest {
         val controller = CameraController(
             rtcManager = rtc,
             permissionManager = permissions,
-            mediaService = MediaService(RealtimeModel.X2_1),
+            mediaService = MediaService(RealtimeModel.X2_1_1_PREVIEW_CN),
         )
 
         val error = runCatching {
@@ -359,7 +359,7 @@ private data object GrantedPermissionManager : PermissionManaging {
 }
 
 private data object IdentityMediaService : MediaServicing by MediaService() {
-    override val model: RealtimeModel = RealtimeModel.X2_1
+    override val model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN
 
     override fun resolveMediaSize(size: IntSize, source: RealtimeMediaSource): IntSize = size
 }

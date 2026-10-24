@@ -27,7 +27,7 @@ internal class RealtimeModelStore(context: Context) {
     fun load(): RealtimeModel {
         val storedModelId = preferences.getString(MODEL_KEY, null)
         return RealtimeModel.entries.firstOrNull { it.id == storedModelId }
-            ?: RealtimeModel.X2_1
+            ?: RealtimeModel.X2_1_1_PREVIEW_CN
     }
 
     fun save(model: RealtimeModel) {

@@ -99,7 +99,7 @@ internal class XmaxRealtimeConnectionManager(
      * Prepares the initial encoder and remote dimensions for a connection.
      *
      * @param baseline The resolved local media format.
-     * @param options The model configuration for this connection.
+     * @param options The model and adaptive quality settings for this connection.
      * @param publishLocalMedia Whether to configure a local video uplink.
      * @return The initial downlink output format.
      */
@@ -112,6 +112,7 @@ internal class XmaxRealtimeConnectionManager(
             baseline,
             options.model.minimumInputPixels,
             publishLocalMedia,
+            isAdaptiveQualityEnabled = options.isAdaptiveQualityEnabled,
         )
 
         quality.uplink?.let {

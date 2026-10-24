@@ -86,6 +86,11 @@ internal class QualityController(
     private var minimumInputPixels = 0
 
     /**
+     * Whether the current connection uses automatic adaptation and saved quality history.
+     */
+    private var isAdaptiveQualityEnabled = false
+
+    /**
      * The network quality listener registration revision.
      */
     private var networkVersion = 0L
@@ -165,17 +170,21 @@ internal class QualityController(
      * @param baseline The fixed, resolved media format.
      * @param minimumInputPixels The minimum uplink pixel area.
      * @param publishLocalMedia Whether to prepare a local uplink policy.
+     * @param isAdaptiveQualityEnabled Whether to adapt quality; disabled connections start at L1 without
+     * reading or updating history.
      * @return The prepared directional transport configuration.
      */
     override fun prepareQuality(
         baseline: RealtimeVideoFormat,
         minimumInputPixels: Int,
         publishLocalMedia: Boolean,
+        isAdaptiveQualityEnabled: Boolean,
     ): QualityConfiguration = synchronized(listenerLock) {
         this.baseline = baseline
         this.minimumInputPixels = minimumInputPixels
+        this.isAdaptiveQualityEnabled = isAdaptiveQualityEnabled
         uplinkQuality = if (publishLocalMedia) {
-            val level = history.read(downlink = false)
+            val level = if (isAdaptiveQualityEnabled) history.read(downlink = false) else QualityTiers.INITIAL_LEVEL
             val previous = uplinkQuality
             if (previous?.baseline == baseline && previous.level == level && previous.minimumInputPixels == minimumInputPixels) {
                 previous.apply { resetSamples() }
@@ -190,7 +199,7 @@ internal class QualityController(
         } else null
         downlinkQuality = QualityDirection(
             baseline,
-            history.read(downlink = true),
+            if (isAdaptiveQualityEnabled) history.read(downlink = true) else QualityTiers.INITIAL_LEVEL,
             downlink = true,
         )
         checkNotNull(qualityConfiguration)
@@ -207,6 +216,8 @@ internal class QualityController(
         quality: RealtimeNetworkQuality,
         sampledAt: Long,
     ): QualityChange = synchronized(listenerLock) {
+        if (!isAdaptiveQualityEnabled) return@synchronized QualityChange(null, null)
+
         val currentTime = now()
         QualityChange(
             uplink = uplinkQuality?.observe(
@@ -246,7 +257,7 @@ internal class QualityController(
             now(),
         )
 
-        if (success) history.write(
+        if (success && isAdaptiveQualityEnabled) history.write(
             downlink,
             level,
         )
@@ -268,6 +279,8 @@ internal class QualityController(
     override fun completeInitialQuality(
         downlink: Boolean,
     ): Unit = synchronized(listenerLock) {
+        if (!isAdaptiveQualityEnabled) return@synchronized
+
         val direction = (if (downlink) downlinkQuality else uplinkQuality) ?: return@synchronized
         history.write(
             downlink,
@@ -285,6 +298,7 @@ internal class QualityController(
         downlinkQuality = null
         baseline = null
         minimumInputPixels = 0
+        isAdaptiveQualityEnabled = false
     }
 
     /**

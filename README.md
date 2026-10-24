@@ -187,10 +187,9 @@ XmaxSDK is distributed through [**Maven Central**](#maven-central).
 
 ### Maven Central
 
-XmaxSDK uses Agora RTC. The current source API exposes `RealtimeModel.X2_1`;
-select China or global service routing through `XmaxConfiguration.environment`.
-The published **1.0.11** artifact still uses `X2_1_1_PREVIEW_CN` and
-`X2_1_1_PREVIEW_US`. The X2.1 API and quality controls described below require
+XmaxSDK uses Agora RTC and supports `RealtimeModel.X2_1_1_PREVIEW_CN` and
+`RealtimeModel.X2_1_1_PREVIEW_US`. Select China or global service routing through
+`XmaxConfiguration.environment`. The quality controls described below require
 the updated source until the next release is published.
 
 When upgrading to **1.0.11**, remove the `videoFormat` argument from
@@ -280,7 +279,7 @@ val client = XmaxClient(
 )
 
 val realtime = client.createRealtimeManager(
-    options = RealtimeConfiguration(model = RealtimeModel.X2_1),
+    options = RealtimeConfiguration(model = RealtimeModel.X2_1_1_PREVIEW_CN),
 )
 
 val videoView = XmaxRealtimeVideoView(this).apply {
@@ -290,7 +289,7 @@ setContentView(videoView)
 
 lifecycleScope.launch {
     val localStream = realtime.createLocalCameraStream(
-        videoFormat = RealtimeVideoFormat(width = 1080, height = 1920, fps = 30),
+        videoFormat = RealtimeVideoFormat(width = 1024, height = 1920, fps = 30),
         position = CameraPosition.FRONT,
     )
     videoView.localTrack = localStream.videoTrack
@@ -312,7 +311,7 @@ default after the generated video becomes visible.
 
 Local camera, image, video, and external input dimensions are capped at the model's
 maximum pixel count without upscaling, and aligned to multiples of four, preserving
-the exact aspect ratio where possible. X2.1 accepts processed media between 500,000
+the exact aspect ratio where possible. Both preview models accept processed media between 500,000
 and 2,100,000 pixels; smaller inputs are rejected rather than enlarged. Only camera
 requests must match a supported model resolution bucket.
 
@@ -416,24 +415,29 @@ val globalClient = XmaxClient(
         environment = XmaxEnvironment.GLOBAL,
     ),
 )
+
+val globalRealtime = globalClient.createRealtimeManager(
+    options = RealtimeConfiguration(model = RealtimeModel.X2_1_1_PREVIEW_US),
+)
 ```
 
 `XmaxEnvironment.CHINA` uses `https://cloud.xmax.22duck.cn/open/api/v1`.
 For `XmaxEnvironment.GLOBAL`, realtime sessions use `https://api.xmax.ai/open/api/v1`,
 while storage and other API requests use `https://api.xmax.cloud/open/api/v1`.
-Both environments use `RealtimeModel.X2_1`; there is no separate regional model.
+Use `RealtimeModel.X2_1_1_PREVIEW_CN` for China and
+`RealtimeModel.X2_1_1_PREVIEW_US` for the global environment. The default model is
+`X2_1_1_PREVIEW_CN`; selecting a model does not change the client's environment.
 
-X2.1 supports generation canvases of `1920×1080`, `1080×1920`, `1408×1408`,
-`1152×1536`, and `1536×1152`. The default camera format is `1080×1920` at 30 fps.
+Both preview models support generation canvases of `1024×1920` and `1920×1024`.
+The default camera format is `1024×1920` at 30 fps.
 The model's `supportedVideoFormats` lists these sizes with their recommended frame rates.
 
-Use a preset when creating a camera stream:
+Create a camera stream using a supported format:
 
 ```kotlin
-import ai.xmax.sdk.RealtimeCameraPreset
-
 val localStream = realtime.createLocalCameraStream(
-    preset = RealtimeCameraPreset.RESOLUTION_1080X1920,
+    videoFormat = RealtimeVideoFormat(width = 1024, height = 1920, fps = 30),
+    position = CameraPosition.FRONT,
 )
 ```
 
@@ -441,15 +445,16 @@ Once the camera preview is `READY` and realtime is disconnected, change its
 resolution without replacing the track or rebinding the view:
 
 ```kotlin
-realtime.updateCameraFormat(RealtimeCameraPreset.RESOLUTION_1408X1408)
+realtime.updateCameraFormat(RealtimeVideoFormat(width = 1920, height = 1024, fps = 30))
 val currentFormat = realtime.currentCameraVideoFormat
 val currentPreset = realtime.currentCameraPreset
 ```
 
-A preset preserves the current frame rate, bitrate settings, and encoder
-preference. Pass a full `RealtimeVideoFormat` to `updateCameraFormat` to update
-those settings as well. Unsupported formats or failed changes preserve the
-previous track configuration. These media settings are independent of L1–L5
+Camera presets are available only when their dimensions match the selected
+model's supported formats. The retained presets do not match these preview models;
+use a full `RealtimeVideoFormat` instead, and `currentCameraPreset` is `null`.
+Unsupported formats or failed changes preserve the previous track configuration.
+These media settings are independent of L1–L5
 transmission quality levels. When no minimum uplink bitrate is specified, the
 SDK uses 500 kbps, capped at the maximum bitrate; explicit values take priority.
 
@@ -563,6 +568,22 @@ which run serially on an SDK background dispatcher.
 
 ### Adjust transmission quality
 
+Automatic uplink and downlink adaptation is enabled by default. To use manual
+quality control only, disable it when creating the realtime manager:
+
+```kotlin
+val manualRealtime = client.createRealtimeManager(
+    options = RealtimeConfiguration(
+        model = RealtimeModel.X2_1_1_PREVIEW_CN,
+        isAdaptiveQualityEnabled = false,
+    ),
+)
+```
+
+When disabled, each connection starts at L1 without reading or updating quality
+history. Manual quality changes remain available. Network quality, performance,
+and uplink/downlink statistics listeners are unaffected.
+
 Read the successfully applied uplink level and successfully submitted downlink
 level through `uplinkQualityLevel` and `downlinkQualityLevel`. A direction with no
 active configuration returns `null`; both become `null` when disconnecting.
@@ -582,9 +603,9 @@ height, with uplink frame-rate limits of 30, 24, 24, 20, and 16 fps. Without val
 history, both directions start at L1. Pixel alignment and minimum dimensions still
 apply; uplink also retains at least 500,000 pixels, so a lower tier may exceed its
 nominal dimension percentage. Downlink does not use that minimum area.
-Manual choices do not disable automatic
-quality adjustment, change the media baseline, or change the model canvas.
-Only successful adjustments update the current level and its one-hour history.
+Manual choices do not change the media baseline or model canvas, and do not
+disable adaptation when it is enabled. Only successful adjustments update the
+current level; one-hour history is updated only when adaptation is enabled.
 Calls outside generation, or calls that cannot apply the requested configuration,
 throw an error without intentionally ending the current generation.
 

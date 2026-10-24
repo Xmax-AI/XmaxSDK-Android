@@ -28,8 +28,12 @@ internal abstract class StreamControllingStub(
     private val quality = QualityController(RtcManagingStub(), history = history, now = now)
 
     override val qualityConfiguration: QualityConfiguration? get() = quality.qualityConfiguration
-    override fun prepareQuality(baseline: RealtimeVideoFormat, minimumInputPixels: Int, publishLocalMedia: Boolean) =
-        quality.prepareQuality(baseline, minimumInputPixels, publishLocalMedia)
+    override fun prepareQuality(
+        baseline: RealtimeVideoFormat,
+        minimumInputPixels: Int,
+        publishLocalMedia: Boolean,
+        isAdaptiveQualityEnabled: Boolean,
+    ) = quality.prepareQuality(baseline, minimumInputPixels, publishLocalMedia, isAdaptiveQualityEnabled)
     override fun proposeQuality(quality: RealtimeNetworkQuality, sampledAt: Long): QualityChange =
         this.quality.proposeQuality(quality, sampledAt)
     override fun completeQuality(downlink: Boolean, level: Int, success: Boolean) =

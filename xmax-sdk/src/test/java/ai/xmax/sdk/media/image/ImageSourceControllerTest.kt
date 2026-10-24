@@ -81,8 +81,10 @@ class ImageSourceControllerTest {
     @Test
     fun `default image frame rate follows model`() = runTest {
         val cases = listOf(
-            RealtimeModel.X2_1 to IntSize(1024, 1_920),
-            RealtimeModel.X2_1 to IntSize(1_920, 1_024),
+            RealtimeModel.X2_1_1_PREVIEW_CN to IntSize(1024, 1_920),
+            RealtimeModel.X2_1_1_PREVIEW_CN to IntSize(1_920, 1_024),
+            RealtimeModel.X2_1_1_PREVIEW_US to IntSize(1024, 1_920),
+            RealtimeModel.X2_1_1_PREVIEW_US to IntSize(1_920, 1_024),
         )
 
         for ((model, size) in cases) {

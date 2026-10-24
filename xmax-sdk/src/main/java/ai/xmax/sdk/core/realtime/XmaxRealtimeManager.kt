@@ -1036,11 +1036,15 @@ internal class XmaxRealtimeManager(
                     taskId = taskId,
                 ),
                 onComplete = {
-                    streamController.setAdaptiveQualityListener { quality ->
-                        adaptQuality(
-                            quality,
-                            taskId,
-                        )
+                    if (options.isAdaptiveQualityEnabled) {
+                        streamController.setAdaptiveQualityListener { quality ->
+                            adaptQuality(
+                                quality,
+                                taskId,
+                            )
+                        }
+                    } else {
+                        streamController.setAdaptiveQualityListener(null)
                     }
                     streamController.activateNetworkVideoCompletion(
                         mediaController.networkVideoFinishHandler?.let { onFinish ->
