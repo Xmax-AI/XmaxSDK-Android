@@ -155,8 +155,13 @@ public sealed interface RealtimeSource {
 
     public data class Video(public val uri: Uri) : RealtimeSource
 
+    public data class ExternalVideo(public val uri: Uri) : RealtimeSource
+
     public data class Image(public val uri: Uri) : RealtimeSource
 }
+
+private val RealtimeSource.isVideoInput: Boolean
+    get() = this is RealtimeSource.Video || this is RealtimeSource.ExternalVideo
 
 public enum class RealtimeTrajectoryStyle {
     SDK_DEFAULT,
@@ -283,6 +288,18 @@ public fun RealtimeScreen(
     var cameraSwitching by remember { mutableStateOf(false) }
     var localMediaStream by remember(realtimeManager) { mutableStateOf<RealtimeMediaStream?>(null) }
     var preparedSource by remember(realtimeManager) { mutableStateOf<RealtimeSource?>(null) }
+    var externalFileSource by remember(realtimeManager) { mutableStateOf<RealtimeFileVideoSource?>(null) }
+
+    suspend fun closeRealtimeMedia(): Unit = withContext(NonCancellable) {
+        try {
+            realtimeManager.close()
+        } finally {
+            val sourceToRelease = externalFileSource
+            externalFileSource = null
+            sourceToRelease?.release()
+        }
+    }
+
     var remoteStream by remember(realtimeManager) { mutableStateOf<RealtimeMediaStream?>(null) }
     var cameraPreviewReady by remember(realtimeManager) { mutableStateOf(false) }
     var generationBusy by remember(realtimeManager) { mutableStateOf(false) }
@@ -306,7 +323,7 @@ public fun RealtimeScreen(
     var remoteAudioVolumeJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
     var localAudioVolume by remember { mutableStateOf(DEFAULT_LOCAL_AUDIO_VOLUME) }
     var remoteAudioVolume by remember(source) {
-        mutableStateOf(if (source is RealtimeSource.Video) DEFAULT_REMOTE_AUDIO_VOLUME else 0f)
+        mutableStateOf(if (source.isVideoInput) DEFAULT_REMOTE_AUDIO_VOLUME else 0f)
     }
     var isAudioMuted by remember { mutableStateOf(false) }
     var isAudioVolumeMenuVisible by remember { mutableStateOf(false) }
@@ -472,7 +489,7 @@ public fun RealtimeScreen(
                         runCatching { realtimeManager.setUplinkVideoStatisticsListener(null) }
                         runCatching { realtimeManager.setDownlinkVideoStatisticsListener(null) }
                         runCatching { realtimeManager.setNetworkQualityListener(null) }
-                        realtimeManager.close()
+                        closeRealtimeMedia()
                     }
                 } finally {
                     recordingController.close()
@@ -526,7 +543,7 @@ public fun RealtimeScreen(
             RecordingState.PREPARING, RecordingState.SAVING -> Unit
             RecordingState.IDLE -> {
                 val intent = generationSelection.current
-                if (currentSource !is RealtimeSource.Video || !canRequestGeneration() || intent == null) {
+                if (!currentSource.isVideoInput || !canRequestGeneration() || intent == null) {
                     Toast.makeText(context, recordingStartHint, Toast.LENGTH_SHORT).show()
                 } else if (Build.VERSION.SDK_INT <= 28 && ContextCompat.checkSelfPermission(
                         context, Manifest.permission.WRITE_EXTERNAL_STORAGE,
@@ -685,7 +702,7 @@ public fun RealtimeScreen(
             if (isSuspendedForBackground) {
                 generationLoading = false
                 withContext(NonCancellable) {
-                    realtimeManager.close()
+                    closeRealtimeMedia()
                 }
                 localMediaStream = null
                 remoteStream = null
@@ -705,7 +722,7 @@ public fun RealtimeScreen(
                 return@withLock
             }
             generationLoading = false
-            realtimeManager.close()
+            closeRealtimeMedia()
             localMediaStream = null
             remoteStream = null
             cameraPreviewReady = false
@@ -730,8 +747,21 @@ public fun RealtimeScreen(
                     is RealtimeSource.Video -> {
                         localMediaStream = realtimeManager.createLocalVideoStream(selectedSource.uri)
                     }
+                    is RealtimeSource.ExternalVideo -> {
+                        val externalSource = RealtimeFileVideoSource.make(context, selectedSource.uri)
+                        externalFileSource = externalSource
+                        try {
+                            localMediaStream = realtimeManager.createExternalVideoStream(externalSource)
+                        } catch (error: Throwable) {
+                            externalFileSource = null
+                            withContext(NonCancellable) {
+                                runCatching { externalSource.release() }.exceptionOrNull()?.let(error::addSuppressed)
+                            }
+                            throw error
+                        }
+                    }
                 }
-                remoteAudioVolume = if (selectedSource is RealtimeSource.Video) 1f else 0f
+                remoteAudioVolume = if (selectedSource.isVideoInput) 1f else 0f
                 if (isAudioMuted) realtimeManager.setRemoteAudioVolume(0f)
                 preparedSource = selectedSource
             } catch (error: CancellationException) {
@@ -824,7 +854,11 @@ public fun RealtimeScreen(
                 )
             }
             when (target) {
-                PickerTarget.LOCAL_VIDEO -> currentSource = RealtimeSource.Video(uri)
+                PickerTarget.LOCAL_VIDEO -> currentSource = if (currentSource is RealtimeSource.ExternalVideo) {
+                    RealtimeSource.ExternalVideo(uri)
+                } else {
+                    RealtimeSource.Video(uri)
+                }
                 PickerTarget.LOCAL_IMAGE -> currentSource = RealtimeSource.Image(uri)
                 PickerTarget.CATEGORY_REFERENCE -> if (categoryId != null) {
                     stopDemoGeneration()
@@ -1126,10 +1160,10 @@ public fun RealtimeScreen(
                 MediaTopMenu(
                     statisticsVisible = statisticsVisible,
                     onStatisticsClick = { statisticsVisible = !statisticsVisible },
-                    showsAudioControls = currentSource is RealtimeSource.Video,
+                    showsAudioControls = currentSource.isVideoInput,
                     recordingState = if (recordingPermissionRequest != null) RecordingState.PREPARING else recordingState,
                     onRecordingClick = ::toggleRecording,
-                    localAudioVolume = localAudioVolume,
+                    localAudioVolume = localAudioVolume.takeIf { currentSource is RealtimeSource.Video },
                     remoteAudioVolume = remoteAudioVolume,
                     isMuted = isAudioMuted,
                     isVolumeMenuVisible = isAudioVolumeMenuVisible,
@@ -1285,6 +1319,7 @@ private fun MediaCanvas(
         RealtimeSource.Camera -> remoteStream != null || cameraPreviewReady
         is RealtimeSource.Image,
         is RealtimeSource.Video,
+        is RealtimeSource.ExternalVideo,
         -> remoteStream != null || localStream != null
     }
     val contentMode = when (source) {
@@ -1294,6 +1329,7 @@ private fun MediaCanvas(
         }
         is RealtimeSource.Image,
         is RealtimeSource.Video,
+        is RealtimeSource.ExternalVideo,
         -> VideoContentMode.FIT
     }
     val containerModifier = Modifier
@@ -1368,7 +1404,7 @@ private fun MediaTopMenu(
     showsAudioControls: Boolean,
     recordingState: RecordingState,
     onRecordingClick: () -> Unit,
-    localAudioVolume: Float,
+    localAudioVolume: Float?,
     remoteAudioVolume: Float,
     isMuted: Boolean,
     isVolumeMenuVisible: Boolean,

@@ -370,14 +370,15 @@ public interface XmaxRealtimeManaging {
     /**
      * Binds an external video source with optional audio for realtime generation.
      *
-     * Your app owns camera or player startup, shutdown, and release. The source may optionally
-     * supply a preview inside the SDK container. When videoFormat is absent, source dimensions and
-     * the model's default frame rate apply, subject to model validation and alignment. Frames must
-     * match the sink's video format.
+     * Your app owns camera or player startup, shutdown, and release. Submit orientation-corrected
+     * RGBA matching source.videoFormat; the SDK copies and resizes pixels for preview and generation.
+     * Without videoFormat, source dimensions and frame rate apply, subject to media-size alignment.
+     * The sink continues accepting preview frames while disconnected. Optional PCM is converted to
+     * 48 kHz mono, 10 ms packets. Stop and replacement invalidate old sinks before releasing bindings.
      *
      * @param source The external media source whose lifecycle your app owns.
-     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
-     * source or parsed media defaults.
+     * @param videoFormat Desired processed dimensions, frame rate, and uplink encoding settings;
+     * null uses the source format. Submitted pixels always match the original source dimensions.
      * @return A local stream for SDK preview and generation.
      */
     public suspend fun createExternalVideoStream(
@@ -402,8 +403,8 @@ public interface XmaxRealtimeManaging {
      * The latest replacement wins; old requests end with CancellationException. Failure does not restore the
      * old task.
      *
-     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
-     * source or parsed media defaults.
+     * @param videoFormat Desired processed dimensions, frame rate, and uplink encoding settings;
+     * null uses the replacement source format. Submitted pixels retain original source dimensions.
      * @param targetSource The suspending callback preparing and returning the replacement source.
      * @return The replacement local stream and any available remote result stream.
      */

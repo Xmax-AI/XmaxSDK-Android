@@ -539,12 +539,13 @@ internal class XmaxRealtimeManager(
     /**
      * Binds an external video source and resolves its media format.
      *
-     * Your app owns camera or player startup, shutdown, and release. The source may optionally supply audio
-     * and a preview inside the SDK container. It must deliver frames matching the sink's video format.
+     * Your app owns camera or player startup, shutdown, and release. Submit orientation-corrected
+     * RGBA matching source.videoFormat; the SDK copies and resizes pixels for preview and generation.
+     * The source can also supply PCM audio and its own native preview.
      *
      * @param source The external media source whose lifecycle your app owns.
-     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
-     * source dimensions and the model's default frame rate, subject to model validation and alignment.
+     * @param videoFormat Desired processed dimensions, frame rate, and uplink encoding settings;
+     * null uses the source format. Submitted pixels retain original source dimensions.
      * @return A local stream for SDK preview and generation.
      */
     override suspend fun createExternalVideoStream(
@@ -569,8 +570,8 @@ internal class XmaxRealtimeManager(
      * Compatible media formats reuse the RTC connection; changed formats reconnect with the retained
      * generation conditions. Replacing a preview-only source does not start generation.
      *
-     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
-     * source or parsed media defaults.
+     * @param videoFormat Desired processed dimensions, frame rate, and uplink encoding settings;
+     * null uses the replacement source format. Submitted pixels retain original source dimensions.
      * @param targetSource The suspending callback preparing and returning the replacement source.
      * @return The replacement local stream and any available remote result stream.
      */

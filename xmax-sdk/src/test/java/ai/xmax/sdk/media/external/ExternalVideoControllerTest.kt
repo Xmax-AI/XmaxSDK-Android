@@ -38,7 +38,7 @@ class ExternalVideoControllerTest {
         val video = mutableListOf<VideoFrame>()
         val audio = mutableListOf<AudioFrame>()
         val errors = mutableListOf<XmaxError>()
-        val controller = ExternalVideoController(rtc, media, { true }, video::add, audio::add, errors::add)
+        val controller = ExternalVideoController(rtc, media, video::add, audio::add, errors::add)
         val source = VideoOnlySource()
 
         try {
@@ -82,22 +82,21 @@ class ExternalVideoControllerTest {
             val video = mutableListOf<VideoFrame>()
             val audio = mutableListOf<AudioFrame>()
             val errors = mutableListOf<XmaxError>()
-            var requesting = false
-            val controller = ExternalVideoController(rtc, media, { requesting }, video::add, audio::add, errors::add)
+            val controller = ExternalVideoController(rtc, media, video::add, audio::add, errors::add)
             val first = Source()
             val stream = controller.create(first)
             assertNotNull(VideoRenderRegistry.binding(stream.videoTrack!!))
             val oldSink = first.sink!!
             oldSink.pushVideo(ByteArray(16), 1)
-            assertTrue(video.isEmpty())
-            requesting = true
+            assertEquals(1, video.size)
+            assertTrue(oldSink.isRequestingFrames)
             val bytes = ByteArray(16) { 7 }
             oldSink.pushVideo(bytes, 2)
             bytes.fill(9)
-            assertEquals(7.toByte(), video.single().planes.single().data.first())
+            assertEquals(7.toByte(), video.last().planes.single().data.first())
             oldSink.pushVideo(bytes, 2) // duplicate timestamp
             oldSink.pushAudio(ByteArray(960), 3)
-            assertEquals(1, video.size)
+            assertEquals(2, video.size)
             assertEquals(1, audio.size)
             controller.stop()
             assertEquals(1, first.stops)
@@ -107,7 +106,7 @@ class ExternalVideoControllerTest {
             oldSink.pushVideo(bytes, 4)
             oldSink.pushAudio(ByteArray(960), 4)
             oldSink.reportError(IllegalStateException("late"))
-            assertEquals(1, video.size)
+            assertEquals(2, video.size)
             assertEquals(1, audio.size)
             assertTrue(errors.isEmpty())
             controller.stop()
@@ -120,7 +119,7 @@ class ExternalVideoControllerTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val rtc = RtcManagingStub()
-            val controller = ExternalVideoController(rtc, media, { true }, {}, {}, {})
+            val controller = ExternalVideoController(rtc, media, {}, {}, {})
             val broken = Source(fail = true)
             try { controller.create(broken); fail("Expected source failure") } catch (_: XmaxError) { }
             assertNull(controller.currentTrack)
@@ -134,7 +133,7 @@ class ExternalVideoControllerTest {
 
     @Test fun `default output preserves source frame rate and non bucket dimensions`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val controller = ExternalVideoController(RtcManagingStub(), MediaService(), { true }, {}, {}, {})
+        val controller = ExternalVideoController(RtcManagingStub(), MediaService(), {}, {}, {})
         try {
             for ((input, expected) in listOf(
                 RealtimeVideoFormat(1080, 1920, 24) to RealtimeVideoFormat(1080, 1920, 24),
@@ -153,7 +152,7 @@ class ExternalVideoControllerTest {
 
     @Test fun `explicit output controls dimensions fps and encoding settings`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val controller = ExternalVideoController(RtcManagingStub(), MediaService(), { true }, {}, {}, {})
+        val controller = ExternalVideoController(RtcManagingStub(), MediaService(), {}, {}, {})
         try {
             val source = Source(videoFormat = RealtimeVideoFormat(1080, 1920, 30))
             val requested = RealtimeVideoFormat(1080, 1920, 24, minimumBitrate = 800,
@@ -169,7 +168,7 @@ class ExternalVideoControllerTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val frames = mutableListOf<VideoFrame>()
         val errors = mutableListOf<XmaxError>()
-        val controller = ExternalVideoController(RtcManagingStub(), MediaService(), { true }, frames::add, {}, errors::add)
+        val controller = ExternalVideoController(RtcManagingStub(), MediaService(), frames::add, {}, errors::add)
         try {
             for ((input, expected) in listOf(
                 RealtimeVideoFormat(1280, 720, 24) to RealtimeVideoFormat(1280, 720, 24),
@@ -178,7 +177,7 @@ class ExternalVideoControllerTest {
                 val source = Source(videoFormat = input)
                 val local = controller.create(source)
                 val sink = checkNotNull(source.sink)
-                sink.pushVideo(ByteArray(expected.width * expected.height * 4), 1)
+                sink.pushVideo(ByteArray(input.width * input.height * 4), 1)
                 val frame = frames.last()
                 assertEquals(expected, local.videoTrack!!.videoFormat)
                 assertEquals(expected, sink.videoFormat)
@@ -195,7 +194,7 @@ class ExternalVideoControllerTest {
     @Test fun `external media does not require a camera bucket but rejects undersized frames before binding`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val rtc = RtcManagingStub()
-        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN), { true }, {}, {}, {})
+        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN), {}, {}, {})
         try {
             val small = Source(videoFormat = RealtimeVideoFormat(640, 480, 30))
             try { controller.create(small); fail("Expected undersized input") } catch (_: XmaxError) { }
@@ -213,7 +212,7 @@ class ExternalVideoControllerTest {
     @Test fun `invalid explicit format is rejected before starting source`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val rtc = RtcManagingStub()
-        val controller = ExternalVideoController(rtc, MediaService(), { true }, {}, {}, {})
+        val controller = ExternalVideoController(rtc, MediaService(), {}, {}, {})
         try {
             for (format in listOf(RealtimeVideoFormat(832, 1472, 0),
                 RealtimeVideoFormat(0, 1472, 30), RealtimeVideoFormat(832, 1472, 30, maximumBitrate = -1))) {
@@ -224,6 +223,49 @@ class ExternalVideoControllerTest {
             }
             assertTrue(rtc.calls.isEmpty())
         } finally { controller.stop(); Dispatchers.resetMain() }
+    }
+
+    @Test
+    fun `source failure reported during startup rejects binding and invalidates its sink`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val errors = mutableListOf<XmaxError>()
+        val controller = ExternalVideoController(RtcManagingStub(), media, {}, {}, errors::add)
+        var stopped = false
+        var input: RealtimeExternalFrameSink? = null
+        val source = object : RealtimeExternalVideoSource {
+            override val videoFormat = RealtimeVideoFormat(2, 2, 30)
+            override suspend fun start(sink: RealtimeExternalFrameSink) {
+                input = sink
+                sink.reportError(IllegalStateException("Capture unavailable"))
+            }
+            override suspend fun stop() { stopped = true }
+        }
+        try {
+            assertTrue(runCatching { controller.create(source) }.exceptionOrNull() is XmaxError)
+            assertTrue(stopped)
+            assertFalse(checkNotNull(input).isRequestingFrames)
+            assertEquals(1, errors.size)
+            assertNull(controller.currentTrack)
+        } finally {
+            controller.stop()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `explicit processed format does not bypass validation of original source pixels`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val rtc = RtcManagingStub()
+        val controller = ExternalVideoController(rtc, media, {}, {}, {})
+        try {
+            val source = Source(videoFormat = RealtimeVideoFormat(3, 2, 30))
+            assertTrue(runCatching { controller.create(source, RealtimeVideoFormat(2, 2, 30)) }.isFailure)
+            assertNull(source.sink)
+            assertTrue(rtc.calls.isEmpty())
+        } finally {
+            controller.stop()
+            Dispatchers.resetMain()
+        }
     }
 
     private class VideoOnlySource : RealtimeExternalVideoSource {

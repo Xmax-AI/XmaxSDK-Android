@@ -11,6 +11,7 @@
 package ai.xmax.media3
 
 import ai.xmax.sdk.RealtimeExternalFrameSink
+import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.VideoContentMode
 import android.graphics.SurfaceTexture
 import android.opengl.EGL14
@@ -34,6 +35,11 @@ internal class DecoderSurfaceBridge(
      * The function returning the current external media sink.
      */
     private val input: () -> RealtimeExternalFrameSink?,
+
+    /**
+     * The original pixel dimensions fixed for the current source binding.
+     */
+    private val sourceFormat: () -> RealtimeVideoFormat?,
 ) {
 
     /**
@@ -533,7 +539,9 @@ internal class DecoderSurfaceBridge(
         sink: RealtimeExternalFrameSink,
         timestampUs: Long,
     ) {
-        val width = sink.videoFormat.width; val height = sink.videoFormat.height
+        val format = sourceFormat() ?: return
+        val width = format.width
+        val height = format.height
         if (width != captureWidth || height != captureHeight) {
             GLES20.glDeleteTextures(
                 1,

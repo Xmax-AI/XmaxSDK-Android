@@ -25,8 +25,8 @@ import android.widget.FrameLayout
 public interface RealtimeExternalVideoSource {
 
     /**
-     * The source's original display format; the SDK supplies the required frame format through
-     * sink.videoFormat.
+     * The original, orientation-corrected frame dimensions and capture rate, fixed until [stop].
+     * Submitted pixels must match these dimensions; the SDK resolves and applies output resizing.
      */
     public val videoFormat: RealtimeVideoFormat
 
@@ -38,11 +38,19 @@ public interface RealtimeExternalVideoSource {
         get() = false
 
     /**
+     * Whether [attachPreview] supplies a native preview instead of the SDK's submitted-frame preview.
+     * False by default; changing this value during a binding is unsupported.
+     */
+    public val providesPreview: Boolean
+        get() = false
+
+    /**
      * Starts delivering video frames to the specified sink.
      *
-     * Install the frame callback and return when the source is ready to deliver frames. Your app rotates,
-     * crops, and scales pixels to [RealtimeExternalFrameSink.videoFormat]; frame delivery must not wait for
-     * generation to begin or complete. Report source completion or unrecoverable failure through
+     * Install the frame callback and return when the source is ready to deliver frames. Your app applies
+     * orientation and mirroring to pixels matching [videoFormat]; the SDK copies and resizes them.
+     * Continue delivering frames for preview while disconnected, without waiting for generation to
+     * begin or complete. Report source completion or unrecoverable failure through
      * [RealtimeExternalFrameSink.reportError]. XmaxSDK may call [stop] even if startup fails.
      *
      * @param sink The SDK receiver for external media frames.
@@ -60,8 +68,8 @@ public interface RealtimeExternalVideoSource {
     public suspend fun stop()
 
     /**
-     * Optionally attaches local preview to the SDK container; does nothing by default, allowing your app to
-     * display its own preview.
+     * Attaches a source-provided local preview when [providesPreview] is true.
+     * Otherwise the SDK displays submitted frames without requiring a preview implementation.
      *
      * @param container The Android container hosting local preview.
      * @param contentMode Aspect-preserving fit or fill scaling.
@@ -96,28 +104,31 @@ public interface RealtimeExternalVideoSource {
  * A receiver for video and optional audio from a single source attachment.
  *
  * The sink processes frames synchronously and discards submissions after unbinding. Input arrays may be
- * reused after each method returns. Video uses top-down RGBA; audio uses 48 kHz mono PCM16LE with 480 samples
- * per packet. Audio and video share a monotonic microsecond clock; timestamps must keep increasing across
- * seeks and loops.
+ * reused after each method returns. Video uses top-down RGBA at the source's original dimensions.
+ * Audio uses interleaved PCM16LE with its sample rate and channel count; the SDK converts it to 48 kHz
+ * mono, 10 ms packets. Audio and video share a monotonic microsecond clock across seeks and loops.
+ * Invalid or overlapping timestamps are ignored. A format or delivery failure invalidates the binding.
  */
 public interface RealtimeExternalFrameSink {
 
     /**
-     * The input format required by XmaxSDK.
+     * The processed output format used for preview and generation, not the submitted pixel dimensions.
      */
     public val videoFormat: RealtimeVideoFormat
 
     /**
-     * Whether the current generation requests frames from this source.
+     * Whether this source binding still accepts frames for preview and generation.
      *
-     * When false, your app may skip readback or conversion without stopping capture or preview.
+     * Remains true while disconnected. False after stop, replacement, or an unrecoverable failure;
+     * your app may then skip readback or conversion without releasing its capture devices.
      */
     public val isRequestingFrames: Boolean
 
     /**
-     * Submits an RGBA video frame for realtime generation.
+     * Copies and resizes an RGBA video frame for local preview and, when connected, generation.
      *
-     * @param rgba Tightly packed RGBA pixels matching the current input dimensions.
+     * @param rgba Tightly packed pixels matching [RealtimeExternalVideoSource.videoFormat], with
+     * orientation and mirroring already applied.
      * @param timestampUs A nonnegative, strictly increasing timestamp from a monotonic clock, in
      * microseconds.
      */
@@ -127,18 +138,41 @@ public interface RealtimeExternalFrameSink {
     )
 
     /**
-     * Submits a PCM audio frame for realtime generation.
+     * Copies, converts, and packetizes PCM audio for realtime generation.
      *
-     * @param pcm A 10 ms packet of 48 kHz mono PCM16 little-endian audio, containing 480 samples.
-     * @param timestampUs A nonnegative, strictly increasing timestamp on the video timeline, in microseconds.
+     * Sample rate and channel count are fixed by the first accepted buffer. Gaps start a new segment
+     * without inserting silence; overlapping buffers are ignored. Local playback remains app-owned.
+     *
+     * @param pcm Interleaved PCM16 little-endian samples containing complete audio frames.
+     * @param timestampUs The first sample's nonnegative timestamp on the video clock, in microseconds.
+     * @param sampleRate The input sample rate in Hz.
+     * @param channelCount The input channel count; defaults to 1 and is downmixed to mono.
      */
     public fun pushAudio(
         pcm: ByteArray,
         timestampUs: Long,
+        sampleRate: Int,
+        channelCount: Int = 1,
     )
 
     /**
-     * Reports a failure in the current media input or generation task.
+     * Submits already converted 48 kHz mono PCM16LE audio, retaining partial packets if necessary.
+     *
+     * @param pcm Complete mono PCM16 little-endian samples.
+     * @param timestampUs The first sample's timestamp on the video clock, in microseconds.
+     */
+    public fun pushAudio(
+        pcm: ByteArray,
+        timestampUs: Long,
+    ) = pushAudio(
+        pcm,
+        timestampUs,
+        sampleRate = 48000,
+        channelCount = 1,
+    )
+
+    /**
+     * Invalidates this binding and reports its first unrecoverable media failure.
      *
      * @param error The operation failure or SDK error.
      */

@@ -54,6 +54,8 @@
     <string name="feed_image_title">Image Pipeline</string>
     <string name="feed_image_subtitle">Bring a local image to life with continuous motion.</string>
     <string name="feed_render_title">Custom Rendering</string>
+    <string name="feed_external_title">External Capture</string>
+    <string name="feed_external_subtitle">Choose a video and supply decoded video and PCM audio through an external source.</string>
     <string name="feed_render_subtitle">Draw touch trails with a custom renderer.</string>
     <string name="feed_storage_title">Storage Service</string>
     <string name="feed_storage_subtitle">Upload images or videos and get reusable URLs.</string>

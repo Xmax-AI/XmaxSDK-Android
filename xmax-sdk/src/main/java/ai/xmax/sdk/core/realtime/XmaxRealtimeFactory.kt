@@ -231,7 +231,6 @@ internal object XmaxRealtimeFactory {
             externalController = ExternalVideoController(
                 rtc = rtcManager,
                 mediaService = mediaService,
-                requestingFrames = { streamController.isRequestingExternalFrames },
                 videoListener = streamController::pushLocalVideoFrame,
                 audioListener = streamController::pushLocalAudioFrame,
                 errorListener = onMediaError,

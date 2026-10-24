@@ -14,7 +14,7 @@ import ai.xmax.sdk.VideoRotation
 import java.nio.ByteBuffer
 
 /**
- * The native Android YUV converter, with Kotlin fallback when the library is unavailable.
+ * Native Android pixel conversion and resizing, with Kotlin fallback when unavailable.
  */
 internal object NativeYuv420Converter {
 
@@ -25,6 +25,55 @@ internal object NativeYuv420Converter {
         System.loadLibrary("xmax_yuv")
         true
     }.getOrDefault(false)
+
+    /**
+     * Resizes tightly packed RGBA pixels with bilinear filtering.
+     *
+     * @param source The original RGBA pixels.
+     * @param sourceWidth The original width, in pixels.
+     * @param sourceHeight The original height, in pixels.
+     * @param output The independently owned destination storage.
+     * @param width The output width, in pixels.
+     * @param height The output height, in pixels.
+     * @return True on success, false when Kotlin fallback is needed.
+     */
+    fun resizeRgba(
+        source: ByteArray,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        output: ByteArray,
+        width: Int,
+        height: Int,
+    ): Boolean = isAvailable && runCatching {
+        resizeRgbaNative(
+            source,
+            sourceWidth,
+            sourceHeight,
+            output,
+            width,
+            height,
+        )
+    }.getOrDefault(false)
+
+    /**
+     * Copies and filters RGBA pixels into destination storage.
+     *
+     * @param source The original RGBA pixels.
+     * @param sourceWidth The original width, in pixels.
+     * @param sourceHeight The original height, in pixels.
+     * @param output The destination RGBA storage.
+     * @param width The output width, in pixels.
+     * @param height The output height, in pixels.
+     * @return True if the arrays contain complete, valid images and resizing succeeds.
+     */
+    private external fun resizeRgbaNative(
+        source: ByteArray,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        output: ByteArray,
+        width: Int,
+        height: Int,
+    ): Boolean
 
     /**
      * Crops, rotates, and scales YUV420 natively, returning false when fallback is needed.

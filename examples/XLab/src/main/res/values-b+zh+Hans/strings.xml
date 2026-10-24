@@ -54,6 +54,8 @@
     <string name="feed_image_title">图片生成管线</string>
     <string name="feed_image_subtitle">选择本地图片，让静态画面持续流动起来。</string>
     <string name="feed_render_title">自定义轨迹渲染</string>
+    <string name="feed_external_title">外部采集</string>
+    <string name="feed_external_subtitle">选择视频，通过外部源提交解码后的视频帧和 PCM 音频。</string>
     <string name="feed_render_subtitle">使用自定义 Renderer 绘制交互轨迹。</string>
     <string name="feed_storage_title">存储服务</string>
     <string name="feed_storage_subtitle">上传图片或视频，获取可复用的远程地址</string>

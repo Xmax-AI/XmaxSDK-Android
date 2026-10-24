@@ -65,6 +65,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.08.00")
 
     implementation(project(":xmax-sdk"))
+    implementation(project(":xmax-media3"))
     implementation(composeBom)
     androidTestImplementation(composeBom)
 

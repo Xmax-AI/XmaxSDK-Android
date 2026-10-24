@@ -208,14 +208,14 @@ internal interface MediaControlling : InteractionControlling {
     /**
      * Binds an external video source with optional audio for realtime generation.
      *
-     * Your app owns camera or player startup, shutdown, and release. The source may optionally
-     * supply a preview inside the SDK container. When videoFormat is absent, source dimensions and
-     * the model's default frame rate apply, subject to model validation and alignment. Frames must
-     * match the sink's video format.
+     * Your app owns camera or player startup, shutdown, and release. Submit orientation-corrected
+     * RGBA matching source.videoFormat; the SDK copies and resizes pixels for preview and generation.
+     * Without videoFormat, source dimensions and frame rate apply, subject to media-size alignment.
+     * The sink continues accepting preview frames while disconnected.
      *
      * @param source The external media source whose lifecycle your app owns.
-     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
-     * source or parsed media defaults.
+     * @param videoFormat Desired processed dimensions, frame rate, and uplink encoding settings;
+     * null uses the source format. Submitted pixels retain original source dimensions.
      */
     suspend fun createExternalVideoStream(
         source: RealtimeExternalVideoSource,
@@ -231,8 +231,8 @@ internal interface MediaControlling : InteractionControlling {
      * Replaces external input without destroying the engine; old frame delivery is detached before source
      * preparation.
      *
-     * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
-     * source or parsed media defaults.
+     * @param videoFormat Desired processed dimensions, frame rate, and uplink encoding settings;
+     * null uses the replacement source format. Submitted pixels retain original source dimensions.
      * @param targetSource The suspending callback preparing and returning the replacement source.
      */
     suspend fun replaceExternalVideoStream(

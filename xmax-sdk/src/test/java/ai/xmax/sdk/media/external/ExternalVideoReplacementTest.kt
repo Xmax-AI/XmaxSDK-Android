@@ -40,7 +40,7 @@ class ExternalVideoReplacementTest {
         val service = MediaService()
         val frames = mutableListOf<VideoFrame>()
         val errors = mutableListOf<XmaxError>()
-        val external = ExternalVideoController(rtc, service, { true }, frames::add, {}, errors::add)
+        val external = ExternalVideoController(rtc, service, frames::add, {}, errors::add)
         val controller = MediaController(rtc, CameraController(rtc, object : PermissionManaging {
             override suspend fun ensureCameraPermission() = error("No camera expected")
             override suspend fun ensureMicrophonePermission() = error("No microphone expected")

@@ -56,6 +56,7 @@ private enum class XLabDestination {
 
 private enum class RealtimeMediaKind {
     VIDEO,
+    EXTERNAL_VIDEO,
     IMAGE,
 }
 
@@ -155,9 +156,14 @@ public fun XLabApp() {
                             realtimeMediaUri = null
                             destination = XLabDestination.REALTIME
                         }
-                        XLabFeedAction.VIDEO -> {
+                        XLabFeedAction.VIDEO,
+                        XLabFeedAction.EXTERNAL_VIDEO -> {
                             realtimeTrajectoryStyle = RealtimeTrajectoryStyle.SDK_DEFAULT
-                            pendingMediaKind = RealtimeMediaKind.VIDEO
+                            pendingMediaKind = if (action == XLabFeedAction.EXTERNAL_VIDEO) {
+                                RealtimeMediaKind.EXTERNAL_VIDEO
+                            } else {
+                                RealtimeMediaKind.VIDEO
+                            }
                             mediaPicker.launch(
                                 PickVisualMediaRequest(
                                     ActivityResultContracts.PickVisualMedia.VideoOnly,
@@ -194,6 +200,7 @@ public fun XLabApp() {
                     source = realtimeMediaUri?.let { uriValue ->
                         when (realtimeSourceKind) {
                             RealtimeMediaKind.VIDEO -> RealtimeSource.Video(Uri.parse(uriValue))
+                            RealtimeMediaKind.EXTERNAL_VIDEO -> RealtimeSource.ExternalVideo(Uri.parse(uriValue))
                             RealtimeMediaKind.IMAGE -> RealtimeSource.Image(Uri.parse(uriValue))
                         }
                     } ?: RealtimeSource.Camera,

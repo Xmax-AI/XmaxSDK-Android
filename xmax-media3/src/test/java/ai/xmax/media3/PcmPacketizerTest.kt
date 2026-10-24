@@ -17,7 +17,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PcmPacketizerTest {
-    @Test fun `resampling is independent of decoder buffer boundaries`() {
+    @Test fun `original PCM packetization is independent of decoder buffer boundaries`() {
         fun collect(chunk: Int): List<Pair<List<Byte>, Long>> {
             val result = mutableListOf<Pair<List<Byte>, Long>>()
             val packetizer = PcmPacketizer { bytes, pts -> result += bytes.toList() to pts }
@@ -36,13 +36,14 @@ class PcmPacketizerTest {
             return result
         }
         val whole = collect(88_200)
-        assertEquals(199, whole.size)
+        assertEquals(200, whole.size)
+        assertEquals(441 * 2 * 2, whole.first().first.size)
         assertEquals(whole, collect(1024))
         assertEquals(whole, collect(137))
         whole.zipWithNext().forEach { (a, b) -> assertEquals(10_000, b.second - a.second) }
     }
 
-    @Test fun `stereo is mixed and discontinuity discards partial old packet`() {
+    @Test fun `stereo channels are preserved and discontinuity discards partial old packet`() {
         val output = mutableListOf<Pair<ByteArray, Long>>()
         val packetizer = PcmPacketizer { bytes, pts -> output += bytes to pts }
         fun input(count: Int, left: Short, right: Short, pts: Long) {
@@ -55,6 +56,9 @@ class PcmPacketizerTest {
         assertEquals(1, output.size)
         assertEquals(2_000_000, output.single().second)
         val data = ByteBuffer.wrap(output.single().first).order(ByteOrder.LITTLE_ENDIAN)
-        repeat(480) { assertEquals(2000.toShort(), data.short) }
+        repeat(480) {
+            assertEquals(3000.toShort(), data.short)
+            assertEquals(1000.toShort(), data.short)
+        }
     }
 }

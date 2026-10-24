@@ -12,10 +12,9 @@ package ai.xmax.media3
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.roundToInt
 
 /**
- * Resamples PCM16 across buffers into 10 ms packets, retaining phase to prevent rounding-induced clock drift.
+ * Splits original PCM16 into short, playback-paced chunks without resampling or mixing channels.
  */
 internal class PcmPacketizer(
     /**
@@ -45,9 +44,9 @@ internal class PcmPacketizer(
     private var inputSamples = 0L
 
     /**
-     * The sample count emitted on the current timeline.
+     * The first sample index of the current packet.
      */
-    private var outputSamples = 0L
+    private var packetStartSample = 0L
 
     /**
      * The number of samples buffered in the current packet.
@@ -55,22 +54,29 @@ internal class PcmPacketizer(
     private var packetSamples = 0
 
     /**
-     * The previous mono sample used for resampling interpolation.
+     * The number of input samples per playback-paced chunk.
      */
-    private var previous = 0.0
+    private var samplesPerPacket = 0
 
     /**
-     * The buffer holding 10 ms of 48 kHz mono PCM.
+     * The buffer holding approximately 10 ms of original interleaved PCM.
      */
-    private val packet = ByteBuffer.allocate(960).order(ByteOrder.LITTLE_ENDIAN)
+    private var packet = ByteBuffer.allocate(0).order(ByteOrder.LITTLE_ENDIAN)
 
     /**
      * Resets packetization for a new format and media timeline.
      */
-    fun reset() { rate = 0; channels = 0; inputSamples = 0; outputSamples = 0; packetSamples = 0; packet.clear() }
+    fun reset() {
+        rate = 0
+        channels = 0
+        inputSamples = 0
+        packetStartSample = 0
+        packetSamples = 0
+        packet.clear()
+    }
 
     /**
-     * Resamples decoded PCM into the SDK's audio packets.
+     * Retains original PCM in short chunks for synchronized SDK submission.
      *
      * @param data The buffer containing valid PCM bytes.
      * @param sampleRate The sample rate, in Hz.
@@ -86,42 +92,28 @@ internal class PcmPacketizer(
         require(sampleRate > 0 && channelCount > 0)
         val expectedUs = originUs + inputSamples * 1_000_000L / sampleRate
         if (rate != sampleRate || channels != channelCount || kotlin.math.abs(timestampUs - expectedUs) > 30_000L) {
-            reset(); rate = sampleRate; channels = channelCount; originUs = timestampUs
+            reset()
+            rate = sampleRate
+            channels = channelCount
+            originUs = timestampUs
+            samplesPerPacket = (rate / 100).coerceAtLeast(1)
+            packet = ByteBuffer.allocate(samplesPerPacket * channels * 2).order(ByteOrder.LITTLE_ENDIAN)
         }
 
         val input = data.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-        while (input.remaining() >= channelCount * 2) {
-            var sum = 0L
-            repeat(channelCount) { sum += input.short }
-            val current = sum.toDouble() / channelCount
-            // Interpolate when the output sample falls between the previous and current input samples.
-            while (outputSamples.toDouble() * rate / 48_000 <= inputSamples) {
-                val position = outputSamples.toDouble() * rate / 48_000
-                val value = if (inputSamples == 0L) current else {
-                    val fraction = (position - (inputSamples - 1)).coerceIn(
-                        0.0,
-                        1.0,
-                    )
-                    previous + (current - previous) * fraction
-                }
-                packet.putShort(
-                    value.roundToInt().coerceIn(
-                        -32768,
-                        32767,
-                    ).toShort(),
-                )
-                outputSamples++; packetSamples++
-                if (packetSamples == 480) {
-                    emit(
-                        packet.array().copyOf(),
-                        originUs + (outputSamples - 480) * 1_000_000 / 48_000,
-                    )
-                    packet.clear(); packetSamples = 0
-                }
-            }
-
-            previous = current
+        while (input.remaining() >= channels * 2) {
+            repeat(channels) { packet.putShort(input.short) }
             inputSamples++
+            packetSamples++
+            if (packetSamples == samplesPerPacket) {
+                emit(
+                    packet.array().copyOf(),
+                    originUs + packetStartSample * 1_000_000 / rate,
+                )
+                packet.clear()
+                packetSamples = 0
+                packetStartSample = inputSamples
+            }
         }
     }
 }

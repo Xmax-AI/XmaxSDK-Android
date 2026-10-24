@@ -52,9 +52,17 @@ public class XmaxMedia3Source(
     @Volatile private var sink: RealtimeExternalFrameSink? = null
 
     /**
+     * The original input dimensions fixed for the current SDK binding.
+     */
+    @Volatile private var inputFormat: RealtimeVideoFormat? = null
+
+    /**
      * The bridge connecting decoder output, local preview, and SDK frame input.
      */
-    private val bridge = DecoderSurfaceBridge { sink }
+    private val bridge = DecoderSurfaceBridge(
+        input = { sink },
+        sourceFormat = { inputFormat },
+    )
 
     /**
      * The Media3 player decoding and playing external media.
@@ -112,6 +120,11 @@ public class XmaxMedia3Source(
      * Whether the selected media tracks include audio.
      */
     override val hasAudio: Boolean get() = player?.currentTracks?.isTypeSelected(C.TRACK_TYPE_AUDIO) == true
+
+    /**
+     * Uses the player's native texture preview instead of rendering submitted RGBA frames twice.
+     */
+    override val providesPreview: Boolean get() = true
 
     /**
      * The player's audio/video renderer factory.
@@ -195,8 +208,8 @@ public class XmaxMedia3Source(
 
     /**
      * Binds frame delivery before returning, without waiting for generation to finish.
-     * Your app rotates, crops, and scales frames to sink.videoFormat; delivery must not wait for
-     * startGeneration to return.
+     * Submits orientation-corrected source-sized pixels; the SDK resolves and applies output resizing.
+     * Delivery continues for preview while disconnected and does not wait for startGeneration to return.
      * Report source completion or unrecoverable failure through sink.reportError. The SDK may call stop even
      * after start fails.
      *
@@ -208,13 +221,17 @@ public class XmaxMedia3Source(
         check(this.sink == null)
         bridge.failure?.let { throw it }
         playbackFailure?.let { throw it }
+        inputFormat = videoFormat
         this.sink = sink
     }
 
     /**
      * Stops frame delivery and clears the sink idempotently without closing your app's camera or player.
      */
-    override suspend fun stop() { sink = null }
+    override suspend fun stop() {
+        sink = null
+        inputFormat = null
+    }
 
     /**
      * Attaches player preview to the SDK video container.
@@ -341,6 +358,7 @@ public class XmaxMedia3Source(
      */
     public suspend fun release(): Unit = withContext(Dispatchers.Main.immediate) {
         sink = null
+        inputFormat = null
         onPreviewFrame = null
         previewHost?.let(::detachPreview)
         player?.removeListener(listener)

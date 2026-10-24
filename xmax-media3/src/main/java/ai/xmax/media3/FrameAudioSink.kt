@@ -51,6 +51,16 @@ internal class FrameAudioSink(
          * The packet's media presentation timestamp, in microseconds.
          */
         val ptsUs: Long,
+
+        /**
+         * The input sample rate, in Hz.
+         */
+        val sampleRate: Int,
+
+        /**
+         * The number of interleaved PCM channels.
+         */
+        val channelCount: Int,
     )
 
     /**
@@ -59,14 +69,17 @@ internal class FrameAudioSink(
     private val pending = ArrayDeque<Packet>()
 
     /**
-     * The packetizer converting decoded audio into fixed-format PCM frames.
+     * The packetizer splitting original PCM into playback-paced chunks without format conversion.
      */
     private val packetizer = PcmPacketizer { bytes, pts ->
+        val format = checkNotNull(format)
         if (pending.size >= 100) pending.removeFirst()
         pending.addLast(
             Packet(
                 bytes,
                 pts,
+                format.sampleRate,
+                format.channelCount,
             ),
         )
     }
@@ -80,6 +93,11 @@ internal class FrameAudioSink(
      * The SDK receiver for external audio frames.
      */
     private var binding: RealtimeExternalFrameSink? = null
+
+    /**
+     * The monotonic offset mapping the current playback segment onto the video clock.
+     */
+    private var clockOffsetUs: Long? = null
 
     /**
      * Checks whether the sink supports an audio format.
@@ -178,9 +196,16 @@ internal class FrameAudioSink(
             val ageUs = positionUs - packet.ptsUs
             if (ageUs > 100_000) continue
 
+            val observedUs = (SystemClock.elapsedRealtimeNanos() / 1000 - ageUs).coerceAtLeast(0)
+            val offsetUs = clockOffsetUs
+            if (offsetUs == null || kotlin.math.abs(packet.ptsUs + offsetUs - observedUs) > 30_000) {
+                clockOffsetUs = observedUs - packet.ptsUs
+            }
             sink.pushAudio(
                 packet.data,
-                (SystemClock.elapsedRealtimeNanos() / 1000 - ageUs).coerceAtLeast(0),
+                packet.ptsUs + checkNotNull(clockOffsetUs),
+                packet.sampleRate,
+                packet.channelCount,
             )
         }
     }
@@ -211,5 +236,9 @@ internal class FrameAudioSink(
     /**
      * Clears pending PCM and packetization state.
      */
-    private fun clearPending() { pending.clear(); packetizer.reset() }
+    private fun clearPending() {
+        pending.clear()
+        packetizer.reset()
+        clockOffsetUs = null
+    }
 }

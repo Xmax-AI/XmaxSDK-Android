@@ -23,6 +23,18 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 public class NativeYuv420ConverterTest {
     @Test
+    public fun nativeRgbaResizePreservesChannelsOrientationAndBilinearFiltering() {
+        val source = ByteArray(64) { index -> ((index / 4) * 10 + index % 4).toByte() }
+        val output = ByteArray(16)
+        assertTrue(NativeYuv420Converter.resizeRgba(source, 4, 4, output, 2, 2))
+        assertArrayEquals(
+            byteArrayOf(25, 26, 27, 28, 45, 46, 47, 48, 105, 106, 107, 108, 125, 126, 127, -128),
+            output,
+        )
+        assertArrayEquals(ByteArray(64) { index -> ((index / 4) * 10 + index % 4).toByte() }, source)
+    }
+
+    @Test
     public fun nativeConverterRotatesFlexibleChromaIntoPortraitI420() {
         val source = Yuv420VideoFrameConverter.Source(
             width = 4,

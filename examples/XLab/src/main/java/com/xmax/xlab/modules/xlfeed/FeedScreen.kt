@@ -82,6 +82,7 @@ internal enum class XLabFeedAction {
     CAMERA,
     VIDEO,
     IMAGE,
+    EXTERNAL_VIDEO,
     TRAJECTORY,
     STORAGE,
 }
@@ -147,6 +148,17 @@ private val pipelines = listOf(
 )
 
 private val features = listOf(
+    FeatureUiModel(
+        categoryLabel = "SDK MEDIA / EXTERNAL",
+        watermark = "PCM",
+        color = Mint,
+        iconLabel = "EXTERNAL",
+        titleResource = R.string.feed_external_title,
+        subtitleResource = R.string.feed_external_subtitle,
+        tags = listOf("EXTERNAL SOURCE", "VIDEO", "PCM AUDIO"),
+        highlightedTag = "EXTERNAL SOURCE",
+        action = XLabFeedAction.EXTERNAL_VIDEO,
+    ),
     FeatureUiModel(
         categoryLabel = "SDK RENDERING / TRAJECTORY",
         watermark = "FX",
@@ -1132,6 +1144,7 @@ private fun FeatureIcon(model: FeatureUiModel) {
             .align(Alignment.TopCenter)
             .offset(y = 7.dp)
         when (model.action) {
+            XLabFeedAction.EXTERNAL_VIDEO -> ExternalCaptureGlyph(model.color, glyphModifier)
             XLabFeedAction.TRAJECTORY -> {
                 TrajectoryGlyph(color = model.color, modifier = glyphModifier)
             }
@@ -1148,6 +1161,31 @@ private fun FeatureIcon(model: FeatureUiModel) {
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.5.sp,
             lineHeight = 7.sp,
+        )
+    }
+}
+
+@Composable
+private fun ExternalCaptureGlyph(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(size.width * 0.08f, size.height * 0.22f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.55f, size.height * 0.56f),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+            style = stroke,
+        )
+        drawPath(
+            path = Path().apply {
+                moveTo(size.width * 0.65f, size.height * 0.4f)
+                lineTo(size.width * 0.92f, size.height * 0.22f)
+                lineTo(size.width * 0.92f, size.height * 0.78f)
+                lineTo(size.width * 0.65f, size.height * 0.6f)
+                close()
+            },
+            color = color,
+            style = stroke,
         )
     }
 }

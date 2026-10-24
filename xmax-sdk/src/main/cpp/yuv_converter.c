@@ -13,6 +13,82 @@
 #include <stdlib.h>
 
 /**
+ * Copies tightly packed RGBA into independently owned, bilinearly resized storage.
+ *
+ * @param env The JNI environment.
+ * @param receiver The Kotlin converter instance.
+ * @param source The original RGBA byte array.
+ * @param source_width The original width, in pixels.
+ * @param source_height The original height, in pixels.
+ * @param output The destination RGBA byte array.
+ * @param width The destination width, in pixels.
+ * @param height The destination height, in pixels.
+ * @return JNI_TRUE on success, JNI_FALSE for invalid storage or allocation failure.
+ */
+JNIEXPORT jboolean JNICALL
+Java_ai_xmax_sdk_media_video_NativeYuv420Converter_resizeRgbaNative(
+    JNIEnv *env,
+    jobject receiver,
+    jbyteArray source,
+    jint source_width,
+    jint source_height,
+    jbyteArray output,
+    jint width,
+    jint height
+) {
+    (void) receiver;
+    if (source == NULL || output == NULL || source_width <= 0 || source_height <= 0 || width <= 0 || height <= 0) {
+        return JNI_FALSE;
+    }
+    if ((int64_t) source_width * source_height > INT32_MAX / 4 ||
+        (int64_t) width * height > INT32_MAX / 4 || (*env)->IsSameObject(env, source, output)) {
+        return JNI_FALSE;
+    }
+    if ((int64_t) source_width * source_height * 4 != (*env)->GetArrayLength(env, source) ||
+        (int64_t) width * height * 4 != (*env)->GetArrayLength(env, output)) {
+        return JNI_FALSE;
+    }
+
+    jbyte *input = (*env)->GetByteArrayElements(env, source, NULL);
+    if (input == NULL) return JNI_FALSE;
+    jbyte *destination = (*env)->GetByteArrayElements(env, output, NULL);
+    if (destination == NULL) {
+        (*env)->ReleaseByteArrayElements(env, source, input, JNI_ABORT);
+        return JNI_FALSE;
+    }
+
+    for (jint row = 0; row < height; ++row) {
+        double y = (row + 0.5) * source_height / height - 0.5;
+        if (y < 0) y = 0;
+        if (y > source_height - 1) y = source_height - 1;
+        const jint top = (jint) y;
+        const jint bottom = top + 1 < source_height ? top + 1 : top;
+        const double fy = y - top;
+        for (jint column = 0; column < width; ++column) {
+            double x = (column + 0.5) * source_width / width - 0.5;
+            if (x < 0) x = 0;
+            if (x > source_width - 1) x = source_width - 1;
+            const jint left = (jint) x;
+            const jint right = left + 1 < source_width ? left + 1 : left;
+            const double fx = x - left;
+            for (jint channel = 0; channel < 4; ++channel) {
+                const double a = (uint8_t) input[(top * source_width + left) * 4 + channel];
+                const double b = (uint8_t) input[(top * source_width + right) * 4 + channel];
+                const double c = (uint8_t) input[(bottom * source_width + left) * 4 + channel];
+                const double d = (uint8_t) input[(bottom * source_width + right) * 4 + channel];
+                const double upper = a + (b - a) * fx;
+                const double lower = c + (d - c) * fx;
+                destination[(row * width + column) * 4 + channel] = (jbyte) (uint8_t) (upper + (lower - upper) * fy + 0.5);
+            }
+        }
+    }
+
+    (*env)->ReleaseByteArrayElements(env, output, destination, 0);
+    (*env)->ReleaseByteArrayElements(env, source, input, JNI_ABORT);
+    return JNI_TRUE;
+}
+
+/**
  * A pixel plane and its safely accessible memory layout.
  */
 typedef struct {
