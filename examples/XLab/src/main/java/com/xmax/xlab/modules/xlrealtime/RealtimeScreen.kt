@@ -246,7 +246,7 @@ public fun RealtimeScreen(
         val appContext = context.applicationContext
         val videoStore = RecordingVideoStore(appContext)
         RealtimeRecordingController(
-            setFrameListener = realtimeManager::setRemoteVideoFrameListener,
+            setFrameListener = realtimeManager::setRemoteMediaFrameListener,
             createRecording = { RealtimeVideoRecorder(File(appContext.cacheDir, "recordings")) },
             saveVideo = { videoStore.save(it) },
             notify = { Toast.makeText(appContext, it, Toast.LENGTH_LONG).show() },

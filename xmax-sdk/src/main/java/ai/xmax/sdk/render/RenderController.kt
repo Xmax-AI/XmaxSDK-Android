@@ -12,9 +12,9 @@ package ai.xmax.sdk.render
 
 import ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink
 import ai.xmax.sdk.foundation.rtc.RtcRemoteVideoFrame
-import ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher
+import ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher
 import ai.xmax.sdk.RealtimeVideoTrack
-import ai.xmax.sdk.RealtimeVideoFrameListener
+import ai.xmax.sdk.RealtimeMediaFrameListener
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
@@ -65,9 +65,9 @@ internal class RenderController(
     private val renderDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 
     /**
-     * The remote video frame dispatcher.
+     * The bounded, serialized remote audio/video output queue.
      */
-    private val frameDispatcher: RealtimeVideoFrameDispatcher = RealtimeVideoFrameDispatcher(),
+    private val frameDispatcher: RealtimeMediaFrameDispatcher = RealtimeMediaFrameDispatcher(),
 
     /**
      * The media failure callback.
@@ -104,14 +104,27 @@ internal class RenderController(
     private var remoteTrack: RealtimeVideoTrack? = null
 
     /**
-     * Sets serialized remote video output without changing playback.
+     * Sets serialized remote audio/video output without changing playback.
      *
      * @param listener The output listener, or null to unregister it.
      */
-    override fun setRemoteVideoFrameListener(
-        listener: RealtimeVideoFrameListener?,
-    ) {
+    override fun setRemoteMediaFrameListener(
+        listener: RealtimeMediaFrameListener?,
+    ) = operationLock.withLock {
+        val current = generation
+        if (listener != null && current != null) {
+            rtcManager.setRemoteAudioFrameListener(current.stream) { frame ->
+                frameDispatcher.dispatchAudio(
+                    current,
+                    frame,
+                )
+            }
+        }
         frameDispatcher.setListener(listener)
+        if (listener == null && current != null) rtcManager.setRemoteAudioFrameListener(
+            current.stream,
+            null,
+        )
     }
 
     /**
@@ -132,12 +145,20 @@ internal class RenderController(
 
         try {
             if (previous != null) {
-                val failure = runCatching {
+                var failure = runCatching {
                     rtcManager.setRemoteVideoFrameListener(
                         previous.stream,
                         null,
                     )
                 }.exceptionOrNull()
+
+                runCatching { rtcManager.setRemoteAudioFrameListener(
+                    previous.stream,
+                    null,
+                ) }
+                    .onFailure { error ->
+                        if (failure == null) failure = error else if (failure !== error) failure.addSuppressed(error)
+                    }
 
                 try {
                     rtcManager.unbindRemoteVideo(previous.stream)
@@ -208,10 +229,19 @@ internal class RenderController(
                         }
                     },
                 )
+                if (frameDispatcher.hasListener) {
+                    rtcManager.setRemoteAudioFrameListener(next.stream) { frame ->
+                        frameDispatcher.dispatchAudio(
+                            next,
+                            frame,
+                        )
+                    }
+                }
             }
         } catch (
             error: Throwable,
         ) {
+            frameDispatcher.setGeneration(null)
             next?.ready?.completeExceptionally(error)
             throw error
         }

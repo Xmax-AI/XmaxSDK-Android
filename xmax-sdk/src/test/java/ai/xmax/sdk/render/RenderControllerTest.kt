@@ -29,6 +29,38 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class RenderControllerTest {
     @Test
+    fun `PCM output follows listener and generation lifetime without requiring a view`() = runTest {
+        val rtc = RtcManagingStub()
+        val dispatcher = ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher(StandardTestDispatcher(testScheduler))
+        val controller = RenderController(rtc, renderDispatcher = StandardTestDispatcher(testScheduler), frameDispatcher = dispatcher)
+        val stream = RemoteStream("room", "bot")
+        val events = mutableListOf<ai.xmax.sdk.RealtimeMediaFrame>()
+        controller.setRemoteStream(stream)
+        assertNull(rtc.captureRemoteAudioFrameListener(stream))
+        controller.setRemoteMediaFrameListener { events += it }
+        val old = rtc.captureRemoteAudioFrameListener(stream)!!
+        val pcm = ai.xmax.sdk.foundation.rtc.RtcRemoteAudioFrame(ByteArray(960), 48_000, 1, 480, 1_000)
+        old.onFrame(pcm)
+        runCurrent()
+        assertEquals(1, events.size)
+        assertTrue(events.single().content is ai.xmax.sdk.RealtimeMediaFrame.Content.Audio)
+        val firstID = events.single().streamID
+        controller.setRemoteStream(stream)
+        old.onFrame(pcm)
+        rtc.captureRemoteAudioFrameListener(stream)!!.onFrame(pcm)
+        runCurrent()
+        assertEquals(2, events.size)
+        assertNotEquals(firstID, events.last().streamID)
+        val current = rtc.captureRemoteAudioFrameListener(stream)!!
+        controller.setRemoteMediaFrameListener(null)
+        assertNull(rtc.captureRemoteAudioFrameListener(stream))
+        current.onFrame(pcm)
+        runCurrent()
+        assertEquals(2, events.size)
+        controller.setRemoteStream(null)
+    }
+
+    @Test
     fun `new remote frame resolves readiness without a bound view and keeps receiving`() = runTest {
         val rtc = RtcManagingStub()
         val controller = RenderController(rtc, remoteFrameReadyTimeoutMillis = 1_000L, renderDispatcher = StandardTestDispatcher(testScheduler))

@@ -233,6 +233,11 @@ private object EngineStub : RtcPlatform {
 
     override fun setCameraPreviewReadyListener(listener: (() -> Unit)?) = Unit
 
+    override fun setRemoteAudioFrameListener(
+        streamId: String,
+        listener: ai.xmax.sdk.foundation.rtc.RtcRemoteAudioFrameListener?,
+    ): Int = 0
+
     override fun setRemoteVideoFrameListener(
         streamId: String,
         listener: ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink?,

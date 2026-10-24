@@ -1654,11 +1654,11 @@ class XmaxRealtimeManagerTest {
 
     @Test fun `registering and clearing frame listener never start media or create a connection`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val frames = ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher(dispatcher)
+        val frames = ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher(dispatcher)
         val f = Fixture(dispatcher, frames = frames)
         val manager = f.manager
-        manager.setRemoteVideoFrameListener { }
-        manager.setRemoteVideoFrameListener(null)
+        manager.setRemoteMediaFrameListener { }
+        manager.setRemoteMediaFrameListener(null)
         manager.close()
         assertEquals(0, f.media.cameraStartCount)
         assertEquals(0, f.session.count)
@@ -1693,14 +1693,14 @@ class XmaxRealtimeManagerTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val frameScheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
         val rtc = ai.xmax.sdk.stream.room.RtcManagingStub()
-        val frames = ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher(StandardTestDispatcher(frameScheduler))
+        val frames = ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher(StandardTestDispatcher(frameScheduler))
         val render = ai.xmax.sdk.render.RenderController(rtc, renderDispatcher = dispatcher,
             frameDispatcher = frames)
         val f = Fixture(dispatcher, render, frames = frames)
         val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
         f.manager.connect(local)
         val received = mutableListOf<Long>()
-        f.manager.setRemoteVideoFrameListener { received += it.presentationTimeUs }
+        f.manager.setRemoteMediaFrameListener { received += it.presentationTimeUs }
         val stream = ai.xmax.sdk.foundation.rtc.RemoteStream("room", "bot")
         val frame = object : ai.xmax.sdk.foundation.rtc.RtcRemoteVideoFrame {
             override val width = 2
@@ -1731,7 +1731,7 @@ class XmaxRealtimeManagerTest {
         dispatcher: CoroutineDispatcher,
         frameGate: RenderControlling? = null,
         timing: RealtimeTiming = RealtimeTiming(),
-        frames: ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher = ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher(),
+        frames: ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher = ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher(),
         qualityNow: () -> Long = { System.nanoTime() / 1_000_000 },
         qualityHistory: QualityHistory = QualityHistory(),
         mediaService: MediaServicing = MediaService(),
@@ -2012,9 +2012,9 @@ private class StreamStub(
     override suspend fun sendTracks(taskId: String, points: List<RealtimePoint>) = Unit
 }
 private class RenderStub(
-    private val frames: ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher = ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher(),
+    private val frames: ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher = ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher(),
 ) : RenderControlling {
-    override fun setRemoteVideoFrameListener(listener: RealtimeVideoFrameListener?) { frames.setListener(listener) }
+    override fun setRemoteMediaFrameListener(listener: RealtimeMediaFrameListener?) { frames.setListener(listener) }
     override fun setRemoteStream(stream: RemoteStream?) = Unit
     override fun registerRemoteTrack(track: RealtimeVideoTrack, resolvedMediaSize: IntSize, interactionListener: (InteractionFrame) -> Unit) = Unit
     override suspend fun waitUntilRemoteFrameReady() = Unit

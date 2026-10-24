@@ -32,7 +32,7 @@ public class RealtimeVideoFrame internal constructor(
     public val height: Int,
 
     /**
-     * The original stream timestamp, in microseconds; recording rebases it to the first frame.
+     * The presentation timestamp on the shared remote audio/video timeline, in microseconds.
      */
     public val presentationTimeUs: Long,
 
@@ -91,20 +91,4 @@ public class RealtimeVideoFrame internal constructor(
      * The read-only V chroma plane.
      */
     public val vData: ByteBuffer get() = ByteBuffer.wrap(v).asReadOnlyBuffer()
-}
-
-/**
- * Receives final frames on the SDK's serial background queue. Dispatch encoding promptly to avoid blocking
- * later callbacks.
- */
-public fun interface RealtimeVideoFrameListener {
-
-    /**
-     * Receives a frame from the subscribed video stream.
-     *
-     * @param frame The video frame to process, display, or submit.
-     */
-    public fun onFrame(
-        frame: RealtimeVideoFrame,
-    )
 }

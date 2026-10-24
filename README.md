@@ -359,7 +359,7 @@ Network preview is silent and plays once, retaining the last frame while attache
 The default server sampling method is `RealtimeVideoSampleMethod.TIME`; `FPS` is
 also available. This source does not upload local audio. Remote audio is subscribed
 after the first generated frame is ready, with the same default playback volume
-as local video inputs. Audio recording and muxing are not performed.
+as local video inputs. Recording and muxing remain your app's responsibility.
 `onFinish` comes from the current task's `video_stopped` message, independently of
 local preview playback, and is delivered only after generation is ready. Generated
 output is not cached or looped. Use `disconnect()` to end the session while keeping
@@ -541,7 +541,7 @@ stream or starting generation.
 | Listener | Purpose |
 | --- | --- |
 | `setStateListener` | Observe pipeline states and terminal failure reasons; camera `READY` means the first local frame can be previewed. |
-| `setRemoteVideoFrameListener` | Receive generated I420 frames for recording or custom processing. |
+| `setRemoteMediaFrameListener` | Receive owned PCM16 audio and I420 video with a shared stream identity and presentation timeline. |
 | `setNetworkQualityListener` | Monitor uplink and downlink network quality. |
 | `setPerformanceAlarmListener` | Detect device performance limitations or recovery, with a suggested video format when available. |
 
@@ -561,8 +561,24 @@ realtime.setStateListener { state ->
 manager returns to `READY` when a local preview remains, or `IDLE` otherwise;
 `state.reason` distinguishes a normal stop from a failure. Individual suspending
 calls still throw their own errors. Listeners are delivered on the main thread,
-except remote video frame callbacks,
+except remote audio/video frame callbacks,
 which run serially on an SDK background dispatcher.
+
+To record or process generated media, register `setRemoteMediaFrameListener` and
+handle `RealtimeMediaFrame.Content.Audio` (PCM16 little-endian) and
+`RealtimeMediaFrame.Content.Video` (I420). Both tracks share `streamID` and
+`presentationTimeUs`; use one recording origin rather than rebasing each track
+independently. Audio comes from the remote publisher before user mixing and is
+independent of playback volume. Registering the listener does not change audio
+subscriptions, enable the microphone, or require a video view.
+
+Packets own their data and can be retained after callbacks return. Delivery is
+serial, not timestamp-sorted across tracks. The queue retains at most 256 packets
+or 32 MiB, including an executing callback. Slow consumers can lose packets;
+`isDiscontinuous` marks the first packet of each track, format/clock changes, and
+the next packet after discarded output. A new `streamID` starts a new timeline.
+Clearing the listener discards queued output; an executing callback may finish.
+XLab demonstrates H.264/AAC recording and MP4 muxing outside the SDK.
 
 <br>
 

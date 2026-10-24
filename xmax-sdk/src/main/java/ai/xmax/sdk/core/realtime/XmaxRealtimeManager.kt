@@ -308,20 +308,17 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Sets serialized remote video output without changing playback.
+     * Sets serialized remote audio/video output without changing playback or volume.
      *
-     * Callbacks run serially on an SDK background dispatcher; slow consumers receive only the latest pending
-     * frame.
-     * Frame pixels may be retained for asynchronous encoding. Null unregisters the listener. Stopping,
-     * disconnecting, or changing tasks discards pending old frames;
-     * callbacks already executing may finish. A video view binding is not required.
+     * Owned PCM16 and I420 packets share a stream identity and presentation timeline. Removing the
+     * listener invalidates queued events; an executing callback may finish. Registration survives close.
      *
-     * @param listener The video frame handler, or null to stop output.
+     * @param listener The audio/video packet handler, or null to stop output.
      */
-    override suspend fun setRemoteVideoFrameListener(
-        listener: RealtimeVideoFrameListener?,
+    override suspend fun setRemoteMediaFrameListener(
+        listener: RealtimeMediaFrameListener?,
     ) {
-        renderController.setRemoteVideoFrameListener(listener)
+        renderController.setRemoteMediaFrameListener(listener)
     }
 
     /**

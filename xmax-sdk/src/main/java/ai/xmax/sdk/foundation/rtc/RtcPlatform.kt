@@ -196,6 +196,18 @@ internal interface RtcPlatform {
     ): Int
 
     /**
+     * Observes a remote publisher's PCM before user mixing without changing playback.
+     *
+     * @param streamId The remote publisher identifier.
+     * @param listener The PCM receiver, or null to unregister it.
+     * @return The RTC result: nonnegative if accepted, negative on failure.
+     */
+    fun setRemoteAudioFrameListener(
+        streamId: String,
+        listener: RtcRemoteAudioFrameListener?,
+    ): Int
+
+    /**
      * Sets playback volume for a remote user's audio.
      *
      * @param streamId The remote media stream or data channel identifier.

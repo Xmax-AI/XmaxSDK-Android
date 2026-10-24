@@ -118,9 +118,9 @@
     <string name="realtime_record_stop">停止</string>
     <string name="realtime_record_saving">保存中</string>
     <string name="realtime_record_stop_description">停止录制并保存视频</string>
-    <string name="realtime_record_start_description">录制生成视频（无声）</string>
+    <string name="realtime_record_start_description">录制生成视频</string>
     <string name="realtime_record_start_failed">无法开始录制：%1$s</string>
-    <string name="realtime_record_saved">视频已保存到相册（无声）</string>
+    <string name="realtime_record_saved">视频已保存到相册</string>
     <string name="realtime_record_failed">录制失败：%1$s</string>
     <string name="realtime_record_detach_failed">无法清除录制回调：%1$s</string>
     <string name="realtime_record_cleanup_failed">无法清理录制临时文件</string>

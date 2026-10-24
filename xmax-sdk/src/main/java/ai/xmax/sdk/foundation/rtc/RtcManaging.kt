@@ -288,6 +288,17 @@ internal interface RtcManaging {
     )
 
     /**
+     * Observes PCM from the current remote publisher without changing playback.
+     *
+     * @param stream The remote stream identified by room and user.
+     * @param listener The PCM receiver, or null to unregister it.
+     */
+    fun setRemoteAudioFrameListener(
+        stream: RemoteStream,
+        listener: RtcRemoteAudioFrameListener?,
+    )
+
+    /**
      * Sets the RTC network and media quality listener.
      *
      * @param listener The event listener, or null to unregister it.

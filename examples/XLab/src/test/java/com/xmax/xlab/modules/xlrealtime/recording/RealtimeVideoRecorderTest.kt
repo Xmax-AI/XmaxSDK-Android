@@ -26,7 +26,100 @@ import org.junit.rules.TemporaryFolder
 class RealtimeVideoRecorderTest {
     @get:Rule val temporary = TemporaryFolder()
 
-    @Test fun `slow encoding keeps only latest pending frame and stop drains it exactly once`() = runTest {
+    @Test fun `muxer rejects mismatched native clock offsets before entering media writer`() {
+        assertTrue(runCatching { validateRecordingTime(1_792_449_676_491_000L) }.isFailure)
+        assertTrue(runCatching { validateRecordingTime(-1) }.isFailure)
+        validateRecordingTime(0)
+        validateRecordingTime(6_714_700)
+    }
+
+    @Test fun `audio and video are encoded separately and merged with original shared origins`() = runTest {
+        val video = Encoder()
+        val audio = AudioEncoder()
+        val id = java.util.UUID.randomUUID()
+        var merged = false
+        val recorder = RealtimeVideoRecorder(
+            temporary.root, StandardTestDispatcher(testScheduler),
+            audioEncoderFactory = { _, _ -> audio },
+            mergeTracks = { _, videoTrack, audioTrack, rotation ->
+                assertEquals(1_100_000L, videoTrack.originUs)
+                assertEquals(1_000_000L, audioTrack.originUs)
+                assertEquals(0, rotation)
+                assertTrue(videoTrack.file.exists())
+                assertTrue(audioTrack.file.exists())
+                merged = true
+            },
+            encoderFactory = { _, _ -> video },
+        )
+        recorder.append(RecordingPacket.Audio(id, audioFrame(1_000_000)))
+        recorder.append(RecordingPacket.Video(id, frame(1_100_000)))
+        recorder.append(RecordingPacket.Audio(id, audioFrame(1_030_000)))
+        recorder.stop()
+        runCurrent()
+        val output = recorder.result.await()
+        assertTrue(merged)
+        assertEquals(listOf(1_000_000L, 1_030_000L), audio.timestamps)
+        assertEquals(1, audio.finishes)
+        assertEquals(1, audio.closes)
+        assertEquals(listOf(output), temporary.root.listFiles()!!.toList())
+    }
+
+    @Test fun `changing stream identity or audio format fails without exporting partial files`() = runTest {
+        val first = java.util.UUID.randomUUID()
+        val video = Encoder()
+        val recorder = RealtimeVideoRecorder(temporary.root, StandardTestDispatcher(testScheduler)) { _, _ -> video }
+        recorder.append(RecordingPacket.Video(first, frame(1)))
+        recorder.append(RecordingPacket.Video(java.util.UUID.randomUUID(), frame(2)))
+        recorder.stop()
+        runCurrent()
+        assertTrue(runCatching { recorder.result.await() }.isFailure)
+        assertTrue(temporary.root.listFiles()!!.isEmpty())
+
+        val audio = AudioEncoder()
+        val second = RealtimeVideoRecorder(temporary.root, StandardTestDispatcher(testScheduler),
+            audioEncoderFactory = { _, _ -> audio }, encoderFactory = { _, _ -> Encoder() })
+        second.append(RecordingPacket.Audio(first, audioFrame(1_000_000)))
+        second.append(RecordingPacket.Audio(first, audioFrame(1_020_000).copy(format = RecordingAudioFormat(44_100, 1))))
+        second.stop()
+        runCurrent()
+        assertTrue(runCatching { second.result.await() }.isFailure)
+        assertEquals(1, audio.closes)
+        assertTrue(temporary.root.listFiles()!!.isEmpty())
+    }
+
+    @Test fun `recording overload fails rather than silently losing audio or compressing time`() = runTest {
+        val recorder = RealtimeVideoRecorder(temporary.root, StandardTestDispatcher(testScheduler)) { _, _ -> Encoder() }
+        repeat(257) { recorder.append(frame(it.toLong())) }
+        runCurrent()
+        assertTrue(runCatching { recorder.result.await() }.exceptionOrNull()!!.message!!.contains("处理速度不足"))
+        assertTrue(temporary.root.listFiles()!!.isEmpty())
+    }
+
+    @Test fun `audio timeline retains forward gaps and uses sample counts without drift`() {
+        val timeline = RecordingAudioTimeline(RecordingAudioFormat(44_100, 1))
+        repeat(441) { index ->
+            assertEquals(0L, timeline.missingSamples(1_000_000L + index * 100_000_000L / 44_100))
+            timeline.next(100)
+        }
+        assertEquals(1_000_000L, timeline.endTimeUs)
+        assertEquals(441L, timeline.missingSamples(2_010_000))
+        timeline.next(441)
+        assertEquals(1_010_000L, timeline.endTimeUs)
+        assertTrue(runCatching { timeline.missingSamples(2_000_000) }.isFailure)
+    }
+
+    private class AudioEncoder : RecordingAudioEncoder {
+        val timestamps = mutableListOf<Long>()
+        var finishes = 0
+        var closes = 0
+        override fun append(frame: RecordingAudioFrame) { timestamps += frame.presentationTimeUs }
+        override fun finish() { finishes++ }
+        override fun close() { closes++ }
+    }
+
+    private fun audioFrame(time: Long) = RecordingAudioFrame(RecordingAudioFormat(48_000, 1), 480, time, 10_000, ByteBuffer.allocate(960))
+
+    @Test fun `slow encoding preserves ordered pending frames and stop drains them exactly once`() = runTest {
         val encoder = Encoder()
         lateinit var recorder: RealtimeVideoRecorder
         encoder.onAppend = { frame ->
@@ -41,7 +134,7 @@ class RealtimeVideoRecorderTest {
         recorder.append(frame(1))
         runCurrent()
         val file = recorder.result.await()
-        assertEquals(listOf(1L, 100L), encoder.timestamps)
+        assertEquals((1L..100L).toList(), encoder.timestamps)
         assertEquals(1, encoder.finishes)
         assertEquals(1, encoder.closes)
         assertTrue(file.exists())

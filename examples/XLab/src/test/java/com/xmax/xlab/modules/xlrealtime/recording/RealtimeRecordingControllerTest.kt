@@ -11,8 +11,8 @@
 
 package com.xmax.xlab.modules.xlrealtime.recording
 
-import ai.xmax.sdk.RealtimeVideoFrame
-import ai.xmax.sdk.RealtimeVideoFrameListener
+import ai.xmax.sdk.RealtimeMediaFrame
+import ai.xmax.sdk.RealtimeMediaFrameListener
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,7 +31,7 @@ class RealtimeRecordingControllerTest {
 
     @Test fun `stop source change and exit share one save and release listener before encoding finishes`() = runTest {
         val recording = Recording()
-        val listeners = mutableListOf<RealtimeVideoFrameListener?>()
+        val listeners = mutableListOf<RealtimeMediaFrameListener?>()
         val saveBarrier = CompletableDeferred<Unit>()
         val messages = mutableListOf<String>()
         var saves = 0
@@ -67,7 +67,7 @@ class RealtimeRecordingControllerTest {
 
     @Test fun `encoding failure detaches listener reports once and allows new recording`() = runTest {
         var recording = Recording()
-        val listeners = mutableListOf<RealtimeVideoFrameListener?>()
+        val listeners = mutableListOf<RealtimeMediaFrameListener?>()
         val messages = mutableListOf<String>()
         val controller = RealtimeRecordingController(
             { listeners += it }, { recording }, { error("must not save") }, messages::add,
@@ -105,7 +105,7 @@ class RealtimeRecordingControllerTest {
 
     private class Recording : VideoRecording {
         override val result = CompletableDeferred<File>()
-        override fun append(frame: RealtimeVideoFrame) = Unit
+        override fun append(frame: RealtimeMediaFrame) = Unit
         override fun stop() = Unit
     }
 }

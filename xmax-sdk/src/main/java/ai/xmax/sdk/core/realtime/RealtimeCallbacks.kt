@@ -10,7 +10,7 @@
 
 package ai.xmax.sdk
 
-import ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher
+import ai.xmax.sdk.render.video.RealtimeMediaFrameDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +31,7 @@ internal class RealtimeCallbacks(
     /**
      * The serial output queue retained for this realtime manager's lifetime.
      */
-    val remoteVideoFrames: RealtimeVideoFrameDispatcher = RealtimeVideoFrameDispatcher(),
+    val remoteMediaFrames: RealtimeMediaFrameDispatcher = RealtimeMediaFrameDispatcher(),
 ) {
 
     /**

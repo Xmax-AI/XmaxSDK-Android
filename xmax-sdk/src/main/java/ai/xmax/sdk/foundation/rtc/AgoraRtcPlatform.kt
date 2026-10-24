@@ -109,9 +109,14 @@ private class AgoraRtcPlatform(
     private val activeRoom = AtomicReference<AgoraRoom?>()
 
     /**
-     * Remote frame receivers keyed by user identifier.
+     * Remote frame receivers and their fixed rendering-clock offsets, keyed by user identifier.
      */
-    private val frameSinks = ConcurrentHashMap<String, RtcRemoteVideoSink>()
+    private val frameSinks = ConcurrentHashMap<String, Pair<RtcRemoteVideoSink, Long>>()
+
+    /**
+     * Remote PCM receivers keyed by publisher identifier.
+     */
+    private val audioSinks = ConcurrentHashMap<String, RtcRemoteAudioFrameListener>()
 
     /**
      * Whether external video input is enabled.
@@ -191,6 +196,23 @@ private class AgoraRtcPlatform(
         ) as RtcEngineEx
 
         try {
+            checkRtc(
+                engine.setPlaybackAudioFrameBeforeMixingParameters(
+                    48_000,
+                    1,
+                    480,
+                ),
+                "set remote PCM format",
+            )
+            checkRtc(
+                engine.registerAudioFrameObserver(
+                    RtcRemoteAudioSink { channelId, uid ->
+                        val room = activeRoom.get()?.takeIf { !it.closed && it.roomId == channelId }
+                        room?.let { audioSinks[it.userId(uid)] }
+                    },
+                ),
+                "registerAudioFrameObserver",
+            )
             checkRtc(
                 engine.enableVideo(),
                 "enableVideo",
@@ -299,10 +321,10 @@ private class AgoraRtcPlatform(
                             frame: io.agora.base.VideoFrame,
                         ): Boolean {
                             val room = activeRoom.get()?.takeIf { !it.closed && it.roomId == channel } ?: return true
-                            val sink = frameSinks[room.userId(uid)] ?: return true
+                            val (sink, renderClockOffsetUs) = frameSinks[room.userId(uid)] ?: return true
 
                             try {
-                                sink.onFrame(AgoraRemoteVideoFrame(frame))
+                                sink.onFrame(AgoraRemoteVideoFrame(frame, renderClockOffsetUs))
                                 sink.onFirstFrame(
                                     frame.rotatedWidth,
                                     frame.rotatedHeight,
@@ -703,7 +725,30 @@ private class AgoraRtcPlatform(
         streamId: String,
         listener: RtcRemoteVideoSink?,
     ): Int {
-        if (listener == null) frameSinks.remove(streamId) else frameSinks[streamId] = listener
+        if (listener == null) {
+            frameSinks.remove(streamId)
+        } else {
+            val beforeNs = System.nanoTime()
+            val renderTimeUs = System.currentTimeMillis() * 1_000L
+            val afterNs = System.nanoTime()
+            val nativeTimeUs = (beforeNs + (afterNs - beforeNs) / 2) / 1_000L
+            frameSinks[streamId] = listener to (renderTimeUs - nativeTimeUs)
+        }
+        return 0
+    }
+
+    /**
+     * Sets a publisher's PCM receiver without changing subscriptions or volume.
+     *
+     * @param streamId The native publisher identifier.
+     * @param listener The PCM receiver, or null to unregister it.
+     * @return Zero when the receiver has been updated.
+     */
+    override fun setRemoteAudioFrameListener(
+        streamId: String,
+        listener: RtcRemoteAudioFrameListener?,
+    ): Int {
+        if (listener == null) audioSinks.remove(streamId) else audioSinks[streamId] = listener
         return 0
     }
 
@@ -1427,6 +1472,7 @@ private class AgoraRtcPlatform(
             scope.cancel()
             codec.clear()
             frameSinks.clear()
+            audioSinks.clear()
             activeRoom.compareAndSet(
                 this,
                 null,

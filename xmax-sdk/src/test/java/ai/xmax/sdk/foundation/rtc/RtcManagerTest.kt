@@ -11,6 +11,8 @@
 
 package ai.xmax.sdk.foundation.rtc
 
+import org.junit.Assert.assertNull
+
 import ai.xmax.sdk.UplinkVideoStatistics
 import ai.xmax.sdk.DownlinkVideoStatistics
 
@@ -42,6 +44,39 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 public class RtcManagerTest {
+    @Test
+    fun `remote PCM registration rejects replaced listeners and rooms and propagates native failure`() = runTest {
+        val room = FakeRtcRoom()
+        room.remoteStreamIds["bot"] = "bot-native"
+        val engine = FakeRtcPlatform(room)
+        val manager = RtcManager(FakeRtcEngineManager(engine), callbackScope = backgroundScope)
+        manager.initialize()
+        join(manager, room)
+        val stream = RemoteStream("room", "bot")
+        val received = mutableListOf<String>()
+        val packet = RtcRemoteAudioFrame(ByteArray(960), 48_000, 1, 480, 1_000)
+        manager.setRemoteAudioFrameListener(stream) { received += "old" }
+        assertEquals("bot-native", engine.remoteAudioFrames.last().first)
+        val old = engine.remoteAudioFrames.last().second!!
+        manager.setRemoteAudioFrameListener(stream) { received += "current" }
+        old.onFrame(packet)
+        engine.remoteAudioFrames.last().second!!.onFrame(packet)
+        assertEquals(listOf("current"), received)
+        val beforeLeave = engine.remoteAudioFrames.last().second!!
+        manager.leaveRoom()
+        assertNull(engine.remoteAudioFrames.last().second)
+        join(manager, room)
+        manager.setRemoteAudioFrameListener(stream) { received += "new-room" }
+        beforeLeave.onFrame(packet)
+        engine.remoteAudioFrames.last().second!!.onFrame(packet)
+        assertEquals(listOf("current", "new-room"), received)
+        manager.setRemoteAudioFrameListener(stream, null)
+        engine.remoteAudioFrameResult = -2
+        assertTrue(runCatching { manager.setRemoteAudioFrameListener(stream) {} }.isFailure)
+        engine.remoteAudioFrameResult = 0
+        manager.destroy()
+    }
+
     @Before fun setupMain() { Dispatchers.setMain(UnconfinedTestDispatcher()) }
     @After fun resetMain() { Dispatchers.resetMain() }
     @Test
@@ -1050,6 +1085,17 @@ private class FakeRtcPlatform(
     override fun unbindRemoteVideo(userId: String): Int = 0
 
     override fun setCameraPreviewReadyListener(listener: (() -> Unit)?) = Unit
+
+    val remoteAudioFrames = mutableListOf<Pair<String, RtcRemoteAudioFrameListener?>>()
+    var remoteAudioFrameResult = 0
+
+    override fun setRemoteAudioFrameListener(
+        streamId: String,
+        listener: ai.xmax.sdk.foundation.rtc.RtcRemoteAudioFrameListener?,
+    ): Int {
+        remoteAudioFrames += streamId to listener
+        return remoteAudioFrameResult
+    }
 
     override fun setRemoteVideoFrameListener(
         streamId: String,

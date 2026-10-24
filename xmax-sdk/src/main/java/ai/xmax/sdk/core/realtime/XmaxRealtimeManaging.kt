@@ -132,17 +132,18 @@ public interface XmaxRealtimeManaging {
     )
 
     /**
-     * Sets serialized remote video output without changing playback.
+     * Sets serialized remote audio/video output without changing playback or volume.
      *
-     * Callbacks run serially on an SDK background dispatcher; slow consumers receive only the
-     * latest pending frame. Frame pixels may be retained for asynchronous encoding. Stopping,
-     * disconnecting, or changing tasks discards pending old frames; callbacks already executing may
-     * finish. A video view binding is not required.
+     * Owned PCM16 and I420 packets share a stream identity and presentation timeline. Callbacks run
+     * serially in delivery order, not sorted by timestamp across tracks. The queue retains at most
+     * 256 packets or 32 MiB; discarded output marks the next packet of that track discontinuous.
+     * Removing the listener or changing streams invalidates queued events; an executing callback may
+     * finish. Registration survives close. A video view binding is not required.
      *
-     * @param listener The video frame handler, or null to stop output.
+     * @param listener The audio/video packet handler, or null to stop output.
      */
-    public suspend fun setRemoteVideoFrameListener(
-        listener: RealtimeVideoFrameListener?,
+    public suspend fun setRemoteMediaFrameListener(
+        listener: RealtimeMediaFrameListener?,
     )
 
     /**

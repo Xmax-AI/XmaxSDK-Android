@@ -129,6 +129,11 @@ internal class RtcManager(
     private var remoteFrameRegistration: RemoteFrameRegistration? = null
 
     /**
+     * The PCM receiver bound to the active room and engine lease.
+     */
+    private var remoteAudioRegistration: RemoteAudioRegistration? = null
+
+    /**
      * Whether local camera capture is active.
      */
     private var isCameraVideoSourceActive = false
@@ -955,6 +960,117 @@ internal class RtcManager(
     }
 
     /**
+     * Registers PCM output for the active remote stream and rejects obsolete room callbacks.
+     *
+     * @param stream The remote stream identified by room and user.
+     * @param listener The PCM receiver, or null to unregister it.
+     */
+    override fun setRemoteAudioFrameListener(
+        stream: RemoteStream,
+        listener: RtcRemoteAudioFrameListener?,
+    ) = nativeGate.write {
+        if (listener == null) {
+            if (synchronized(stateLock) { remoteAudioRegistration?.stream == stream }) {
+                clearRemoteAudioRegistrationLocked()
+            }
+            return@write
+        }
+
+        val registration = synchronized(stateLock) {
+            val lease = engineLease ?: throw rtcError("RTC Engine is not initialized")
+            val room = activeRoom?.takeIf { it.roomId == stream.roomId }
+                ?: throw rtcError("Remote stream does not belong to the active RTC room")
+            RemoteAudioRegistration(
+                stream,
+                room.room.resolveRemoteStreamId(stream.userId),
+                room,
+                lease,
+                listener,
+            )
+        }
+        clearRemoteAudioRegistrationLocked()
+        synchronized(stateLock) { remoteAudioRegistration = registration }
+        try {
+            val result = registration.lease.engine.setRemoteAudioFrameListener(registration.streamId) { frame ->
+                val active = synchronized(stateLock) {
+                    registration.isActive && remoteAudioRegistration === registration &&
+                        activeRoom === registration.room && engineLease === registration.lease
+                }
+                if (active) registration.listener.onFrame(frame)
+            }
+            if (result < 0) throw rtcResultError(
+                "setRemoteAudioFrameListener",
+                result,
+            )
+        } catch (
+            error: Throwable,
+        ) {
+            runCatching { clearRemoteAudioRegistrationLocked() }
+                .onFailure { if (it !== error) error.addSuppressed(it) }
+            if (error is CancellationException || error is XmaxError) throw error
+
+            throw rtcOperationError(
+                "setRemoteAudioFrameListener",
+                error,
+            )
+        }
+    }
+
+    /**
+     * Invalidates PCM delivery before unregistering the native receiver.
+     */
+    private fun clearRemoteAudioRegistrationLocked() {
+        val registration = synchronized(stateLock) {
+            remoteAudioRegistration?.also { it.isActive = false }
+        } ?: return
+        val result = registration.lease.engine.setRemoteAudioFrameListener(
+            registration.streamId,
+            null,
+        )
+        if (result < 0) throw rtcResultError(
+            "setRemoteAudioFrameListener",
+            result,
+        )
+
+        synchronized(stateLock) { remoteAudioRegistration = null }
+    }
+
+    /**
+     * A PCM registration tied to one room and engine lease.
+     */
+    private class RemoteAudioRegistration(
+        /**
+         * The owning remote stream.
+         */
+        val stream: RemoteStream,
+
+        /**
+         * The native publisher identifier.
+         */
+        val streamId: String,
+
+        /**
+         * The owning room context.
+         */
+        val room: RoomContext,
+
+        /**
+         * The owning engine lease.
+         */
+        val lease: RtcEngineLease,
+
+        /**
+         * The PCM receiver.
+         */
+        val listener: RtcRemoteAudioFrameListener,
+
+        /**
+         * Whether native callbacks may still be delivered.
+         */
+        var isActive: Boolean = true,
+    )
+
+    /**
      * Sets the RTC network and media quality listener.
      *
      * @param listener The event listener, or null to unregister it.
@@ -1642,6 +1758,7 @@ internal class RtcManager(
             var failure: Throwable? = null
             val releases: List<() -> Unit> = listOf(
                 { clearRemoteFrameRegistrationLocked() },
+                { clearRemoteAudioRegistrationLocked() },
                 { resources.pending?.context?.let { tearDownRoom(
                     it,
                     leave = false,

@@ -1,5 +1,5 @@
 //
-//  RealtimeVideoFrameDispatcherTest.kt
+//  RealtimeMediaFrameDispatcherTest.kt
 //  XmaxSDK
 //  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
@@ -12,6 +12,8 @@
 package ai.xmax.sdk.render.video
 
 import ai.xmax.sdk.RealtimeVideoFrame
+import ai.xmax.sdk.RealtimeMediaFrame
+import ai.xmax.sdk.foundation.rtc.RtcRemoteAudioFrame
 import ai.xmax.sdk.foundation.rtc.RtcRemoteVideoFrame
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -25,10 +27,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class RealtimeVideoFrameDispatcherTest {
+class RealtimeMediaFrameDispatcherTest {
     @Test
     fun `listener replacement generation change and clear discard queued pixels`() = runTest {
-        val dispatcher = RealtimeVideoFrameDispatcher(StandardTestDispatcher(testScheduler))
+        val dispatcher = RealtimeMediaFrameDispatcher(StandardTestDispatcher(testScheduler))
         val generation = Any()
         val nextGeneration = Any()
         val received = mutableListOf<Long>()
@@ -57,8 +59,8 @@ class RealtimeVideoFrameDispatcherTest {
     }
 
     @Test
-    fun `slow listeners receive latest pending frame and listener exceptions do not kill delivery`() = runTest {
-        val dispatcher = RealtimeVideoFrameDispatcher(StandardTestDispatcher(testScheduler))
+    fun `slow listeners preserve FIFO order and listener exceptions do not kill delivery`() = runTest {
+        val dispatcher = RealtimeMediaFrameDispatcher(StandardTestDispatcher(testScheduler))
         val generation = Any()
         val received = mutableListOf<Long>()
         dispatcher.setGeneration(generation)
@@ -71,12 +73,72 @@ class RealtimeVideoFrameDispatcherTest {
         }
         dispatcher.dispatch(generation, Frame(1))
         runCurrent()
-        assertEquals(listOf(1L, 101L), received)
+        assertEquals((1L..101L).toList(), received)
+    }
+
+    @Test
+    fun `audio and video share identity and native timeline but retain delivery order`() = runTest {
+        val dispatcher = RealtimeMediaFrameDispatcher(StandardTestDispatcher(testScheduler))
+        val generation = Any()
+        val events = mutableListOf<RealtimeMediaFrame>()
+        dispatcher.setGeneration(generation)
+        dispatcher.setListener { events += it }
+        dispatcher.dispatchAudio(generation, RtcRemoteAudioFrame(ByteArray(960), 48_000, 1, 480, 1_000))
+        dispatcher.dispatch(generation, Frame(1_005_000))
+        dispatcher.dispatchAudio(generation, RtcRemoteAudioFrame(ByteArray(960), 48_000, 1, 480, 1_000))
+        runCurrent()
+        assertEquals(listOf(1_000_000L, 1_005_000L, 1_010_000L), events.map { it.presentationTimeUs })
+        assertEquals(1, events.map { it.streamID }.toSet().size)
+        assertEquals(listOf(true, true, false), events.map { it.isDiscontinuous })
+        val previous = events.first().streamID
+        dispatcher.setGeneration(generation)
+        dispatcher.dispatch(generation, Frame(2_000_000))
+        runCurrent()
+        assertNotEquals(previous, events.last().streamID)
+    }
+
+    @Test
+    fun `overflow accounts for running callbacks and marks only the discarded track discontinuous`() = runTest {
+        val dispatcher = RealtimeMediaFrameDispatcher(StandardTestDispatcher(testScheduler), maximumPackets = 2)
+        val generation = Any()
+        val events = mutableListOf<RealtimeMediaFrame>()
+        dispatcher.setGeneration(generation)
+        dispatcher.setListener { frame ->
+            events += frame
+            if (frame.presentationTimeUs == 1L) {
+                dispatcher.dispatch(generation, Frame(2))
+                dispatcher.dispatchAudio(generation, RtcRemoteAudioFrame(ByteArray(960), 48_000, 1, 480, 1_000))
+            }
+        }
+        dispatcher.dispatch(generation, Frame(1))
+        runCurrent()
+        dispatcher.dispatchAudio(generation, RtcRemoteAudioFrame(ByteArray(960), 48_000, 1, 480, 1_010))
+        dispatcher.dispatch(generation, Frame(3))
+        runCurrent()
+        assertEquals(listOf(1L, 2L, 1_010_000L, 3L), events.map { it.presentationTimeUs })
+        assertEquals(listOf(true, false, true, false), events.map { it.isDiscontinuous })
+    }
+
+    @Test
+    fun `byte limit skips pixel copies and marks resumed video discontinuous`() = runTest {
+        val dispatcher = RealtimeMediaFrameDispatcher(StandardTestDispatcher(testScheduler), maximumBytes = 6)
+        val generation = Any()
+        val events = mutableListOf<RealtimeMediaFrame>()
+        dispatcher.setGeneration(generation)
+        dispatcher.setListener { events += it }
+        dispatcher.dispatch(generation, Frame(1))
+        val discarded = Frame(2)
+        dispatcher.dispatch(generation, discarded)
+        assertEquals(0, discarded.copies)
+        runCurrent()
+        dispatcher.dispatch(generation, Frame(3))
+        runCurrent()
+        assertEquals(listOf(true, true), events.map { it.isDiscontinuous })
     }
 
     @Test
     fun `production dispatcher runs off caller thread and never overlaps callbacks`() {
-        val dispatcher = RealtimeVideoFrameDispatcher()
+        val dispatcher = RealtimeMediaFrameDispatcher()
         val generation = Any()
         val caller = Thread.currentThread()
         val firstEntered = CountDownLatch(1)

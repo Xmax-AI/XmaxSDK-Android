@@ -12,7 +12,7 @@ package ai.xmax.sdk.render
 
 import androidx.compose.ui.unit.IntSize
 import ai.xmax.sdk.RealtimeVideoTrack
-import ai.xmax.sdk.RealtimeVideoFrameListener
+import ai.xmax.sdk.RealtimeMediaFrameListener
 import ai.xmax.sdk.foundation.rtc.RemoteStream
 import ai.xmax.sdk.media.interaction.InteractionFrame
 
@@ -22,12 +22,12 @@ import ai.xmax.sdk.media.interaction.InteractionFrame
 internal interface RenderControlling {
 
     /**
-     * Sets serialized remote video output without changing playback.
+     * Sets serialized remote audio/video output without changing playback.
      *
      * @param listener The output listener, or null to unregister it.
      */
-    fun setRemoteVideoFrameListener(
-        listener: RealtimeVideoFrameListener?,
+    fun setRemoteMediaFrameListener(
+        listener: RealtimeMediaFrameListener?,
     )
 
     /**

@@ -216,6 +216,19 @@ internal class RtcManagingStub(
 
     override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) = Unit
 
+    override fun setRemoteAudioFrameListener(
+        stream: ai.xmax.sdk.foundation.rtc.RemoteStream,
+        listener: ai.xmax.sdk.foundation.rtc.RtcRemoteAudioFrameListener?,
+    ) {
+        synchronized(lock) {
+            if (listener == null) remoteAudioFrameListeners.remove(stream) else remoteAudioFrameListeners[stream] = listener
+        }
+    }
+
+    private val remoteAudioFrameListeners = mutableMapOf<RemoteStream, ai.xmax.sdk.foundation.rtc.RtcRemoteAudioFrameListener>()
+
+    fun captureRemoteAudioFrameListener(stream: RemoteStream) = synchronized(lock) { remoteAudioFrameListeners[stream] }
+
     override fun setRemoteVideoFrameListener(
         stream: RemoteStream,
         listener: ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink?,

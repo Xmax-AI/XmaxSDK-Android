@@ -11,7 +11,7 @@
 
 package com.xmax.xlab.modules.xlrealtime.recording
 
-import ai.xmax.sdk.RealtimeVideoFrameListener
+import ai.xmax.sdk.RealtimeMediaFrameListener
 import com.xmax.xlab.R
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -36,7 +36,7 @@ internal enum class RecordingState { IDLE, PREPARING, RECORDING, SAVING }
  * 主线程管理一次录制意图；保存独立于页面协程，退出时等待文件收尾，不能把旧帧写进新录制。
  */
 internal class RealtimeRecordingController(
-    private val setFrameListener: suspend (RealtimeVideoFrameListener?) -> Unit,
+    private val setFrameListener: suspend (RealtimeMediaFrameListener?) -> Unit,
     private val createRecording: () -> VideoRecording,
     private val saveVideo: suspend (File) -> Unit,
     private val notify: (String) -> Unit,

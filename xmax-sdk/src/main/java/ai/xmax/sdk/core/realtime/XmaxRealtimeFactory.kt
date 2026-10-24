@@ -182,7 +182,7 @@ internal object XmaxRealtimeFactory {
         val mediaService = MediaService(options.model)
         val renderController = RenderController(
             rtcManager,
-            frameDispatcher = callbacks.remoteVideoFrames,
+            frameDispatcher = callbacks.remoteMediaFrames,
             errorListener = onError,
         )
         val streamController = StreamController(

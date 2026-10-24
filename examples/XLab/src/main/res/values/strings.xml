@@ -118,9 +118,9 @@
     <string name="realtime_record_stop">Stop</string>
     <string name="realtime_record_saving">Saving</string>
     <string name="realtime_record_stop_description">Stop recording and save the video</string>
-    <string name="realtime_record_start_description">Record generated video without audio</string>
+    <string name="realtime_record_start_description">Record generated video</string>
     <string name="realtime_record_start_failed">Couldn\'t start recording: %1$s</string>
-    <string name="realtime_record_saved">Video saved to Photos without audio.</string>
+    <string name="realtime_record_saved">Video saved to Photos.</string>
     <string name="realtime_record_failed">Recording failed: %1$s</string>
     <string name="realtime_record_detach_failed">Couldn\'t clear the recording callback: %1$s</string>
     <string name="realtime_record_cleanup_failed">Couldn\'t remove the temporary recording file.</string>

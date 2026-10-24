@@ -15,13 +15,20 @@ import io.agora.base.VideoFrame
 import java.nio.ByteBuffer
 
 /**
- * Borrows an Agora frame, copying I420 only when pixel access is requested; native VideoCanvas owns display.
+ * Borrows an Agora frame and exposes owned I420 on the remote audio/video rendering clock.
+ *
+ * Native VideoCanvas owns display; pixel data is copied only for application media output.
  */
 internal class AgoraRemoteVideoFrame(
     /**
      * The video frame to process, display, or submit.
      */
     private val frame: VideoFrame,
+
+    /**
+     * The fixed microsecond offset from native video time to the remote audio rendering clock.
+     */
+    private val renderClockOffsetUs: Long,
 ) : RtcRemoteVideoFrame {
 
     /**
@@ -56,7 +63,7 @@ internal class AgoraRemoteVideoFrame(
             return RealtimeVideoFrame(
                 width = width,
                 height = height,
-                presentationTimeUs = frame.timestampNs / 1_000L,
+                presentationTimeUs = resolvePresentationTimeUs(),
                 durationUs = null,
                 rotationDegrees = frame.rotation,
                 y = copyPlane(
@@ -81,6 +88,19 @@ internal class AgoraRemoteVideoFrame(
         } finally {
             i420.release()
         }
+    }
+
+    /**
+     * Maps native video time to the shared rendering clock without changing frame cadence.
+     *
+     * @return The presentation timestamp in microseconds, or -1 for an invalid native timestamp.
+     */
+    private fun resolvePresentationTimeUs(): Long {
+        if (frame.timestampNs < 0) return -1L
+
+        return runCatching {
+            Math.addExact(frame.timestampNs / 1_000L, renderClockOffsetUs)
+        }.getOrDefault(-1L)
     }
 
     /**
