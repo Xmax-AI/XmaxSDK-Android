@@ -189,10 +189,15 @@ XmaxSDK is distributed through [**Maven Central**](#maven-central).
 
 XmaxSDK uses Agora RTC and supports `RealtimeModel.X2_1_1_PREVIEW_CN` and
 `RealtimeModel.X2_1_1_PREVIEW_US`. Select China or global service routing through
-`XmaxConfiguration.environment`. The quality controls described below require
-the updated source until the next release is published.
+`XmaxConfiguration.environment`. The quality controls and unified remote
+audio/video output described below are available starting in version 1.0.12.
 
-When upgrading to **1.0.11**, remove the `videoFormat` argument from
+When upgrading to **1.0.12**, replace `setRemoteVideoFrameListener(...)` with
+`setRemoteMediaFrameListener(...)` and handle its audio and video packet variants.
+External sources providing their own preview must override `providesPreview` to
+`true`; otherwise XmaxSDK renders the submitted frames.
+
+When upgrading from **1.0.10 or earlier**, also remove the `videoFormat` argument from
 `createLocalImageStream(...)` and `createLocalVideoStream(uri)` calls and rebuild
 your application. The SDK now derives image and local video input formats from
 the media dimensions and model defaults.
@@ -221,7 +226,7 @@ Add XmaxSDK to your application module:
 
 ```kotlin
 dependencies {
-    implementation("ai.xmax:xmax-sdk:1.0.11")
+    implementation("ai.xmax:xmax-sdk:1.0.12")
 }
 ```
 
