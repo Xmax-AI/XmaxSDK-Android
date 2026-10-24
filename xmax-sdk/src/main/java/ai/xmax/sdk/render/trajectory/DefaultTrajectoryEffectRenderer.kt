@@ -85,7 +85,7 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * Starts drawing newly added trajectories.
+     * Begins trajectories for new touches.
      *
      * @param points Trajectory points with positions and timestamps.
      */
@@ -105,7 +105,7 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * Updates the positions of visible trajectories.
+     * Updates active trajectory positions.
      *
      * @param points Trajectory points with positions and timestamps.
      */
@@ -143,7 +143,7 @@ public class DefaultTrajectoryEffectRenderer(
     }
 
     /**
-     * Ends display of the specified trajectories.
+     * Ends active trajectories.
      *
      * @param identifiers The trajectory identifiers to end.
      */

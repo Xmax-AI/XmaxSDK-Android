@@ -11,7 +11,7 @@
 package ai.xmax.sdk.foundation.permissions
 
 /**
- * The platform permission checks required by XmaxSDK.
+ * An interface for SDK media permissions.
  */
 internal interface PermissionManaging {
 

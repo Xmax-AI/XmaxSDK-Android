@@ -28,7 +28,7 @@ import android.view.View
 import android.widget.FrameLayout
 
 /**
- * Collects multitouch input, drives trajectory effects, and submits interaction frames at a fixed cadence.
+ * Captures multitouch trajectories and samples interactions at a fixed frequency.
  *
  * @param context The Android context; views should use the current UI theme's context.
  */

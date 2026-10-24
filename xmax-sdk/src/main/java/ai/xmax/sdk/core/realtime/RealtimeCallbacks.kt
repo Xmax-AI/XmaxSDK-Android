@@ -29,7 +29,7 @@ internal class RealtimeCallbacks(
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
 
     /**
-     * The serial queue shared across runtime recreation within this manager's lifetime.
+     * The serial output queue retained for this realtime manager's lifetime.
      */
     val remoteVideoFrames: RealtimeVideoFrameDispatcher = RealtimeVideoFrameDispatcher(),
 ) {

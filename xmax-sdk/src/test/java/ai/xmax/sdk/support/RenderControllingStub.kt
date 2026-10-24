@@ -22,6 +22,7 @@ import kotlinx.coroutines.Deferred
 internal class RenderControllingStub(
     private val firstFrame: Deferred<Unit>? = null,
 ) : RenderControlling {
+    override fun setRemoteVideoFrameListener(listener: RealtimeVideoFrameListener?) = Unit
     override fun setRemoteStream(stream: RemoteStream?) = Unit
     override fun registerRemoteTrack(track: RealtimeVideoTrack, resolvedMediaSize: IntSize, interactionListener: (InteractionFrame) -> Unit) = Unit
     override suspend fun waitUntilRemoteFrameReady() { firstFrame?.await() }

@@ -26,13 +26,12 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 /**
- * Receives the active task identifier and media-normalized trajectories asynchronously.
+ * An asynchronous handler for task identifiers and normalized media trajectories.
  */
 internal typealias InteractionListener = suspend (String, List<RealtimePoint>) -> Unit
 
 /**
- * Maps viewport interaction to normalized coordinates using the fixed media baseline and submits
- * trajectories.
+ * Maps view touches to normalized media coordinates and sends trajectories.
  */
 internal class InteractionController(
     /**
@@ -72,7 +71,7 @@ internal class InteractionController(
     private var drainGeneration = 0L
 
     /**
-     * Enables interaction submission for a generation task.
+     * Starts accepting interactions for a generation task.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param videoFormat The fixed, resolved media format defining normalized coordinates.
@@ -94,7 +93,7 @@ internal class InteractionController(
     }
 
     /**
-     * Stops interaction submission and discards pending trajectories.
+     * Stops accepting interactions and clears pending trajectories.
      */
     override suspend fun stopInteraction() {
         val job = synchronized(stateLock) {
@@ -108,7 +107,7 @@ internal class InteractionController(
     }
 
     /**
-     * Submits a trajectory for the currently displayed image.
+     * Submits a touch trajectory.
      *
      * @param frame The current trajectory and displayed image dimensions.
      */

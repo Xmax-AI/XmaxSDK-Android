@@ -21,8 +21,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Listener revisions and generation identity reject stale frames; slow consumers retain at most one pending
- * frame.
+ * Dispatches remote video frames serially to the registered listener.
+ *
+ * Listener revisions and generation identity reject stale frames; slow consumers retain at most one
+ * pending frame.
  *
  * @param dispatcher The background operation dispatcher.
  */

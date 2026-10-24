@@ -23,9 +23,14 @@ import android.graphics.Bitmap
 import android.net.Uri
 
 /**
- * The local media capabilities exposed to Core.
+ * The media layer interface used by Core.
  */
 internal interface MediaControlling : InteractionControlling {
+
+    /**
+     * The local preview volume retained across source changes and resource release.
+     */
+    val localAudioVolume: Float
 
     /**
      * The active media track.
@@ -98,10 +103,11 @@ internal interface MediaControlling : InteractionControlling {
     )
 
     /**
-     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
-     * follow the model's constraints.
-     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
-     * disconnection without local playback.
+     * Creates a local camera stream and starts its preview.
+     *
+     * Your app must obtain camera permission before creation and recording permission before
+     * enabling the microphone. Microphone capture starts on connection and stops on disconnection,
+     * without local playback. Input dimensions must satisfy the model constraints.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @param position The front or rear camera to use.
@@ -134,15 +140,18 @@ internal interface MediaControlling : InteractionControlling {
     fun stopMicrophoneCapture()
 
     /**
-     * Stops and releases the current camera source; does nothing for other source types.
+     * Stops the local camera stream.
+     *
+     * Other input sources are unaffected.
      */
     suspend fun stopLocalCameraStream()
 
     /**
-     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from encoded image data.
+     *
+     * The stream retains the media aspect ratio and uses the model's default frame rate. Dimensions
+     * respect model pixel-area limits and four-pixel alignment; the generation canvas is selected
+     * separately.
      *
      * @param imageData Encoded image file bytes, not raw pixels.
      */
@@ -151,9 +160,11 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
-     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
-     * rate and a separately selected model canvas.
+     * Creates a continuous video frame stream from an Android bitmap.
+     *
+     * The stream retains the media aspect ratio and uses the model's default frame rate. Dimensions
+     * respect model pixel-area limits and four-pixel alignment; the generation canvas is selected
+     * separately.
      *
      * @param bitmap The Android image to process or display.
      */
@@ -162,10 +173,11 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * Creates a local image stream from a readable URI; your app owns read permissions.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from a local image URI.
+     *
+     * Your app must hold read permission. The stream retains the media aspect ratio and uses the
+     * model's default frame rate. Dimensions respect model pixel-area limits and four-pixel
+     * alignment; the generation canvas is selected separately.
      *
      * @param uri A media URI your app can read.
      */
@@ -174,16 +186,18 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * Stops and releases the current image source; does nothing for other source types.
+     * Stops the local image stream.
+     *
+     * Other input sources are unaffected.
      */
     suspend fun stopLocalImageStream()
 
     /**
-     * Creates a local video stream from a URI, including its audio track when present.
-     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
-     * output.
+     * Creates a looping audio and video stream from a local video URI.
+     *
+     * Your app must hold read permission. The stream retains the video's display aspect ratio and
+     * uses the model's default frame rate. Dimensions respect model pixel-area limits and
+     * four-pixel alignment; the generation canvas is resolved separately.
      *
      * @param uri A media URI your app can read.
      */
@@ -192,13 +206,12 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * Binds video collected, decoded, or processed by your app; your app owns camera or player startup,
-     * shutdown, and release.
-     * Video is provided by default; the source may optionally supply audio and a preview inside the SDK
-     * container.
-     * When videoFormat is absent, uses source dimensions and the model's default frame rate, subject to model
-     * validation and alignment.
-     * The external source must deliver frames matching sink.videoFormat.
+     * Binds an external video source with optional audio for realtime generation.
+     *
+     * Your app owns camera or player startup, shutdown, and release. The source may optionally
+     * supply a preview inside the SDK container. When videoFormat is absent, source dimensions and
+     * the model's default frame rate apply, subject to model validation and alignment. Frames must
+     * match the sink's video format.
      *
      * @param source The external media source whose lifecycle your app owns.
      * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
@@ -210,7 +223,7 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * Unbinds external input after disconnection without closing your app's camera or player.
+     * Unbinds external video and preview without releasing your app's capture resources.
      */
     suspend fun stopExternalVideoStream()
 
@@ -228,8 +241,9 @@ internal interface MediaControlling : InteractionControlling {
     ): RealtimeMediaStream
 
     /**
-     * Stops the current video source and releases decoding and preview resources; does nothing for other
-     * source types.
+     * Stops the local file video stream.
+     *
+     * Other input sources are unaffected.
      */
     suspend fun stopLocalVideoStream()
 

@@ -23,8 +23,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.coroutineContext
 
 /**
- * Sends room signaling in order, retaining only the latest unsent trajectory for each key when the budget is
- * exhausted.
+ * An ordered signaling queue respecting data-stream packet and byte limits.
+ *
+ * When the budget is exhausted, only the latest unsent trajectory for each key is retained.
  *
  * @param scope The sending scope owned by the room lifecycle.
  */

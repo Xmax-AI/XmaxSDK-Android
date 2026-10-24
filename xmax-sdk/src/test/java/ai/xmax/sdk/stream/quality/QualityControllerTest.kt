@@ -30,6 +30,28 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 public class QualityControllerTest {
     @Test
+    public fun `quality reset discards queued callbacks while retaining public registrations`() = runTest {
+        val rtc = RtcManagingStub()
+        val controller = QualityController(rtc, callbackScope = this)
+        var networkCount = 0
+        var performanceCount = 0
+        controller.setNetworkQualityListener { networkCount++ }
+        controller.setPerformanceAlarmListener { performanceCount++ }
+        rtc.emitNetworkQuality(RtcQualityLevel.BAD, RtcQualityLevel.BAD)
+        rtc.emitPerformanceAlarm(true, 540, 960, 15)
+        controller.resetQuality()
+        runCurrent()
+        assertEquals(0, networkCount)
+        assertEquals(0, performanceCount)
+
+        rtc.emitNetworkQuality(RtcQualityLevel.GOOD, RtcQualityLevel.GOOD)
+        rtc.emitPerformanceAlarm(false, 0, 0, 0)
+        runCurrent()
+        assertEquals(1, networkCount)
+        assertEquals(1, performanceCount)
+    }
+
+    @Test
     public fun `quality policies restore history and commit only successful adjustments`() = runTest {
         val history = QualityHistory(now = { 1_000L })
         history.write(downlink = false, level = 2)

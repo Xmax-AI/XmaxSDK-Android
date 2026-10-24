@@ -17,11 +17,7 @@ import ai.xmax.sdk.service.storage.StorageServicing
 import java.io.File
 
 /**
- * Adapts storage service results and progress to the public SDK models.
- * StorageService validates uploads, requests credentials, and checks content safety; the transport owns
- * transfer and cancellation.
- * Path overloads delegate to File overloads without intercepting exceptions or changing progress callback
- * threads.
+ * Provides public file transfer operations backed by the storage service.
  */
 internal class XmaxStorageManager(
     /**
@@ -31,7 +27,7 @@ internal class XmaxStorageManager(
 ) : XmaxStorageManaging {
 
     /**
-     * Uploads encoded image bytes.
+     * Uploads encoded image data.
      *
      * @param data Encoded image file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -92,7 +88,7 @@ internal class XmaxStorageManager(
     )
 
     /**
-     * Uploads encoded image bytes and checks content safety.
+     * Uploads encoded image data and checks its content before returning.
      *
      * @param data Encoded image file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -115,7 +111,7 @@ internal class XmaxStorageManager(
         .toPublicModel()
 
     /**
-     * Uploads a local image file and checks content safety.
+     * Uploads a local image file and checks its content before returning.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -135,7 +131,7 @@ internal class XmaxStorageManager(
         .toPublicModel()
 
     /**
-     * Uploads an image file path and checks content safety.
+     * Uploads a local image file and checks its content before returning.
      *
      * @param filePath A readable local file path.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -153,7 +149,7 @@ internal class XmaxStorageManager(
     )
 
     /**
-     * Uploads encoded video bytes.
+     * Uploads encoded video data.
      *
      * @param data Encoded video file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -214,7 +210,7 @@ internal class XmaxStorageManager(
     )
 
     /**
-     * Downloads a remote image to a local file.
+     * Downloads an image to the specified local file.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.
@@ -234,7 +230,7 @@ internal class XmaxStorageManager(
         .toPublicModel()
 
     /**
-     * Downloads a remote image to a local file path.
+     * Downloads an image to the specified local file.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destinationPath The destination path replaced after a successful download.
@@ -252,7 +248,7 @@ internal class XmaxStorageManager(
     )
 
     /**
-     * Downloads a remote video to a local file.
+     * Downloads a video to the specified local file.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.
@@ -272,7 +268,7 @@ internal class XmaxStorageManager(
         .toPublicModel()
 
     /**
-     * Downloads a remote video to a local file path.
+     * Downloads a video to the specified local file.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destinationPath The destination path replaced after a successful download.

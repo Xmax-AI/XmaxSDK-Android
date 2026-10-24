@@ -19,7 +19,7 @@ import ai.xmax.sdk.RealtimePerformanceAlarmListener
 import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
- * The video statistics, network quality, and device alarm listener capabilities.
+ * An interface for video statistics, network quality, and performance alarms.
  */
 internal interface QualityControlling {
 
@@ -29,7 +29,7 @@ internal interface QualityControlling {
     val qualityConfiguration: QualityConfiguration?
 
     /**
-     * Prepares independent transport levels from media dimensions and successful history.
+     * Prepares initial transport quality from the media baseline and model history.
      *
      * @param baseline The fixed, resolved local media format.
      * @param minimumInputPixels The minimum uplink pixel area.
@@ -43,7 +43,7 @@ internal interface QualityControlling {
     ): QualityConfiguration
 
     /**
-     * Proposes transport levels from a fresh sample without committing them.
+     * Proposes quality levels without committing them.
      *
      * @param quality The directional network quality.
      * @param sampledAt The sample time on the monotonic millisecond clock.
@@ -55,7 +55,7 @@ internal interface QualityControlling {
     ): QualityChange
 
     /**
-     * Commits an adjustment result and persists successful levels.
+     * Commits an adjustment result, persisting successful levels only.
      *
      * @param downlink Whether the adjustment affects returned video.
      * @param level The attempted quality level.
@@ -87,7 +87,7 @@ internal interface QualityControlling {
     fun resetQuality()
 
     /**
-     * Receives internal adaptation samples independently of the app's network listener.
+     * Sets the internal adaptation listener independently of your app's network listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -96,7 +96,7 @@ internal interface QualityControlling {
     )
 
     /**
-     * Enables or disables uplink statistics and clears the current snapshot.
+     * Updates uplink statistics availability and clears previous statistics.
      *
      * @param enabled Whether the capability is enabled.
      */
@@ -105,7 +105,9 @@ internal interface QualityControlling {
     )
 
     /**
-     * Sets the downlink statistics user and clears the snapshot; null stops collection.
+     * Changes the downlink statistics target and clears previous statistics.
+     *
+     * Null stops collection.
      *
      * @param userId The room's business user identifier.
      */
@@ -114,8 +116,9 @@ internal interface QualityControlling {
     )
 
     /**
-     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the uplink video statistics listener.
+     *
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -124,8 +127,9 @@ internal interface QualityControlling {
     )
 
     /**
-     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the downlink video statistics listener.
+     *
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -134,7 +138,7 @@ internal interface QualityControlling {
     )
 
     /**
-     * Sets the RTC network quality listener; null unregisters it.
+     * Sets the network quality listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -143,7 +147,7 @@ internal interface QualityControlling {
     )
 
     /**
-     * Sets the RTC performance alarm listener; null unregisters it.
+     * Sets the device performance alarm listener.
      *
      * @param listener The event listener, or null to unregister it.
      */

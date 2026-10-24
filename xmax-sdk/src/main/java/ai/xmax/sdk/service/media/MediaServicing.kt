@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.geometry.Size
 
 /**
- * The sizing rules for local media, model canvases, and downlink output.
+ * The sizing rules for local media, generation canvases, and returned media.
  */
 public interface MediaServicing {
 
@@ -24,7 +24,9 @@ public interface MediaServicing {
     public val model: RealtimeModel
 
     /**
-     * Resolves media within the maximum pixel area without enlargement, using four-pixel alignment and
+     * Resolves local media dimensions and validates camera resolution buckets.
+     *
+     * Non-camera media respects pixel-area limits and four-pixel alignment without enlargement,
      * preserving exact aspect ratio where possible.
      *
      * @param size The requested camera dimensions or the source's orientation-corrected pixel dimensions.
@@ -39,7 +41,7 @@ public interface MediaServicing {
     ): IntSize
 
     /**
-     * Selects the closest model canvas aspect ratio without changing local media format.
+     * Selects the closest generation canvas without changing local media dimensions.
      *
      * @param size The media display dimensions, in pixels.
      * @return The matching model bucket, or an area-limited, aligned canvas when buckets are absent.
@@ -50,8 +52,9 @@ public interface MediaServicing {
     ): IntSize
 
     /**
-     * Resolves downlink dimensions within the bounds without enlarging media, preserving exact aspect ratio
-     * where possible.
+     * Resolves returned dimensions within quality limits.
+     *
+     * Local media is not enlarged; exact aspect ratio is preserved where possible.
      *
      * @param sourceSize The fixed media baseline dimensions, in pixels.
      * @param maximumSize The downlink bounds, which may include fractional pixels.

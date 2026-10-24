@@ -13,12 +13,12 @@ package ai.xmax.sdk.foundation.storage
 import java.io.File
 
 /**
- * The basic file upload and download capabilities.
+ * An interface for file uploads and downloads.
  */
 internal interface StorageManaging {
 
     /**
-     * Uploads a file or bytes to an object key and returns accessible object metadata.
+     * Uploads data or a local file using temporary credentials.
      *
      * @param source The local file or bytes to upload.
      * @param objectKey The complete object key within the bucket.
@@ -36,7 +36,9 @@ internal interface StorageManaging {
     ): StoredFile
 
     /**
-     * Downloads a file, replacing the destination only on success and retaining existing contents on failure.
+     * Downloads a file to the specified local location.
+     *
+     * The destination is replaced only on success; existing contents are retained on failure.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.

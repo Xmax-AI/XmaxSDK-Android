@@ -27,9 +27,14 @@ import ai.xmax.sdk.stream.quality.QualityConfiguration
 import ai.xmax.sdk.stream.quality.QualityChange
 
 /**
- * The transport capabilities exposed to Core.
+ * The transport interface used by Core.
  */
 internal interface StreamControlling {
+
+    /**
+     * The remote playback volume retained across subscriptions and disconnection.
+     */
+    val remoteAudioVolume: Float
 
     /**
      * The current connection quality configuration, or null before preparation or after reset.
@@ -37,7 +42,7 @@ internal interface StreamControlling {
     val qualityConfiguration: QualityConfiguration?
 
     /**
-     * Prepares independent transport levels from media dimensions and successful history.
+     * Prepares initial transport quality from the media baseline and model history.
      *
      * @param baseline The fixed, resolved local media format.
      * @param minimumInputPixels The minimum uplink pixel area.
@@ -51,7 +56,7 @@ internal interface StreamControlling {
     ): QualityConfiguration
 
     /**
-     * Proposes transport levels from a fresh sample without committing them.
+     * Proposes quality levels without committing them.
      *
      * @param quality The directional network quality.
      * @param sampledAt The sample time on the monotonic millisecond clock.
@@ -63,7 +68,7 @@ internal interface StreamControlling {
     ): QualityChange
 
     /**
-     * Commits an adjustment result and persists successful levels.
+     * Commits an adjustment result, persisting successful levels only.
      *
      * @param downlink Whether the adjustment affects returned video.
      * @param level The attempted quality level.
@@ -95,7 +100,7 @@ internal interface StreamControlling {
     fun resetQuality()
 
     /**
-     * Receives internal adaptation samples without occupying the public network listener.
+     * Sets the internal adaptation listener independently of your app's network listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -104,8 +109,9 @@ internal interface StreamControlling {
     )
 
     /**
-     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the uplink video statistics listener.
+     *
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -114,8 +120,9 @@ internal interface StreamControlling {
     )
 
     /**
-     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the downlink video statistics listener.
+     *
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -124,7 +131,7 @@ internal interface StreamControlling {
     )
 
     /**
-     * Updates uplink dimensions, frame rate, and encoder bitrate.
+     * Sets the realtime video encoder configuration.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
@@ -133,7 +140,7 @@ internal interface StreamControlling {
     )
 
     /**
-     * Sets the RTC network quality listener; null unregisters it.
+     * Sets the network quality listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -142,7 +149,7 @@ internal interface StreamControlling {
     )
 
     /**
-     * Sets the RTC performance alarm listener; null unregisters it.
+     * Sets the device performance alarm listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -151,7 +158,9 @@ internal interface StreamControlling {
     )
 
     /**
-     * Sets result audio volume from 0 to 1 and retains it for future subscriptions.
+     * Sets remote generated audio volume.
+     *
+     * The volume is retained for future subscriptions.
      *
      * @param volume The playback volume, from 0 to 1.
      */
@@ -242,12 +251,12 @@ internal interface StreamControlling {
     )
 
     /**
-     * Subscribes to result audio and applies remote playback volume.
+     * Subscribes to generated audio after remote video is ready.
      */
     fun activateRemoteAudio()
 
     /**
-     * Updates the current task's conditions without creating another server session.
+     * Sends an active task's condition update.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
@@ -264,7 +273,7 @@ internal interface StreamControlling {
     )
 
     /**
-     * Sends a stop signal for the generation task.
+     * Stops generation and clears its result stream.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      */
@@ -273,7 +282,7 @@ internal interface StreamControlling {
     )
 
     /**
-     * Submits media-normalized trajectories for the current task.
+     * Sends a generation task's trajectory.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param points Normalized media trajectory points from 0 to 1.

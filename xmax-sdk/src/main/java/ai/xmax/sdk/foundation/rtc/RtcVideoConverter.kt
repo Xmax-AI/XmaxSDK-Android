@@ -21,7 +21,9 @@ import io.agora.rtc2.video.VideoCanvas
 import io.agora.rtc2.video.VideoEncoderConfiguration
 
 /**
- * Converts neutral video configuration to Agora types; output buffers support synchronous submission only.
+ * Converts between SDK and Agora video types.
+ *
+ * Output buffers support synchronous submission only.
  */
 internal object RtcVideoConverter {
 

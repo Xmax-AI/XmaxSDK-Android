@@ -51,6 +51,42 @@ import org.junit.Test
 
 class CameraControllerTest {
     @Test
+    fun `shared media components retain volume and rebind preview readiness after engine release`() = runTest {
+        val rtc = CameraRtcStub()
+        var permissionChecks = 0
+        val permissions = object : PermissionManaging {
+            override suspend fun ensureCameraPermission() { permissionChecks++ }
+            override suspend fun ensureMicrophonePermission() = Unit
+        }
+        val camera = CameraController(rtc, permissions, IdentityMediaService)
+        val media = MediaController(rtc, camera)
+        var readyCount = 0
+        val listener = RealtimeCameraPreviewReadyListener { readyCount++ }
+        media.setCameraPreviewReadyListener(listener)
+        media.setLocalAudioVolume(0.2f)
+
+        assertEquals(0, rtc.initializeCount)
+        assertEquals(0, permissionChecks)
+        assertTrue(rtc.captureFormats.isEmpty())
+
+        repeat(2) {
+            media.createLocalCameraStream(RealtimeVideoFormat(704, 1280, 24), CameraPosition.FRONT)
+            assertSame(listener, rtc.previewListener)
+            rtc.previewListener!!.onCameraPreviewReady()
+            assertEquals(0.2f, media.localAudioVolume)
+            media.stopLocalStream()
+            assertNull(rtc.previewListener)
+            assertNull(media.currentTrack)
+            assertEquals(0.2f, media.localAudioVolume)
+        }
+
+        assertEquals(2, rtc.initializeCount)
+        assertEquals(2, rtc.destroyCount)
+        assertEquals(2, permissionChecks)
+        assertEquals(2, readyCount)
+    }
+
+    @Test
     fun `format update preserves track preview binding and camera position`() = runTest {
         val rtc = CameraRtcStub()
         val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1))
@@ -336,13 +372,16 @@ private class CameraRtcStub : RtcManaging {
     var audioStopCount = 0
     var unbindCount = 0
     var destroyCount = 0
+    var initializeCount = 0
+    var previewListener: RealtimeCameraPreviewReadyListener? = null
     var startFailure: Throwable? = null
     var stopFailure: Throwable? = null
     var unbindFailure: Throwable? = null
 
-    override suspend fun initialize() = Unit
+    override suspend fun initialize() { initializeCount++ }
     override suspend fun destroy() {
         destroyCount += 1
+        previewListener = null
     }
     override fun configureVideoEncoding(configuration: VideoEncodingConfiguration) = Unit
     override fun pushExternalVideoFrame(frame: VideoFrame, seiData: ByteArray?) = Unit
@@ -395,7 +434,7 @@ private class CameraRtcStub : RtcManaging {
 
     override fun discardPendingMessages(key: String?) = Unit
     override fun setEventListener(listener: RtcEventListener?) = Unit
-    override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) = Unit
+    override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) { previewListener = listener }
     override fun setRemoteVideoFrameListener(
         stream: RemoteStream,
         listener: ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink?,

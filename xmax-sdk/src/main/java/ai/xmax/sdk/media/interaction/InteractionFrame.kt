@@ -15,7 +15,7 @@ import android.graphics.PointF
 import android.util.SizeF
 
 /**
- * Interaction input captured from a rendering viewport.
+ * An interaction sampled from a video viewport.
  */
 internal data class InteractionFrame(
     /**

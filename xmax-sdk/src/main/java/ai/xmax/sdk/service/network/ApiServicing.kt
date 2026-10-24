@@ -16,7 +16,7 @@ import ai.xmax.sdk.XmaxErrorCode
 import org.json.JSONObject
 
 /**
- * HTTP methods supported by the Xmax API.
+ * An HTTP method supported by the Xmax API.
  */
 internal enum class ApiMethod(
     /**
@@ -47,7 +47,7 @@ internal enum class ApiMethod(
 }
 
 /**
- * The basic Xmax API request capabilities.
+ * An interface for Xmax API requests.
  */
 internal interface ApiServicing {
 

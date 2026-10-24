@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * The clockwise rotation of a video frame.
+ * The clockwise rotation applied to a video frame.
  */
 internal enum class VideoRotation(
     /**

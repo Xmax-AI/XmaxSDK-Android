@@ -25,7 +25,7 @@ import kotlin.math.abs
 import kotlin.math.ln
 
 /**
- * Resolves local media, model canvases, and downlink dimensions.
+ * The sizing rules for local media, generation canvases, and returned media.
  */
 internal class MediaService(
     /**
@@ -35,7 +35,7 @@ internal class MediaService(
 ) : MediaServicing {
 
     /**
-     * Selects the closest model canvas aspect ratio for an aspect-preserving media stream.
+     * Selects the closest generation canvas without changing local media dimensions.
      *
      * @param size The media display dimensions, in pixels.
      * @return The model canvas with the closest aspect ratio.
@@ -60,8 +60,9 @@ internal class MediaService(
     }
 
     /**
-     * Validates camera resolution buckets and resolves area-limited, four-pixel-aligned media without
-     * enlargement.
+     * Resolves local media dimensions and validates camera resolution buckets.
+     *
+     * Non-camera media respects pixel-area limits and four-pixel alignment without enlargement.
      *
      * @param size The media frame dimensions, in pixels.
      * @param source The source kind; only cameras must exactly match a fixed bucket.
@@ -115,7 +116,9 @@ internal class MediaService(
     }
 
     /**
-     * Resolves four-pixel-aligned downlink dimensions within the bounds without enlargement.
+     * Resolves returned dimensions within quality limits.
+     *
+     * Dimensions use four-pixel alignment without enlarging local media.
      *
      * @param sourceSize The fixed media baseline dimensions, in pixels.
      * @param maximumSize The downlink dimension bounds, which may include fractional pixels.

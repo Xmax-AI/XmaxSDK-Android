@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
- * Media upload, download, format validation, and optional image safety checks.
+ * Coordinates media transfers, temporary credentials, and image safety checks.
  */
 internal class StorageService(
     /**
@@ -48,7 +48,7 @@ internal class StorageService(
 ) : StorageServicing {
 
     /**
-     * Uploads image bytes and returns accessible storage metadata.
+     * Uploads encoded image data.
      *
      * @param data Encoded image file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -71,7 +71,7 @@ internal class StorageService(
     )
 
     /**
-     * Uploads a local image and returns accessible storage metadata.
+     * Uploads a local image file.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -92,7 +92,7 @@ internal class StorageService(
     )
 
     /**
-     * Uploads image bytes and returns the result after content safety validation.
+     * Uploads image data and verifies content safety.
      *
      * @param data Encoded image file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -115,7 +115,7 @@ internal class StorageService(
     )
 
     /**
-     * Uploads a local image and returns the result after content safety validation.
+     * Uploads a local image and verifies content safety.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -136,7 +136,7 @@ internal class StorageService(
     )
 
     /**
-     * Uploads video bytes and returns accessible storage metadata.
+     * Uploads encoded video data.
      *
      * @param data Encoded video file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -159,7 +159,7 @@ internal class StorageService(
     )
 
     /**
-     * Uploads a local video and returns accessible storage metadata.
+     * Uploads a local video file.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -180,7 +180,9 @@ internal class StorageService(
     )
 
     /**
-     * Downloads an image and returns local file metadata, retaining the existing destination on failure.
+     * Downloads a remote image to a local file.
+     *
+     * The existing destination is retained on failure.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.
@@ -198,7 +200,9 @@ internal class StorageService(
     )
 
     /**
-     * Downloads a video and returns local file metadata, retaining the existing destination on failure.
+     * Downloads a remote video to a local file.
+     *
+     * The existing destination is retained on failure.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.

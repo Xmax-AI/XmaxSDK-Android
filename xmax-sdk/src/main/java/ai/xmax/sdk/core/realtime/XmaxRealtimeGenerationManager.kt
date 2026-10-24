@@ -19,10 +19,11 @@ import java.util.Base64
 import java.util.UUID
 
 /**
- * Owns generation identifiers, cached conditions, and interaction bindings; XmaxRealtimeLifecycleManager serializes
- * operations.
- * Core shares one taskId with Stream and Interaction to associate signaling, frames, and trajectories.
- * Generation becomes ready after Stream confirmation, a renderable remote frame, and audio activation.
+ * Coordinates generation signaling, remote stream confirmation, condition updates, and
+ * interactions.
+ *
+ * Generation becomes ready after result-stream confirmation, a renderable remote frame, and audio
+ * activation.
  */
 internal class XmaxRealtimeGenerationManager(
     /**
@@ -72,10 +73,10 @@ internal class XmaxRealtimeGenerationManager(
     val cachedFaceRestoration: Boolean get() = synchronized(stateLock) { currentFaceRestoration }
 
     /**
-     * Requires initial generation conditions and permits later reuse of cached conditions.
+     * Verifies that the request supplies a context or can reuse a cached context.
      *
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
+     * @param context The generation conditions. Required for the first request; null reuses cached
+     * conditions thereafter.
      */
     fun validateContext(
         context: RealtimeContext?,
@@ -89,12 +90,14 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * Starts a generation task and commits its context after its first remote frame and audio are ready.
-     * Failure or cancellation stops that taskId; only results passing ensureCurrent can return.
+     * Starts generation and waits for result-stream confirmation and a displayable first frame.
+     *
+     * Conditions are retained after the first frame and audio are ready. Failure or cancellation
+     * stops the task; only results passing the validity check can return.
      *
      * @param videoFormat The resolved local media baseline used for interaction coordinates.
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
+     * @param context The generation conditions. Required for the first request; null reuses cached
+     * conditions thereafter.
      * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
      * @param targetVideoFormat The downlink output format.
      * @param generationVideoFormat The model canvas format, independent of media input; defaults to
@@ -162,13 +165,13 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * Updates an existing task using its taskId; null conditions reuse the cache, while face restoration uses
-     * this call's setting.
+     * Updates generation conditions and interactions without waiting for a new stream confirmation.
+     *
+     * Null conditions reuse the cache; face restoration uses the setting supplied with this call.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param videoFormat The resolved local media baseline used for interaction coordinates.
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
+     * @param context The requested conditions, or null to reuse the most recent successful conditions.
      * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
      * @param generationVideoFormat The model canvas format, independent of media input; defaults to
      * `videoFormat`.
@@ -211,8 +214,10 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * Stops interaction and the task while retaining successful conditions for another generation; attempts
-     * every independent cleanup step.
+     * Stops interactions and sends a stop-generation signal.
+     *
+     * Successful conditions are retained for another generation; every independent cleanup step is
+     * attempted.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      */
@@ -226,8 +231,9 @@ internal class XmaxRealtimeGenerationManager(
     }
 
     /**
-     * Clears cached conditions and stops generation when the connection resets; an empty taskId stops the
-     * current task in Stream.
+     * Stops generation and clears cached conditions.
+     *
+     * An empty task identifier stops the current task in the stream controller.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      */
@@ -247,8 +253,7 @@ internal class XmaxRealtimeGenerationManager(
     internal companion object {
 
         /**
-         * Encodes the UUID's 16 bytes as unpadded Base64URL and identifies the platform with a query
-         * parameter.
+         * Creates a random task identifier with an Android platform marker.
          *
          * @return A unique identifier for generation signaling.
          */

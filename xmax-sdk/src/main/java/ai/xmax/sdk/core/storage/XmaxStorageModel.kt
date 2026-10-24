@@ -56,7 +56,7 @@ public fun interface XmaxStorageProgressListener {
 }
 
 /**
- * A successfully uploaded file.
+ * A remote file produced by a successful upload.
  */
 public data class XmaxUploadedFile(
     /**
@@ -76,7 +76,7 @@ public data class XmaxUploadedFile(
 )
 
 /**
- * A successfully downloaded file.
+ * A local file produced by a successful download.
  */
 public data class XmaxDownloadedFile(
     /**

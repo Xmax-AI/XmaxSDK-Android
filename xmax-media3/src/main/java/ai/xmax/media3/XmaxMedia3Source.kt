@@ -29,11 +29,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * A Media3 adapter supporting SDR, normal-speed playback, and PCM16 audio; your app creates and releases the
- * player.
- * Pass renderersFactory when creating ExoPlayer, then call attachPlayer. A player can bind only one video
+ * A Media3 source supplying playback video and PCM audio for realtime generation.
+ *
+ * Supports SDR, normal-speed playback, and PCM16 audio. Your app creates and releases the player. Pass
+ * [renderersFactory] when creating ExoPlayer, then call [attachPlayer]. A player can bind only one video
  * output.
- * SDK stop and close only detach frame delivery. Finally release ExoPlayer before calling release to free GL
+ *
+ * SDK stop and close only detach frame delivery. Release ExoPlayer before calling [release] to free GL
  * resources.
  *
  * @param context The Android context used for system services and media resources.

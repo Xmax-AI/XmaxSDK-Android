@@ -13,7 +13,7 @@ package ai.xmax.sdk.service.realtime
 import ai.xmax.sdk.XmaxError
 
 /**
- * A realtime generation session.
+ * An Xmax realtime generation session.
  */
 internal data class RealtimeSession(
     /**

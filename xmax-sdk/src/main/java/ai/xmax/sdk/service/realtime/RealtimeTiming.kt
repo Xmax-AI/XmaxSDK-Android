@@ -17,7 +17,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 /**
- * Records startup, connection, and first-frame durations for performance logging.
+ * Records the durations of realtime generation startup stages.
  */
 internal class RealtimeTiming(
     /**

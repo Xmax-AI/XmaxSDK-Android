@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * The video's scaling mode within its rendering container.
+ * The layout of video content within a rendering view.
  */
 public enum class VideoContentMode(
     /**

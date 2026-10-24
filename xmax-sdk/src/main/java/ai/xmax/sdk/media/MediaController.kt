@@ -93,6 +93,12 @@ internal class MediaController(
     private var activeSource: LocalMediaKind? = null
 
     /**
+     * The successfully configured local preview volume, from 0 to 1.
+     */
+    @Volatile override var localAudioVolume: Float = 0.45f
+        private set
+
+    /**
      * The track supplied by the current media source.
      */
     override val currentTrack: RealtimeVideoTrack?
@@ -182,7 +188,7 @@ internal class MediaController(
     }
 
     /**
-     * Enables interaction submission for a generation task.
+     * Starts accepting interactions for a generation task.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
@@ -198,14 +204,14 @@ internal class MediaController(
     }
 
     /**
-     * Stops interaction submission and discards pending trajectories.
+     * Stops accepting interactions and clears pending trajectories.
      */
     override suspend fun stopInteraction() {
         interactionController.stopInteraction()
     }
 
     /**
-     * Submits a trajectory for the currently displayed image.
+     * Submits a touch trajectory.
      *
      * @param frame The current trajectory and displayed image dimensions.
      */
@@ -216,10 +222,11 @@ internal class MediaController(
     }
 
     /**
-     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
-     * follow the model's constraints.
-     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
-     * disconnection without local playback.
+     * Creates a local camera stream and starts its preview.
+     *
+     * Your app must obtain camera permission before creation and recording permission before
+     * enabling the microphone. Microphone capture starts on connection and stops on disconnection,
+     * without local playback. Input dimensions must satisfy the model constraints.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @param position The front or rear camera to use.
@@ -276,10 +283,11 @@ internal class MediaController(
     }
 
     /**
-     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from encoded image data.
+     *
+     * The stream retains the media aspect ratio and uses the model's default frame rate. Dimensions
+     * respect model pixel-area limits and four-pixel alignment; the generation canvas is selected
+     * separately.
      *
      * @param imageData Encoded image file bytes, not raw pixels.
      */
@@ -290,9 +298,11 @@ internal class MediaController(
     }
 
     /**
-     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
-     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
-     * rate and a separately selected model canvas.
+     * Creates a continuous video frame stream from an Android bitmap.
+     *
+     * The stream retains the media aspect ratio and uses the model's default frame rate. Dimensions
+     * respect model pixel-area limits and four-pixel alignment; the generation canvas is selected
+     * separately.
      *
      * @param bitmap The Android image to process or display.
      */
@@ -303,10 +313,11 @@ internal class MediaController(
     }
 
     /**
-     * Creates a local image stream from a readable URI; your app owns read permissions.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from a local image URI.
+     *
+     * Your app must hold read permission. The stream retains the media aspect ratio and uses the
+     * model's default frame rate. Dimensions respect model pixel-area limits and four-pixel
+     * alignment; the generation canvas is selected separately.
      *
      * @param uri A media URI your app can read.
      */
@@ -317,14 +328,18 @@ internal class MediaController(
     }
 
     /**
-     * Stops and releases the current camera source; does nothing for other source types.
+     * Stops the local camera stream.
+     *
+     * Other input sources are unaffected.
      */
     override suspend fun stopLocalCameraStream() {
         stopSource(LocalMediaKind.CAMERA)
     }
 
     /**
-     * Stops and releases the current image source; does nothing for other source types.
+     * Stops the local image stream.
+     *
+     * Other input sources are unaffected.
      */
     override suspend fun stopLocalImageStream() {
         stopSource(LocalMediaKind.IMAGE)
@@ -343,11 +358,11 @@ internal class MediaController(
         get() = synchronized(stateLock) { activeSource == LocalMediaKind.IMAGE }
 
     /**
-     * Creates a local video stream from a URI, including its audio track when present.
-     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
-     * output.
+     * Creates a looping audio and video stream from a local video URI.
+     *
+     * Your app must hold read permission. The stream retains the video's display aspect ratio and
+     * uses the model's default frame rate. Dimensions respect model pixel-area limits and
+     * four-pixel alignment; the generation canvas is resolved separately.
      *
      * @param uri A media URI your app can read.
      */
@@ -358,13 +373,12 @@ internal class MediaController(
     }
 
     /**
-     * Binds video collected, decoded, or processed by your app; your app owns camera or player startup,
-     * shutdown, and release.
-     * Video is provided by default; the source may optionally supply audio and a preview inside the SDK
-     * container.
-     * When videoFormat is absent, uses source dimensions and the model's default frame rate, subject to model
-     * validation and alignment.
-     * The external source must deliver frames matching sink.videoFormat.
+     * Binds an external video source with optional audio for realtime generation.
+     *
+     * Your app owns camera or player startup, shutdown, and release. The source may optionally
+     * supply a preview inside the SDK container. When videoFormat is absent, source dimensions and
+     * the model's default frame rate apply, subject to model validation and alignment. Frames must
+     * match the sink's video format.
      *
      * @param source The external media source whose lifecycle your app owns.
      * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
@@ -380,7 +394,7 @@ internal class MediaController(
         ) }
 
     /**
-     * Unbinds external input after disconnection without closing your app's camera or player.
+     * Unbinds external video and preview without releasing your app's capture resources.
      */
     override suspend fun stopExternalVideoStream() { stopSource(LocalMediaKind.EXTERNAL) }
 
@@ -408,8 +422,9 @@ internal class MediaController(
     }
 
     /**
-     * Stops the current video source and releases decoding and preview resources; does nothing for other
-     * source types.
+     * Stops the local file video stream.
+     *
+     * Other input sources are unaffected.
      */
     override suspend fun stopLocalVideoStream() {
         stopSource(LocalMediaKind.VIDEO)
@@ -442,6 +457,7 @@ internal class MediaController(
     ) {
         videoController?.setLocalAudioVolume(volume)
         externalController?.setAudio(volume = volume)
+        localAudioVolume = volume
     }
 
     /**
@@ -576,7 +592,7 @@ internal class MediaController(
     )
 
     /**
-     * The kind of local input owned by this manager.
+     * The active local input source.
      */
     private enum class LocalMediaKind {
 

@@ -13,7 +13,7 @@ package ai.xmax.sdk
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * A media stream for local preview or generated output.
+ * A realtime stream containing local input or remote generation.
  */
 public class RealtimeMediaStream internal constructor(
     /**
@@ -28,7 +28,7 @@ public class RealtimeMediaStream internal constructor(
 )
 
 /**
- * A realtime video track with mutable metadata snapshots.
+ * A realtime video track with dynamic metadata.
  *
  * @param videoFormat The initial format, omitted when unknown.
  * @param position The initial lens position of a camera track.
@@ -54,13 +54,13 @@ public class RealtimeVideoTrack internal constructor(
     )
 
     /**
-     * The current media input format, unaffected by transmission quality changes.
+     * The track's current video format.
      */
     public val videoFormat: RealtimeVideoFormat?
         get() = metadata.get().videoFormat
 
     /**
-     * The camera lens position for this track.
+     * The local camera track's current camera position, or null for a noncamera track.
      */
     public val position: CameraPosition?
         get() = metadata.get().position
@@ -97,7 +97,7 @@ public class RealtimeVideoTrack internal constructor(
         val videoFormat: RealtimeVideoFormat?,
 
         /**
-         * The camera lens position for this track.
+         * The local camera track's current camera position, or null for a noncamera track.
          */
         val position: CameraPosition?,
     )

@@ -14,7 +14,7 @@ import ai.xmax.sdk.RealtimeVideoTrack
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The registry connecting realtime tracks to their rendering capabilities.
+ * A registry of video track rendering bindings.
  */
 internal object VideoRenderRegistry {
 

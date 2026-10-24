@@ -13,8 +13,9 @@ package ai.xmax.sdk.stream.quality
 import android.content.Context
 
 /**
- * Retains successful levels for one hour by RTC vendor, model, and direction; defaults to L1 without a valid
- * record.
+ * The successfully applied model and directional levels retained for one hour.
+ *
+ * Records are isolated by RTC vendor, model, and direction; L1 is used without a valid record.
  */
 internal class QualityHistory(
     /**

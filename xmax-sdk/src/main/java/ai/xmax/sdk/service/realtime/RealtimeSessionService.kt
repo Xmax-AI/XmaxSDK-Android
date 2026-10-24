@@ -32,7 +32,7 @@ import ai.xmax.sdk.foundation.rtc.RtcEngineManager
 import org.json.JSONObject
 
 /**
- * Creates, maintains heartbeats for, and closes realtime sessions.
+ * Manages session creation, heartbeat, and closure.
  */
 internal class RealtimeSessionService(
     /**
@@ -67,7 +67,7 @@ internal class RealtimeSessionService(
     private var heartbeatJob: Job? = null
 
     /**
-     * Creates a realtime session and returns its RTC connection details.
+     * Creates a realtime session for the requested model.
      *
      * @param model The model defining server capabilities and input constraints.
      * @return The server session identifier, state, and available RTC connection details.
@@ -107,7 +107,7 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * Starts periodic heartbeats for a session.
+     * Starts a session heartbeat, replacing the previous task.
      *
      * @param sessionId The server session identifier.
      * @param onFailure Receives the session identifier and error when renewal fails.
@@ -132,7 +132,7 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * Stops the heartbeat, preventing invalidated late results from reporting failures.
+     * Stops the heartbeat and invalidates pending failure notifications.
      */
     override suspend fun stopHeartbeat() {
         val job = synchronized(heartbeatLock) {
@@ -144,7 +144,7 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * Closes a realtime session.
+     * Closes a server session.
      *
      * @param sessionId The server session identifier.
      */
@@ -361,7 +361,7 @@ internal class RealtimeSessionService(
 }
 
 /**
- * The server session heartbeat interval.
+ * An asynchronous wait between heartbeats.
  */
 internal fun interface RealtimeHeartbeatSleeper {
 

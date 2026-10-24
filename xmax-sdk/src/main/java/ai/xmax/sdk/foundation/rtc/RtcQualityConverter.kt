@@ -17,8 +17,9 @@ import io.agora.rtc2.IRtcEngineEventHandler.LocalVideoStats
 import io.agora.rtc2.IRtcEngineEventHandler.RemoteVideoStats
 
 /**
- * Converts Agora network quality and video statistics without substituting invented values for unavailable
- * measurements.
+ * Converts Agora quality events to SDK metrics.
+ *
+ * Unavailable measurements remain absent rather than being replaced with configuration values.
  */
 internal object RtcQualityConverter {
 

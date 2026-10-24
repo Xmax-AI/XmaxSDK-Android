@@ -45,7 +45,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * The Tencent COS upload and HTTP download transport.
+ * A COS upload and HTTP file download manager.
  *
  * @param context The Android context used for system services and media resources.
  */
@@ -59,7 +59,7 @@ internal class StorageManager(
     private val applicationContext = context.applicationContext
 
     /**
-     * Uploads a file or bytes to an object key and returns accessible object metadata.
+     * Uploads data or a local file using temporary credentials.
      *
      * @param source The local file or bytes to upload.
      * @param objectKey The complete object key within the bucket.
@@ -218,7 +218,9 @@ internal class StorageManager(
     }
 
     /**
-     * Downloads a file, replacing the destination only on success and retaining existing contents on failure.
+     * Downloads a file to the specified local location.
+     *
+     * The destination is replaced only on success; existing contents are retained on failure.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.

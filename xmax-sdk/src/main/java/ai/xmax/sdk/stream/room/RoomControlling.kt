@@ -16,7 +16,7 @@ import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.service.realtime.RealtimeSessionConnection
 
 /**
- * The RTC room lifecycle and signaling capabilities.
+ * An interface for room lifecycle and signaling.
  */
 internal interface RoomControlling {
 
@@ -86,7 +86,7 @@ internal interface RoomControlling {
     )
 
     /**
-     * Sends a stop signal for the generation task.
+     * Enqueues a stop signal if the room and task are active.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      */
@@ -95,7 +95,7 @@ internal interface RoomControlling {
     )
 
     /**
-     * Submits media-normalized trajectories for the current task.
+     * Sends a generation task's trajectory.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param points Normalized media trajectory points from 0 to 1.

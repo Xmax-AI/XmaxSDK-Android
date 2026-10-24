@@ -19,12 +19,12 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Maps rendering viewport coordinates to normalized coordinates on the fixed media baseline.
+ * Maps viewport positions to normalized media coordinates.
  */
 internal object InteractionCoordinateMapper {
 
     /**
-     * Resolves the media region from the processed aspect ratio and scaling mode.
+     * Resolves the displayed media rectangle from media aspect ratio and content mode.
      *
      * @param viewportSize The preview dimensions, in pixels.
      * @param resolvedMediaSize The fixed media dimensions after area limits and alignment.
@@ -68,7 +68,9 @@ internal object InteractionCoordinateMapper {
     }
 
     /**
-     * Normalizes points using the complete media aspect ratio; FIT letterbox regions do not produce points.
+     * Resolves a touch position in normalized media coordinates.
+     *
+     * FIT letterbox regions do not produce points.
      *
      * @param point The touch location in preview coordinates, in pixels.
      * @param viewportSize The preview dimensions, in pixels.

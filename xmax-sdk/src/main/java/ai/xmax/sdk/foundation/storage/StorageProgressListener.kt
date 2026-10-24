@@ -11,7 +11,7 @@
 package ai.xmax.sdk.foundation.storage
 
 /**
- * The byte-progress listener for storage transfers.
+ * A handler for completed and total transfer byte counts.
  */
 internal fun interface StorageProgressListener {
 

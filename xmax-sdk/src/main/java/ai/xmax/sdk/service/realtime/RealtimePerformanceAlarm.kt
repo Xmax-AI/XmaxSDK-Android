@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * The realtime device performance state.
+ * A realtime performance limitation state.
  */
 public enum class RealtimePerformanceStatus(
     /**
@@ -47,12 +47,12 @@ public data class RealtimePerformanceAlarm(
 )
 
 /**
- * The realtime performance alarm listener.
+ * A realtime performance alarm listener.
  */
 public fun interface RealtimePerformanceAlarmListener {
 
     /**
-     * Receives device performance limits and a suggested video format.
+     * Receives performance limitation or recovery events.
      *
      * @param alarm The device limitation and suggested format snapshot.
      */

@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * The realtime connection state.
+ * A realtime connection lifecycle state.
  */
 public enum class RealtimeConnectionState(
     /**
@@ -57,7 +57,7 @@ public enum class RealtimeConnectionState(
 }
 
 /**
- * The reason for entering the current realtime state.
+ * The reason for entering a realtime state.
  */
 public sealed interface RealtimeReason {
 
@@ -108,7 +108,7 @@ public data class RealtimeState(
 )
 
 /**
- * The realtime state listener.
+ * A realtime state listener.
  */
 public fun interface RealtimeStateListener {
 

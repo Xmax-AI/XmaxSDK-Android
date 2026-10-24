@@ -11,7 +11,7 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * Parameters for joining an RTC room.
+ * The credentials for joining an RTC room.
  */
 internal data class RoomJoinConfiguration(
     /**

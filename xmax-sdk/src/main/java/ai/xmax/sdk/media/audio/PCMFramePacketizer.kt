@@ -16,7 +16,7 @@ import java.nio.ByteOrder
 import java.util.ArrayDeque
 
 /**
- * Packs decoded PCM samples into contiguous 10 ms frames for RTC.
+ * Packetizes decoded PCM into fixed 10 ms RTC audio frames.
  */
 internal class PCMFramePacketizer(
     /**

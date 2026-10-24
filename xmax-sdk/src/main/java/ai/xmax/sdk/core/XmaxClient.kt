@@ -17,7 +17,7 @@ import ai.xmax.sdk.service.media.MediaService
 import ai.xmax.sdk.service.storage.StorageService
 
 /**
- * The SDK entry point, sharing client configuration and API access across services.
+ * A client that provides access to Xmax realtime generation, storage, and media services.
  *
  * Client construction configures logging and retains the application context without starting network or
  * media operations.
@@ -75,7 +75,9 @@ public class XmaxClient(
     )
 
     /**
-     * Creates a storage manager; requires a nonempty API key and a client context.
+     * Creates a manager for uploading and downloading media files.
+     *
+     * Requires a nonempty API key and an Android context supplied when creating the client.
      *
      * @return A manager for image and video uploads and downloads.
      */
@@ -95,8 +97,10 @@ public class XmaxClient(
     }
 
     /**
-     * Creates a realtime manager with its own lifecycle; requires a client context.
-     * Session creation, heartbeats, and closure use the environment's realtime endpoint.
+     * Creates a manager for local media inputs and realtime generation.
+     *
+     * Requires an Android context supplied when creating the client. Each manager owns its media
+     * and connection lifecycle; the client environment selects the realtime service endpoint.
      *
      * @param options The model and realtime configuration.
      * @return A realtime manager with independent media and connection ownership.
@@ -121,7 +125,9 @@ public class XmaxClient(
     }
 
     /**
-     * Creates a model-specific media sizing service without requiring a context or network access.
+     * Creates a service for media sizing queries.
+     *
+     * An Android context and network access are not required.
      *
      * @param model The model whose input constraints apply; defaults to `RealtimeModel.X2_1`.
      * @return A media sizing service for the specified model.

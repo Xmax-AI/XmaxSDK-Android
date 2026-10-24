@@ -15,7 +15,7 @@ import android.view.View
 import java.util.UUID
 
 /**
- * A stable identifier for one active trajectory.
+ * A stable identifier for an active trajectory.
  */
 public class TrajectoryID internal constructor(
     /**
@@ -40,7 +40,7 @@ public class TrajectoryID internal constructor(
 }
 
 /**
- * A visual touch point delivered to a trajectory effect renderer.
+ * A touch sample delivered to a trajectory renderer.
  */
 public class TrajectoryPoint internal constructor(
     /**
@@ -65,7 +65,7 @@ public class TrajectoryPoint internal constructor(
 )
 
 /**
- * The drawing interface for custom trajectory effects.
+ * An interface for custom trajectory effects.
  */
 public interface TrajectoryEffectRendering {
 
@@ -75,7 +75,7 @@ public interface TrajectoryEffectRendering {
     public val view: View
 
     /**
-     * Starts drawing newly added trajectories.
+     * Begins trajectories for new touches.
      *
      * @param points Trajectory points with positions and timestamps.
      */
@@ -84,7 +84,7 @@ public interface TrajectoryEffectRendering {
     )
 
     /**
-     * Updates the positions of visible trajectories.
+     * Updates active trajectory positions.
      *
      * @param points Trajectory points with positions and timestamps.
      */
@@ -93,7 +93,7 @@ public interface TrajectoryEffectRendering {
     )
 
     /**
-     * Ends display of the specified trajectories.
+     * Ends active trajectories.
      *
      * @param identifiers The trajectory identifiers to end.
      */
@@ -102,7 +102,7 @@ public interface TrajectoryEffectRendering {
     )
 
     /**
-     * Clears all trajectories and rendering effects.
+     * Clears all trajectories and animation resources.
      */
     public fun reset()
 }

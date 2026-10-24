@@ -14,7 +14,7 @@ import android.util.Log
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * The enabled XmaxSDK log categories.
+ * The categories of logs emitted by XmaxSDK.
  */
 public class XmaxLoggerOption(
     /**
@@ -103,7 +103,7 @@ public class XmaxLoggerOption(
 }
 
 /**
- * Writes system logs with the Xmax prefix and category.
+ * A logger with SDK and domain prefixes.
  */
 internal class XmaxLogger private constructor(
     /**

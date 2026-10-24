@@ -17,7 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Logs realtime failures and routes current media or connection failures to scoped lifecycle cleanup.
+ * Logs realtime errors and forwards runtime failures for coordinated lifecycle termination.
  *
  * @param dispatcher The dispatcher used to route asynchronous runtime failures.
  */
@@ -51,7 +51,7 @@ internal class XmaxRealtimeErrorManager(
     private var failureHandler: ((XmaxError, XmaxRealtimeLifecycleManager.TerminationScope, () -> Boolean) -> Unit)? = null
 
     /**
-     * Registers the handler that terminates resources affected by a current failure.
+     * Sets the runtime failure handler.
      *
      * @param handler The failure, cleanup scope, and validity handler.
      */
@@ -109,7 +109,7 @@ internal class XmaxRealtimeErrorManager(
     }
 
     /**
-     * Records a realtime failure without changing lifecycle state.
+     * Logs a realtime error code and message.
      *
      * @param error The SDK error to log.
      */

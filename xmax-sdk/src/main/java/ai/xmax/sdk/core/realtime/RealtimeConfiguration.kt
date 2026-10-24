@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * Configuration for a realtime manager.
+ * The model configuration for a realtime manager.
  */
 public data class RealtimeConfiguration(
     /**

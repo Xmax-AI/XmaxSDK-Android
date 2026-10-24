@@ -14,7 +14,7 @@ import ai.xmax.sdk.RealtimeVideoTrack
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The bindings between remote tracks and trajectory interaction.
+ * A registry of remote track interaction bindings.
  */
 internal object TrajectoryRegistry {
 

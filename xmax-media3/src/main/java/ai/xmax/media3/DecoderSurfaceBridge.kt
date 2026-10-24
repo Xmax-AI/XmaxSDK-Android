@@ -27,7 +27,7 @@ import java.nio.ByteOrder
 import kotlinx.coroutines.CompletableDeferred
 
 /**
- * A decoder Surface whose GL thread feeds local preview and RTC pixels without main-thread screenshots.
+ * A decoder surface bridging Media3 output to local preview and external RTC video input.
  */
 internal class DecoderSurfaceBridge(
     /**

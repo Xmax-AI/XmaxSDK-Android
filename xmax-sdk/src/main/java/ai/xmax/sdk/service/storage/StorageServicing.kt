@@ -16,12 +16,12 @@ import ai.xmax.sdk.foundation.storage.StoredFile
 import java.io.File
 
 /**
- * The image/video transfer and image content safety capabilities.
+ * An interface for image and video transfers and image safety.
  */
 internal interface StorageServicing {
 
     /**
-     * Uploads image bytes and returns accessible storage metadata.
+     * Uploads encoded image data.
      *
      * @param data Encoded image file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -37,7 +37,7 @@ internal interface StorageServicing {
     ): StoredFile
 
     /**
-     * Uploads a local image and returns accessible storage metadata.
+     * Uploads a local image file.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -51,7 +51,7 @@ internal interface StorageServicing {
     ): StoredFile
 
     /**
-     * Uploads image bytes and returns the result after content safety validation.
+     * Uploads image data and verifies content safety.
      *
      * @param data Encoded image file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -67,7 +67,7 @@ internal interface StorageServicing {
     ): StoredFile
 
     /**
-     * Uploads a local image and returns the result after content safety validation.
+     * Uploads a local image and verifies content safety.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -81,7 +81,7 @@ internal interface StorageServicing {
     ): StoredFile
 
     /**
-     * Uploads video bytes and returns accessible storage metadata.
+     * Uploads encoded video data.
      *
      * @param data Encoded video file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -97,7 +97,7 @@ internal interface StorageServicing {
     ): StoredFile
 
     /**
-     * Uploads a local video and returns accessible storage metadata.
+     * Uploads a local video file.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -111,7 +111,9 @@ internal interface StorageServicing {
     ): StoredFile
 
     /**
-     * Downloads an image and returns local file metadata, retaining the existing destination on failure.
+     * Downloads a remote image to a local file.
+     *
+     * The existing destination is retained on failure.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.
@@ -125,7 +127,9 @@ internal interface StorageServicing {
     ): DownloadedFile
 
     /**
-     * Downloads a video and returns local file metadata, retaining the existing destination on failure.
+     * Downloads a remote video to a local file.
+     *
+     * The existing destination is retained on failure.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.

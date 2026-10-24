@@ -11,7 +11,7 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * Receives RTC media and data signaling events.
+ * A listener for RTC media and signaling events.
  */
 internal interface RtcEventListener {
 

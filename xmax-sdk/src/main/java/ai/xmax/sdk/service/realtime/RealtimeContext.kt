@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * The prompt and reference resources for one generation request.
+ * The prompt and reference media for a generation task.
  *
  * @param prompt The prompt describing the desired generation.
  * @param referencePath An accessible reference image URL, or null without a reference.

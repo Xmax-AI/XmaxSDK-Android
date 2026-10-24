@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancelAndJoin
 
 /**
- * Sends periodic room heartbeats while rejecting events from stopped lifecycles.
+ * Sends RTC room heartbeats while rejecting stopped cycles.
  */
 internal class RoomHeartbeat(
     /**

@@ -13,7 +13,7 @@ package ai.xmax.sdk.foundation.media
 import android.net.Uri
 
 /**
- * Reads metadata from local media files.
+ * An interface for local media metadata.
  */
 internal interface MediaFileMetadataManaging {
 

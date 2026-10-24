@@ -36,7 +36,7 @@ internal data class RtcEngineLease(
 )
 
 /**
- * Owns the process-wide exclusive lifecycle of the Agora RTC engine.
+ * Serializes exclusive access to the process-wide RTC engine.
  */
 internal open class RtcEngineManager internal constructor(
     /**

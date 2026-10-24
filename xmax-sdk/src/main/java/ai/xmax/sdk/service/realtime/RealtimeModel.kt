@@ -11,7 +11,9 @@
 package ai.xmax.sdk
 
 /**
- * A realtime generation model; [id] identifies the model in server session requests.
+ * A realtime generation model supported by XmaxSDK.
+ *
+ * [id] identifies the model in server session requests.
  */
 public enum class RealtimeModel(
     /**

@@ -24,7 +24,7 @@ import ai.xmax.sdk.stream.StreamID
 import android.net.Uri
 
 /**
- * Coordinates local playback, RTC external media input, and preview resources.
+ * Coordinates video file playback, external RTC media, and preview.
  */
 internal class VideoController(
     /**
@@ -61,11 +61,11 @@ internal class VideoController(
         get() = currentTrack != null && mediaSourceController.hasAudio
 
     /**
-     * Creates a local video stream from a URI, including its audio track when present.
-     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
-     * output.
+     * Creates a looping audio and video stream from a local video URI.
+     *
+     * Your app must hold read permission. The stream retains the video's display aspect ratio and
+     * uses the model's default frame rate. Dimensions respect model pixel-area limits and
+     * four-pixel alignment; the generation canvas is resolved separately.
      *
      * @param uri A media URI your app can read.
      */
@@ -145,8 +145,9 @@ internal class VideoController(
     }
 
     /**
-     * Stops the current video source and releases decoding and preview resources; does nothing for other
-     * source types.
+     * Stops the local file video stream.
+     *
+     * Other input sources are unaffected.
      */
     suspend fun stopLocalVideoStream() {
         val state = synchronized(stateLock) {

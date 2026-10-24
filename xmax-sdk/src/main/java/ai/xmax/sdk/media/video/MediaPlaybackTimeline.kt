@@ -15,7 +15,7 @@ import android.os.SystemClock
 import kotlin.math.ceil
 
 /**
- * A shared looped-playback clock for a file's audio and video.
+ * A shared looping playback clock for file audio and video.
  *
  * @param mediaDurationUs The duration of one playback loop, in microseconds.
  * @param nowNanoseconds The current monotonic timestamp, in nanoseconds.

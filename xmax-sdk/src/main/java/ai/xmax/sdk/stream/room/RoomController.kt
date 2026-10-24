@@ -30,7 +30,7 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
 /**
- * Owns RTC room entry, heartbeats, and generation signaling.
+ * Manages RTC room lifecycle, heartbeat, and generation signaling.
  */
 internal class RoomController(
     /**
@@ -232,8 +232,10 @@ internal class RoomController(
     }
 
     /**
-     * The downlink minimum is 100 kbps; its maximum is estimated from output dimensions at 24 fps and clamped
-     * to 100 through 10,000 kbps.
+     * Resolves the downlink bitrate budget.
+     *
+     * The minimum is 100 kbps; the maximum is estimated from output dimensions at 24 fps and
+     * clamped to 100 through 10,000 kbps.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @return The minimum and maximum downlink encoder bitrates, in kbps.
@@ -282,7 +284,7 @@ internal class RoomController(
     }
 
     /**
-     * Sends a stop signal for the generation task.
+     * Enqueues a stop signal if the room and task are active.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      */
@@ -305,7 +307,7 @@ internal class RoomController(
     }
 
     /**
-     * Submits media-normalized trajectories for the current task.
+     * Sends a generation task's trajectory.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param points Normalized media trajectory points from 0 to 1.

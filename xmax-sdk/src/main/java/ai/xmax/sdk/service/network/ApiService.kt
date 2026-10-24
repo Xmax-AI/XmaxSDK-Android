@@ -24,7 +24,7 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * Sends Xmax API requests and normalizes responses and errors.
+ * Sends Xmax API requests and handles responses, logging, and errors.
  *
  * @param apiKey The API key issued by the developer platform; do not log or expose it.
  */

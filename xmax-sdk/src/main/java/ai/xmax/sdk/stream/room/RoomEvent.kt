@@ -20,12 +20,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Builds structured event messages for RTC room transport.
+ * The structured signaling exchanged through RTC rooms.
  */
 internal object RoomEvent {
 
     /**
-     * Builds a realtime generation start signal.
+     * Encodes a generation start signal with runtime information.
      *
      * @param userId The room's business user identifier.
      * @param taskId The identifier associating the generation request with its result stream.
@@ -137,7 +137,7 @@ internal object RoomEvent {
     )
 
     /**
-     * Builds a generation condition update signal.
+     * Encodes a condition update with runtime information.
      *
      * @param userId The room's business user identifier.
      * @param taskId The identifier associating the generation request with its result stream.
@@ -171,7 +171,7 @@ internal object RoomEvent {
     )
 
     /**
-     * Builds a signal stopping the specified task.
+     * Encodes a generation stop signal.
      *
      * @param userId The room's business user identifier.
      * @param taskId The identifier associating the generation request with its result stream.
@@ -187,7 +187,7 @@ internal object RoomEvent {
     )
 
     /**
-     * Builds a trajectory signal.
+     * Encodes a normalized media trajectory.
      *
      * @param userId The room's business user identifier.
      * @param taskId The identifier associating the generation request with its result stream.
@@ -210,7 +210,7 @@ internal object RoomEvent {
     )
 
     /**
-     * Builds a room heartbeat signal.
+     * Encodes a room heartbeat.
      *
      * @param userId The room's business user identifier.
      * @return The room heartbeat JSON signal.

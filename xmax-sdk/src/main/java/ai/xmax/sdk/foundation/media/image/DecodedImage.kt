@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.IntSize
 import java.util.UUID
 
 /**
- * An internally decoded image with normalized orientation.
+ * An orientation-corrected, decoded image.
  */
 internal interface DecodedImage {
 

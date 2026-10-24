@@ -11,7 +11,7 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * Encoding settings for the primary RTC video stream.
+ * The encoding settings for the RTC main video stream.
  */
 internal data class VideoEncodingConfiguration(
     /**
@@ -47,7 +47,7 @@ internal data class VideoEncodingConfiguration(
 ) {
 
     /**
-     * The uplink encoder's preference under limited bandwidth.
+     * The preferred encoding fallback under network constraints.
      */
     enum class EncoderPreference {
 

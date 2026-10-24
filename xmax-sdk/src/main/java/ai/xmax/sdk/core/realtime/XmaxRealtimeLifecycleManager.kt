@@ -31,7 +31,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Admits realtime operations, merges termination requests, and owns lifecycle state changes.
+ * Owns operation admission, lifecycle state, and scoped termination for a realtime manager.
  *
  * [lock] protects short state accesses without suspension; [effects] serializes operations and rollback.
  * Termination cancels affected operations and completes cleanup independently of a waiting caller's
@@ -64,8 +64,10 @@ internal class XmaxRealtimeLifecycleManager(
 ) {
 
     /**
-     * Generation and external-source replacements prefer the latest request; settings may queue, while other
-     * conflicting operations are rejected.
+     * The kinds of mutually coordinated media and realtime operations.
+     *
+     * Generation and external-source replacements prefer the latest request; settings may queue,
+     * while other conflicting operations are rejected.
      */
     enum class OperationKind {
 
@@ -106,8 +108,10 @@ internal class XmaxRealtimeLifecycleManager(
     }
 
     /**
-     * Resource scopes ordered from narrowest to broadest; merged termination requests may only expand the
-     * scope.
+     * The resources affected by a termination request.
+     *
+     * Scopes are ordered from narrowest to broadest; merged termination requests may only expand
+     * the scope.
      */
     enum class TerminationScope {
 
@@ -193,6 +197,20 @@ internal class XmaxRealtimeLifecycleManager(
     val currentState: RealtimeState get() = synchronized(lock) { state }
 
     /**
+     * Registers state notifications and publishes the current snapshot.
+     *
+     * @param listener The state listener, or null to unregister it.
+     */
+    fun setStateListener(
+        listener: RealtimeStateListener?,
+    ) {
+        callbacks.setStateListener(
+            listener,
+            currentState,
+        )
+    }
+
+    /**
      * Whether foreground, background, or cleanup operations are pending.
      */
     val isBusy: Boolean get() = synchronized(lock) {
@@ -242,8 +260,7 @@ internal class XmaxRealtimeLifecycleManager(
         /**
          * Retains the latest valid conditions for generation resumption.
          *
-         * @param context Generation prompts and reference media; null reuses cached conditions, which must
-         * exist for the first request.
+         * @param context Previously successful generation conditions, if available.
          * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to
          * false.
          */
@@ -322,8 +339,7 @@ internal class XmaxRealtimeLifecycleManager(
      *
      * @param kind The operation or media source kind.
      * @param failureScope The resources to terminate on failure; null requests no additional termination.
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
+     * @param context The conditions retained for generation or external-source replacement, if supplied.
      * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
      * @param action The operation to perform.
      * @return The operation's successful result.
@@ -397,8 +413,7 @@ internal class XmaxRealtimeLifecycleManager(
      *
      * @param kind The operation or media source kind.
      * @param failureScope The resources to terminate on failure; null requests no additional termination.
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
+     * @param context The conditions retained for generation or external-source replacement, if supplied.
      * @param faceRestoration Whether to enable face restoration through `face_replace`.
      * @param action The operation to perform.
      * @return The operation's successful result.
@@ -817,8 +832,9 @@ internal class XmaxRealtimeLifecycleManager(
     }
 
     /**
-     * Validity and termination flags are protected by lock; task assignment precedes publication of the
-     * operation.
+     * A realtime operation and its cancellation and cleanup controls.
+     *
+     * Validity and termination flags are protected by the lifecycle lock.
      */
     internal class Operation(
         /**
@@ -879,8 +895,10 @@ internal class XmaxRealtimeLifecycleManager(
     }
 
     /**
-     * Owns a pending generation or replacement request until completion; GenerationManager retains committed
-     * conditions.
+     * A generation request's cancellation handle and resource-completion barrier.
+     *
+     * Pending requests retain conditions until completion; the generation manager retains
+     * successful conditions.
      */
     internal class GenerationRequest(
         /**
@@ -917,7 +935,9 @@ internal class XmaxRealtimeLifecycleManager(
     }
 
     /**
-     * The merged cleanup target and first failure; cleanup repeats if a broader scope arrives.
+     * A termination request shared by concurrent cleanup callers.
+     *
+     * Cleanup repeats if a broader resource scope is requested.
      */
     private class Termination(
         /**

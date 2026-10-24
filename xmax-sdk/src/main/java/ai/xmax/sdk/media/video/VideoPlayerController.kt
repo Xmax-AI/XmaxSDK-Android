@@ -867,7 +867,7 @@ internal class VideoPlayerController(
             .joinToString(" <- ")
 
     /**
-     * Local decoding, rotation, frame output, and playback loop settings.
+     * The file decoding and playback configuration.
      */
     private data class PlaybackConfiguration(
         /**

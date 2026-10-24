@@ -11,7 +11,7 @@
 package ai.xmax.sdk.foundation.rtc
 
 /**
- * A remote primary stream within an RTC room.
+ * A remote main stream in an RTC room.
  */
 internal data class RemoteStream(
     /**

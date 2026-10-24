@@ -13,13 +13,14 @@ package ai.xmax.sdk
 import android.widget.FrameLayout
 
 /**
- * An app-owned source of captured, decoded, or processed video, such as a camera or player.
- * XmaxSDK binds frame delivery without owning the device or player. Your app owns permissions, device
- * switching, and resource release.
- * Video-only input is the default; SDK local preview is optional, and sources may supply audio and preview
- * capabilities.
- * Lifecycle and preview methods run on the main thread; frames may be submitted synchronously from a
- * background thread.
+ * A video source that supplies frames captured, decoded, or processed by your app.
+ *
+ * Your app manages permissions, capture devices, playback, and resource cleanup. A source can also supply
+ * PCM audio and an SDK-hosted preview. XmaxSDK does not capture microphone audio or play submitted audio
+ * locally; the source controls local monitoring through [setPreviewAudio].
+ *
+ * Lifecycle and preview methods run on the main thread. You can submit frames synchronously from a capture
+ * or processing thread.
  */
 public interface RealtimeExternalVideoSource {
 
@@ -37,11 +38,12 @@ public interface RealtimeExternalVideoSource {
         get() = false
 
     /**
-     * Binds frame delivery before returning, without waiting for generation to finish.
-     * Your app rotates, crops, and scales frames to sink.videoFormat; delivery must not wait for
-     * startGeneration to return.
-     * Report source completion or unrecoverable failure through sink.reportError. The SDK may call stop even
-     * after start fails.
+     * Starts delivering video frames to the specified sink.
+     *
+     * Install the frame callback and return when the source is ready to deliver frames. Your app rotates,
+     * crops, and scales pixels to [RealtimeExternalFrameSink.videoFormat]; frame delivery must not wait for
+     * generation to begin or complete. Report source completion or unrecoverable failure through
+     * [RealtimeExternalFrameSink.reportError]. XmaxSDK may call [stop] even if startup fails.
      *
      * @param sink The SDK receiver for external media frames.
      */
@@ -50,7 +52,10 @@ public interface RealtimeExternalVideoSource {
     )
 
     /**
-     * Stops frame delivery and clears the sink idempotently without closing your app's camera or player.
+     * Stops delivering frames and releases the source's reference to the sink.
+     *
+     * This method must be safe to call more than once. Your app retains ownership of its capture devices
+     * and players and decides when to release them.
      */
     public suspend fun stop()
 
@@ -88,11 +93,12 @@ public interface RealtimeExternalVideoSource {
 }
 
 /**
- * The frame receiver for one binding; submissions after unbinding are discarded. Input arrays may be reused
- * after each method returns.
- * Video uses top-down RGBA; audio uses 48 kHz mono PCM16LE with 480 samples per packet.
- * Audio and video share a monotonic microsecond clock; timestamps must keep increasing across seeks and
- * loops.
+ * A receiver for video and optional audio from a single source attachment.
+ *
+ * The sink processes frames synchronously and discards submissions after unbinding. Input arrays may be
+ * reused after each method returns. Video uses top-down RGBA; audio uses 48 kHz mono PCM16LE with 480 samples
+ * per packet. Audio and video share a monotonic microsecond clock; timestamps must keep increasing across
+ * seeks and loops.
  */
 public interface RealtimeExternalFrameSink {
 
@@ -102,15 +108,18 @@ public interface RealtimeExternalFrameSink {
     public val videoFormat: RealtimeVideoFormat
 
     /**
-     * When false, your app may skip expensive readback or conversion without stopping capture or preview.
+     * Whether the current generation requests frames from this source.
+     *
+     * When false, your app may skip readback or conversion without stopping capture or preview.
      */
     public val isRequestingFrames: Boolean
 
     /**
-     * Submits an externally captured RGBA video frame.
+     * Submits an RGBA video frame for realtime generation.
      *
      * @param rgba Tightly packed RGBA pixels matching the current input dimensions.
-     * @param timestampUs The monotonic frame timestamp, in microseconds.
+     * @param timestampUs A nonnegative, strictly increasing timestamp from a monotonic clock, in
+     * microseconds.
      */
     public fun pushVideo(
         rgba: ByteArray,
@@ -118,10 +127,10 @@ public interface RealtimeExternalFrameSink {
     )
 
     /**
-     * Submits externally captured PCM audio.
+     * Submits a PCM audio frame for realtime generation.
      *
-     * @param pcm 48 kHz mono PCM16 little-endian audio bytes.
-     * @param timestampUs The monotonic frame timestamp, in microseconds.
+     * @param pcm A 10 ms packet of 48 kHz mono PCM16 little-endian audio, containing 480 samples.
+     * @param timestampUs A nonnegative, strictly increasing timestamp on the video timeline, in microseconds.
      */
     public fun pushAudio(
         pcm: ByteArray,

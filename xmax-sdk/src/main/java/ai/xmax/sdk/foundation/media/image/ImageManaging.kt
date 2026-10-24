@@ -13,7 +13,7 @@ package ai.xmax.sdk.foundation.media.image
 import android.graphics.Bitmap
 
 /**
- * The platform image decoding capability used internally by the SDK.
+ * An interface for image decoding.
  */
 internal interface ImageManaging {
 

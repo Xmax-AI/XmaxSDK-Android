@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * A point in normalized coordinates.
+ * A normalized media point, from top-left `(0, 0)` to bottom-right `(1, 1)`.
  */
 public data class RealtimePoint(
     /**

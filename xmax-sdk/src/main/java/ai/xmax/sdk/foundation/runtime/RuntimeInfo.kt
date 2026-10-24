@@ -15,7 +15,9 @@ import android.os.Build
 import org.json.JSONObject
 
 /**
- * SDK runtime metadata shared by API requests and room signals.
+ * The SDK runtime environment.
+ *
+ * Metadata is shared by API requests and room signals.
  */
 internal data class RuntimeInfo(
     /**

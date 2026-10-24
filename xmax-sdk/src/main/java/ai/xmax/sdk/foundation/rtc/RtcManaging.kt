@@ -18,7 +18,7 @@ import ai.xmax.sdk.VideoContentMode
 import android.view.View
 
 /**
- * The RTC engine lifecycle and room connection capabilities.
+ * An interface for RTC engines, rooms, media, and remote frames.
  */
 internal interface RtcManaging {
 
@@ -33,7 +33,7 @@ internal interface RtcManaging {
     suspend fun destroy()
 
     /**
-     * Applies encoding settings to the primary video stream.
+     * Applies the uplink encoder configuration.
      *
      * @param configuration Uplink dimensions, frame rate, bitrate, and encoding preference.
      */
@@ -258,7 +258,7 @@ internal interface RtcManaging {
     suspend fun awaitPendingMessages() = Unit
 
     /**
-     * Sets the RTC event listener; null unregisters it.
+     * Sets the RTC connection and media event listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -288,7 +288,7 @@ internal interface RtcManaging {
     )
 
     /**
-     * Sets the RTC quality listener; null unregisters it.
+     * Sets the RTC network and media quality listener.
      *
      * @param listener The event listener, or null to unregister it.
      */

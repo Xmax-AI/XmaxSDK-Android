@@ -12,13 +12,23 @@ package ai.xmax.sdk.render
 
 import androidx.compose.ui.unit.IntSize
 import ai.xmax.sdk.RealtimeVideoTrack
+import ai.xmax.sdk.RealtimeVideoFrameListener
 import ai.xmax.sdk.foundation.rtc.RemoteStream
 import ai.xmax.sdk.media.interaction.InteractionFrame
 
 /**
- * The remote video capabilities exposed by Render to Core.
+ * The rendering interface used by Core.
  */
 internal interface RenderControlling {
+
+    /**
+     * Sets serialized remote video output without changing playback.
+     *
+     * @param listener The output listener, or null to unregister it.
+     */
+    fun setRemoteVideoFrameListener(
+        listener: RealtimeVideoFrameListener?,
+    )
 
     /**
      * Sets the subscribed remote stream; null unbinds it.
@@ -30,7 +40,7 @@ internal interface RenderControlling {
     )
 
     /**
-     * Registers remote video display and trajectory capabilities for a track.
+     * Registers remote rendering and trajectory interactions.
      *
      * @param track The video track to display or bind.
      * @param resolvedMediaSize The fixed, resolved local media dimensions used for interaction coordinates.
@@ -43,7 +53,9 @@ internal interface RenderControlling {
     )
 
     /**
-     * Waits for a displayable remote frame, throwing if the stream expires or the wait times out.
+     * Waits for the first remote frame ready for display.
+     *
+     * An expired stream or timeout ends the wait with an error.
      */
     suspend fun waitUntilRemoteFrameReady()
 

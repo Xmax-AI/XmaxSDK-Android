@@ -19,10 +19,11 @@ import android.widget.FrameLayout
 import androidx.annotation.MainThread
 
 /**
- * A realtime video container whose tracks must be set on the main thread; keeps local preview attached until
- * remote video fades in.
- * Clearing [remoteTrack] or stopping SDK remote rendering immediately restores local preview.
- * This view does not start or stop media streams.
+ * An Android container switching between local preview and remote generation.
+ *
+ * Set tracks on the main thread. Local preview remains attached until remote video fades in;
+ * clearing [remoteTrack] or stopping remote rendering restores local preview. This view does not
+ * start or stop media streams.
  *
  * @param context The Android context; views should use the current UI theme's context.
  * @param attrs The XML view attributes; optional for programmatic construction.

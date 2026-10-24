@@ -18,7 +18,7 @@ import ai.xmax.sdk.foundation.rtc.RtcManaging
 import ai.xmax.sdk.foundation.rtc.VideoEncodingConfiguration
 
 /**
- * Configures RTC encoding from a realtime video format.
+ * Applies RTC encoding settings for a realtime video format.
  */
 internal class EncodingController(
     /**
@@ -28,7 +28,9 @@ internal class EncodingController(
 ) : EncodingControlling {
 
     /**
-     * Validates and applies video encoding; the default minimum is 500 kbps capped at the maximum.
+     * Validates and applies a resolved encoder configuration.
+     *
+     * An unspecified minimum uses 500 kbps, capped by the maximum.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */

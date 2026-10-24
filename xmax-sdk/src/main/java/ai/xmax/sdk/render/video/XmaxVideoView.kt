@@ -28,7 +28,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 
 /**
- * An Android container displaying a local or remote realtime video track.
+ * An Android view displaying a local or remote video track.
  *
  * @param context The Android context; views should use the current UI theme's context.
  * @param attrs The XML view attributes; optional for programmatic construction.

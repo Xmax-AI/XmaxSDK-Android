@@ -14,6 +14,7 @@ import ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink
 import ai.xmax.sdk.foundation.rtc.RtcRemoteVideoFrame
 import ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher
 import ai.xmax.sdk.RealtimeVideoTrack
+import ai.xmax.sdk.RealtimeVideoFrameListener
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
@@ -42,7 +43,9 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 
 /**
- * Uses one remote frame path per generation for first-frame readiness, continuous display, and app frame
+ * Coordinates video tracks, remote frame processing, and trajectory rendering.
+ *
+ * Each generation shares one remote frame path for first-frame readiness, display, and app frame
  * callbacks.
  */
 internal class RenderController(
@@ -99,6 +102,17 @@ internal class RenderController(
      * The active downlink video track.
      */
     private var remoteTrack: RealtimeVideoTrack? = null
+
+    /**
+     * Sets serialized remote video output without changing playback.
+     *
+     * @param listener The output listener, or null to unregister it.
+     */
+    override fun setRemoteVideoFrameListener(
+        listener: RealtimeVideoFrameListener?,
+    ) {
+        frameDispatcher.setListener(listener)
+    }
 
     /**
      * Sets the subscribed remote stream; null unbinds it.
@@ -204,7 +218,7 @@ internal class RenderController(
     }
 
     /**
-     * Registers remote video display and trajectory capabilities for a track.
+     * Registers remote rendering and trajectory interactions.
      *
      * @param track The video track to display or bind.
      * @param resolvedMediaSize The fixed, resolved local media dimensions used for interaction coordinates.
@@ -233,7 +247,9 @@ internal class RenderController(
     }
 
     /**
-     * Waits for a displayable remote frame, throwing if the stream expires or the wait times out.
+     * Waits for the first remote frame ready for display.
+     *
+     * An expired stream or timeout ends the wait with an error.
      */
     override suspend fun waitUntilRemoteFrameReady() {
         val current = operationLock.withLock { generation } ?: throw XmaxError(

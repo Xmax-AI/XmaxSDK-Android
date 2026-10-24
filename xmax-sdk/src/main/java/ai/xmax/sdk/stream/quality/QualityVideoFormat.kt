@@ -21,8 +21,9 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
- * Resolves quality formats from the original baseline, preserving orientation, explicit uplink bitrates, and
- * encoder preference.
+ * Resolves transport levels without changing capture or generation formats.
+ *
+ * The original media baseline, explicit uplink bitrates, and encoder preference are preserved.
  */
 internal object QualityVideoFormat {
 

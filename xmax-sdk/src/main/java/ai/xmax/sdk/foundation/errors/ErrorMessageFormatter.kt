@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * Produces stable, nonempty error descriptions.
+ * Formats errors for logs and diagnostic displays.
  */
 internal object ErrorMessageFormatter {
 

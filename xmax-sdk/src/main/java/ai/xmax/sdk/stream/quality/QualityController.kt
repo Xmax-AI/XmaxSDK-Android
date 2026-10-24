@@ -32,8 +32,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Owns directional quality policies and history, converts RTC events, and dispatches public statistics and
- * alarms on the main thread.
+ * Converts RTC quality events and notifies realtime listeners.
+ *
+ * Owns directional quality policies and history; public statistics and alarms are delivered on the
+ * main thread.
  *
  * @param rtcManager The manager for RTC capture, publication, subscription, and rendering.
  */
@@ -158,7 +160,7 @@ internal class QualityController(
         }
 
     /**
-     * Restores initial transport levels from model-specific history.
+     * Prepares initial transport quality from the media baseline and model history.
      *
      * @param baseline The fixed, resolved media format.
      * @param minimumInputPixels The minimum uplink pixel area.
@@ -195,7 +197,7 @@ internal class QualityController(
     }
 
     /**
-     * Proposes levels from a fresh directional sample without publishing configuration.
+     * Proposes quality levels without committing them.
      *
      * @param quality The directional network quality.
      * @param sampledAt The sample time on the monotonic millisecond clock.
@@ -221,7 +223,7 @@ internal class QualityController(
     }
 
     /**
-     * Records an applied adjustment and persists its successful level.
+     * Commits an adjustment result, persisting successful levels only.
      *
      * @param downlink Whether to update the returned video policy.
      * @param level The attempted quality level.
@@ -274,9 +276,11 @@ internal class QualityController(
     }
 
     /**
-     * Clears connection policies without releasing saved levels or public listeners.
+     * Clears connection policies and queued quality callbacks, retaining saved levels and public listeners.
      */
     override fun resetQuality() = synchronized(listenerLock) {
+        networkVersion++
+        performanceVersion++
         uplinkQuality = null
         downlinkQuality = null
         baseline = null
@@ -284,8 +288,9 @@ internal class QualityController(
     }
 
     /**
-     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the uplink video statistics listener.
+     *
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -299,8 +304,9 @@ internal class QualityController(
     }
 
     /**
-     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the downlink video statistics listener.
+     *
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -314,7 +320,7 @@ internal class QualityController(
     }
 
     /**
-     * Enables or disables uplink statistics and clears the current snapshot.
+     * Updates uplink statistics availability and clears previous statistics.
      *
      * @param enabled Whether the capability is enabled.
      */
@@ -329,7 +335,9 @@ internal class QualityController(
     }
 
     /**
-     * Sets the downlink statistics user and clears the snapshot; null stops collection.
+     * Changes the downlink statistics target and clears previous statistics.
+     *
+     * Null stops collection.
      *
      * @param userId The room's business user identifier.
      */
@@ -388,7 +396,7 @@ internal class QualityController(
     }
 
     /**
-     * Receives internal adaptation samples without occupying the public network listener.
+     * Sets the internal adaptation listener independently of your app's network listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -399,7 +407,7 @@ internal class QualityController(
     }
 
     /**
-     * Sets the RTC network quality listener; null unregisters it.
+     * Sets the network quality listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -413,7 +421,7 @@ internal class QualityController(
     }
 
     /**
-     * Sets the RTC performance alarm listener; null unregisters it.
+     * Sets the device performance alarm listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -427,7 +435,7 @@ internal class QualityController(
     }
 
     /**
-     * Receives uplink and downlink network quality samples.
+     * Receives uplink and downlink network quality.
      *
      * @param uplink The uplink network quality rating.
      * @param downlink The downlink network quality rating.
@@ -453,7 +461,7 @@ internal class QualityController(
     }
 
     /**
-     * Receives device performance limits and a suggested video format.
+     * Receives performance limitation or recovery events.
      *
      * @param limited Whether device performance is limited.
      * @param suggestedWidth The suggested width, in pixels.
@@ -506,7 +514,7 @@ internal class QualityController(
     }
 
     /**
-     * Converts internal RTC quality to the public network rating.
+     * Maps RTC network quality to the public rating.
      *
      * @param level The quality level to apply or retain; 1 is highest.
      * @return The public network quality rating.
@@ -525,7 +533,7 @@ internal class QualityController(
         }
 
     /**
-     * Builds a suggested format, returning null for invalid dimensions or frame rate.
+     * Resolves a valid video format from a performance suggestion.
      *
      * @param width The frame width, in pixels.
      * @param height The frame height, in pixels.

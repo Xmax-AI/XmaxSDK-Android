@@ -37,6 +37,47 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class XmaxRealtimeManagerTest {
     @Test
+    fun `generation resolves canvas through the shared injected media service`() = runTest {
+        val requestedSizes = mutableListOf<IntSize>()
+        val service = object : MediaServicing by MediaService() {
+            override fun resolveGenerationSize(size: IntSize): IntSize {
+                requestedSizes += size
+                return IntSize(1408, 1408)
+            }
+        }
+        val f = Fixture(StandardTestDispatcher(testScheduler), mediaService = service)
+        val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        f.stream.confirmation.complete(Unit)
+        f.manager.startGeneration(local, RealtimeContext("shared service"))
+
+        assertSame(service, f.components.mediaService)
+        assertEquals(listOf(IntSize(format.width, format.height)), requestedSizes)
+        assertEquals(IntSize(1408, 1408), f.stream.startedFormats.single().let { IntSize(it.width, it.height) })
+        f.manager.close()
+    }
+
+    @Test
+    fun `errors emitted by released media during close do not affect the next stream`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        f.listen()
+        f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        f.media.onStop = {
+            f.components.errorManager.forward(
+                XmaxError(XmaxErrorCode.MEDIA_ERROR, "Released capture failed"),
+                XmaxRealtimeLifecycleManager.TerminationScope.ALL,
+            )
+        }
+        f.manager.close()
+        runCurrent()
+        assertTrue(f.errors.isEmpty())
+        f.media.onStop = {}
+        f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        assertEquals(RealtimeConnectionState.READY, f.manager.currentState.connectionState)
+        assertNotNull(f.media.currentTrack)
+        f.manager.close()
+    }
+
+    @Test
     fun `camera presets require ready disconnected preview and preserve encoding options`() = runTest {
         val f = Fixture(StandardTestDispatcher(testScheduler))
         assertNull(f.manager.currentCameraVideoFormat)
@@ -579,7 +620,7 @@ class XmaxRealtimeManagerTest {
         f.manager.close()
     }
 
-    @Test fun `listener updates during close only apply to the next runtime`() = runTest {
+    @Test fun `listener updates during close remain on shared components for the next stream`() = runTest {
         val f = Fixture(StandardTestDispatcher(testScheduler))
         f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
         f.manager.setUplinkVideoStatisticsListener { }
@@ -602,9 +643,9 @@ class XmaxRealtimeManagerTest {
             assertTrue(registration.isCompleted)
             assertFalse(registration.isCancelled)
             assertNull(f.stream.registeredUplinkStatisticsListener)
-            assertNull(f.stream.registeredDownlinkStatisticsListener)
-            assertNull(f.stream.registeredNetworkQualityListener)
-            assertNull(f.stream.registeredPerformanceAlarmListener)
+            assertSame(remote, f.stream.registeredDownlinkStatisticsListener)
+            assertSame(network, f.stream.registeredNetworkQualityListener)
+            assertSame(performance, f.stream.registeredPerformanceAlarmListener)
         } finally {
             gate.complete(Unit)
         }
@@ -628,13 +669,10 @@ class XmaxRealtimeManagerTest {
         f.manager.close()
     }
 
-    @Test fun `listener registration and clearing never initialize components`() = runTest {
+    @Test fun `listener registration and clearing never start media or create a connection`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        var creations = 0
-        val manager = XmaxRealtimeManager(RealtimeConfiguration(), { _, _, _ ->
-            creations++
-            error("Listener registration must not create components")
-        }, RealtimeCallbacks(dispatcher), dispatcher)
+        val f = Fixture(dispatcher)
+        val manager = f.manager
         manager.setUplinkVideoStatisticsListener { }
         manager.setDownlinkVideoStatisticsListener { }
         manager.setNetworkQualityListener { }
@@ -644,7 +682,9 @@ class XmaxRealtimeManagerTest {
         manager.setDownlinkVideoStatisticsListener(null)
         manager.setNetworkQualityListener(null)
         manager.setPerformanceAlarmListener(null)
-        assertEquals(0, creations)
+        assertEquals(0, f.media.cameraStartCount)
+        assertEquals(0, f.session.count)
+        assertNull(f.media.currentTrack)
     }
 
     /**
@@ -739,11 +779,12 @@ class XmaxRealtimeManagerTest {
                 ai.xmax.sdk.stream.room.RoomHeartbeat(rtc, sleeper = { awaitCancellation() }, scope = backgroundScope)),
             generationScope = backgroundScope, renderDispatcher = dispatcher,
         )
-        val manager = XmaxRealtimeManager(RealtimeConfiguration(), { _, _, _ ->
-            XmaxRealtimeComponents(media, stream, render,
-                XmaxRealtimeConnectionManager(session, media, render, stream),
-                XmaxRealtimeGenerationManager(media, stream, render))
-        }, RealtimeCallbacks(dispatcher), dispatcher, qualityNow = { testScheduler.currentTime })
+        val manager = XmaxRealtimeManager(
+            RealtimeConfiguration(),
+            managerComponents(media, stream, render, session, dispatcher),
+            dispatcher,
+            qualityNow = { testScheduler.currentTime },
+        )
         val local = manager.createLocalImageStream(byteArrayOf(1))
         media.networkVideoReference = RealtimeReferenceVideo("https://example.test/driver.mp4")
         manager.setRemoteAudioVolume(1f)
@@ -1182,20 +1223,12 @@ class XmaxRealtimeManagerTest {
         assertEquals(2, f.media.microphoneStopCount)
     }
 
-    @Test fun `audio preferences survive close and are restored before a new local stream starts`() = runTest {
+    @Test fun `audio preferences remain on shared components across close and local stream restart`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val frameDispatchers = mutableListOf<ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher>()
-        val mediaInstances = mutableListOf<MediaStub>()
-        val streamInstances = mutableListOf<StreamStub>()
-        val manager = XmaxRealtimeManager(RealtimeConfiguration(), { _, _, frames ->
-            frameDispatchers += frames
-            val media = MediaStub().also(mediaInstances::add)
-            val stream = StreamStub().also(streamInstances::add)
-            val render = RenderStub()
-            XmaxRealtimeComponents(media, stream, render,
-                XmaxRealtimeConnectionManager(SessionStub(), media, render, stream),
-                XmaxRealtimeGenerationManager(media, stream, render))
-        }, RealtimeCallbacks(dispatcher), dispatcher)
+        val f = Fixture(dispatcher)
+        val media = f.media
+        val stream = f.stream
+        val manager = f.manager
 
         assertEquals(0.45f, manager.localAudioVolume)
         assertEquals(1f, manager.remoteAudioVolume)
@@ -1206,17 +1239,17 @@ class XmaxRealtimeManagerTest {
         manager.createLocalCameraStream(format, CameraPosition.FRONT)
         manager.close()
         manager.createLocalCameraStream(format, CameraPosition.FRONT)
-        assertSame(frameDispatchers.first(), frameDispatchers.last())
-        assertEquals(2, mediaInstances.size)
-        assertEquals(0f, mediaInstances.last().volumeAtStart)
-        assertEquals(0f, streamInstances.last().volume)
+        assertSame(media, f.components.mediaController)
+        assertSame(stream, f.components.streamController)
+        assertEquals(0f, media.volumeAtStart)
+        assertEquals(0f, stream.volume)
 
         manager.setLocalAudioVolume(0.2f)
         manager.setRemoteAudioVolume(0.606f)
         assertEquals(0.2f, manager.localAudioVolume)
         assertEquals(0.61f, manager.remoteAudioVolume)
-        mediaInstances.last().volumeError = XmaxError(XmaxErrorCode.MEDIA_ERROR, "volume failed")
-        streamInstances.last().volumeError = XmaxError(XmaxErrorCode.RTC_ERROR, "volume failed")
+        media.volumeError = XmaxError(XmaxErrorCode.MEDIA_ERROR, "volume failed")
+        stream.volumeError = XmaxError(XmaxErrorCode.RTC_ERROR, "volume failed")
         assertTrue(runCatching { manager.setLocalAudioVolume(0.8f) }.isFailure)
         assertTrue(runCatching { manager.setRemoteAudioVolume(0.9f) }.isFailure)
         assertTrue(runCatching { manager.setLocalAudioVolume(Float.NaN) }.isFailure)
@@ -1224,12 +1257,13 @@ class XmaxRealtimeManagerTest {
         assertEquals(0.61f, manager.remoteAudioVolume)
         manager.close()
         manager.setNetworkQualityListener(null)
-        assertEquals(2, mediaInstances.size)
         assertEquals(0.61f, manager.remoteAudioVolume)
+        media.volumeError = null
+        stream.volumeError = null
         manager.createLocalCameraStream(format, CameraPosition.FRONT)
-        assertEquals(3, mediaInstances.size)
-        assertEquals(0.2f, mediaInstances.last().volumeAtStart)
-        assertEquals(0f, streamInstances.last().volume)
+        assertEquals(3, media.cameraStartCount)
+        assertEquals(0.2f, media.volumeAtStart)
+        assertEquals(0f, stream.volume)
         manager.close()
     }
 
@@ -1263,19 +1297,10 @@ class XmaxRealtimeManagerTest {
         f.manager.close()
     }
 
-    @Test fun `public listeners survive close and runtime recreation`() = runTest {
+    @Test fun `public listeners and preview callback survive close on the same components`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        val callbacks = RealtimeCallbacks(dispatcher)
-        val mediaInstances = mutableListOf<MediaStub>()
-        val streamInstances = mutableListOf<StreamStub>()
-        val manager = XmaxRealtimeManager(RealtimeConfiguration(), { _, _, _ ->
-            val media = MediaStub().also(mediaInstances::add)
-            val stream = StreamStub().also(streamInstances::add)
-            val render = RenderStub()
-            XmaxRealtimeComponents(media, stream, render,
-                XmaxRealtimeConnectionManager(SessionStub(), media, render, stream),
-                XmaxRealtimeGenerationManager(media, stream, render))
-        }, callbacks, dispatcher)
+        val f = Fixture(dispatcher)
+        val manager = f.manager
         val networkListener = RealtimeNetworkQualityListener { _ -> }
         val performanceListener = RealtimePerformanceAlarmListener { _ -> }
         val uplinkStatisticsListener = UplinkVideoStatisticsListener { _ -> }
@@ -1291,7 +1316,7 @@ class XmaxRealtimeManagerTest {
         manager.setPerformanceAlarmListener(performanceListener)
         manager.setUplinkVideoStatisticsListener(uplinkStatisticsListener)
         manager.setDownlinkVideoStatisticsListener(downlinkStatisticsListener)
-        assertTrue(mediaInstances.isEmpty())
+        assertEquals(0, f.media.cameraStartCount)
         manager.createLocalCameraStream(format, CameraPosition.FRONT)
         manager.close()
         runCurrent()
@@ -1301,14 +1326,12 @@ class XmaxRealtimeManagerTest {
         assertTrue(errors.isEmpty())
 
         manager.createLocalCameraStream(format, CameraPosition.FRONT)
-        assertEquals(2, mediaInstances.size)
-        assertNotNull(mediaInstances.last().registeredCameraPreviewReadyListener)
-        assertSame(networkListener, streamInstances.last().registeredNetworkQualityListener)
-        assertSame(performanceListener, streamInstances.last().registeredPerformanceAlarmListener)
-        assertSame(uplinkStatisticsListener, streamInstances.last().registeredUplinkStatisticsListener)
-        assertSame(downlinkStatisticsListener, streamInstances.last().registeredDownlinkStatisticsListener)
-        assertNull(streamInstances.first().registeredUplinkStatisticsListener)
-        assertNull(streamInstances.first().registeredDownlinkStatisticsListener)
+        assertEquals(2, f.media.cameraStartCount)
+        assertNotNull(f.media.registeredCameraPreviewReadyListener)
+        assertSame(networkListener, f.stream.registeredNetworkQualityListener)
+        assertSame(performanceListener, f.stream.registeredPerformanceAlarmListener)
+        assertSame(uplinkStatisticsListener, f.stream.registeredUplinkStatisticsListener)
+        assertSame(downlinkStatisticsListener, f.stream.registeredDownlinkStatisticsListener)
         manager.close()
     }
 
@@ -1578,18 +1601,16 @@ class XmaxRealtimeManagerTest {
         f.manager.close()
     }
 
-    @Test fun `registering and clearing frame listener do not initialize RTC components`() = runTest {
+    @Test fun `registering and clearing frame listener never start media or create a connection`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        var builds = 0
         val frames = ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher(dispatcher)
-        val manager = XmaxRealtimeManager(RealtimeConfiguration(), { _, _, _ ->
-            builds++
-            error("Frame listeners must not create a runtime")
-        }, RealtimeCallbacks(dispatcher, frames), dispatcher)
+        val f = Fixture(dispatcher, frames = frames)
+        val manager = f.manager
         manager.setRemoteVideoFrameListener { }
         manager.setRemoteVideoFrameListener(null)
         manager.close()
-        assertEquals(0, builds)
+        assertEquals(0, f.media.cameraStartCount)
+        assertEquals(0, f.session.count)
     }
 
     @Test fun `timing measures reconnects but skips updates and cancellation`() = runTest {
@@ -1657,25 +1678,24 @@ class XmaxRealtimeManagerTest {
 
     private class Fixture(
         dispatcher: CoroutineDispatcher,
-        frameGate: RenderControlling = RenderStub(),
+        frameGate: RenderControlling? = null,
         timing: RealtimeTiming = RealtimeTiming(),
         frames: ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher = ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher(),
         qualityNow: () -> Long = { System.nanoTime() / 1_000_000 },
         qualityHistory: QualityHistory = QualityHistory(),
+        mediaService: MediaServicing = MediaService(),
     ) {
         val media = MediaStub()
         val stream = StreamStub(qualityHistory, qualityNow)
-        val render = object : RenderControlling by frameGate {
+        val render = object : RenderControlling by (frameGate ?: RenderStub(frames)) {
             // JVM tests exercise the real frame gate; Android view/trajectory binding has device tests.
             override fun registerRemoteTrack(track: RealtimeVideoTrack, resolvedMediaSize: IntSize, interactionListener: (InteractionFrame) -> Unit) = Unit
         }
         val session = SessionStub()
         val errors = mutableListOf<XmaxError>()
-        val manager = XmaxRealtimeManager(RealtimeConfiguration(), { _, _, _ ->
-            XmaxRealtimeComponents(media, stream, render,
-                XmaxRealtimeConnectionManager(session, media, render, stream),
-                XmaxRealtimeGenerationManager(media, stream, render))
-        }, RealtimeCallbacks(dispatcher, frames), dispatcher, timing, qualityNow = qualityNow)
+        val components = managerComponents(media, stream, render, session, dispatcher,
+            timing = timing, callbacks = RealtimeCallbacks(dispatcher, frames), mediaService = mediaService)
+        val manager = XmaxRealtimeManager(RealtimeConfiguration(), components, dispatcher, qualityNow = qualityNow)
         init { stream.onStop = { render.setRemoteStream(null) } }
         suspend fun listen() {
             manager.setStateListener { state ->
@@ -1685,6 +1705,28 @@ class XmaxRealtimeManagerTest {
     }
     companion object { val format = RealtimeVideoFormat(704, 1280, 24) }
 }
+
+private fun managerComponents(
+    media: MediaControlling,
+    stream: StreamControlling,
+    render: RenderControlling,
+    session: RealtimeSessionServicing,
+    dispatcher: CoroutineDispatcher,
+    timing: RealtimeTiming = RealtimeTiming(),
+    callbacks: RealtimeCallbacks = RealtimeCallbacks(dispatcher),
+    mediaService: MediaServicing = MediaService(),
+) = XmaxRealtimeFactory.assemble(
+    connectionManager = XmaxRealtimeConnectionManager(session, media, render, stream, mediaService),
+    generationManager = XmaxRealtimeGenerationManager(media, stream, render),
+    errorManager = XmaxRealtimeErrorManager(dispatcher),
+    mediaController = media,
+    renderController = render,
+    streamController = stream,
+    mediaService = mediaService,
+    timing = timing,
+    callbacks = callbacks,
+    dispatcher = dispatcher,
+)
 
 private class SessionStub : RealtimeSessionServicing {
     var createBarrier: CompletableDeferred<Unit>? = null
@@ -1703,6 +1745,7 @@ private class SessionStub : RealtimeSessionServicing {
     override suspend fun closeSession(sessionId: String) { currentCoroutineContext().ensureActive(); closed += sessionId }
 }
 private class MediaStub : MediaControlling {
+    override val localAudioVolume: Float get() = volume
     var imageFormat = RealtimeVideoFormat(704, 1280, 24)
     override var isLocalVideo = false
     override var isLocalImage = false
@@ -1724,8 +1767,10 @@ private class MediaStub : MediaControlling {
     var createError: XmaxError? = null
     var registeredCameraPreviewReadyListener: RealtimeCameraPreviewReadyListener? = null
     var reportPreviewReadyOnCreate = true
+    var cameraStartCount = 0
     var cameraStartBarrier: CompletableDeferred<Unit>? = null
     var stopBarrier: CompletableDeferred<Unit>? = null
+    var onStop: () -> Unit = {}
     override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) {
         registeredCameraPreviewReadyListener = listener
     }
@@ -1736,6 +1781,7 @@ private class MediaStub : MediaControlling {
     ): RealtimeMediaStream {
         cameraStartBarrier?.await()
         createError?.let { throw it }
+        cameraStartCount++
         volumeAtStart = volume
         hasAudio = useMicrophone
         val track = RealtimeVideoTrack("local", videoFormat, position = position)
@@ -1793,6 +1839,7 @@ private class MediaStub : MediaControlling {
     override suspend fun stopLocalStream() {
         stopBarrier?.await()
         currentTrack = null
+        onStop()
     }
     override suspend fun setLocalAudioPreviewMuted(muted: Boolean) { this.muted = muted; muteChanges += muted }
     override suspend fun setLocalAudioVolume(volume: Float) { volumeError?.let { throw it }; this.volume = volume }
@@ -1829,6 +1876,7 @@ private class StreamStub(
     val startedFaceRestorations = mutableListOf<Boolean>()
     val updatedPrompts = mutableListOf<String?>()
     var volume = 1f
+    override val remoteAudioVolume: Float get() = volume
     var volumeError: XmaxError? = null
     val localPublicationSelections = mutableListOf<Boolean>()
     var networkFinishHandler: (() -> Unit)? = null
@@ -1854,7 +1902,7 @@ private class StreamStub(
     override fun setPerformanceAlarmListener(listener: RealtimePerformanceAlarmListener?) {
         registeredPerformanceAlarmListener = listener
     }
-    override fun setRemoteAudioVolume(volume: Float) { volumeError?.let { throw it }; this.volume = volume }
+    override fun setRemoteAudioVolume(volume: Float) { volumeError?.let { throw it }; this.volume = kotlin.math.round(volume * 100f) / 100f }
     override suspend fun connect(connection: RealtimeSessionConnection, includeLocalAudio: Boolean, publishLocalMedia: Boolean, ensureActive: () -> Unit) {
         ensureActive()
         localPublicationSelections += publishLocalMedia
@@ -1911,7 +1959,10 @@ private class StreamStub(
     override suspend fun stopGeneration(taskId: String) { onStop() }
     override suspend fun sendTracks(taskId: String, points: List<RealtimePoint>) = Unit
 }
-private class RenderStub : RenderControlling {
+private class RenderStub(
+    private val frames: ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher = ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher(),
+) : RenderControlling {
+    override fun setRemoteVideoFrameListener(listener: RealtimeVideoFrameListener?) { frames.setListener(listener) }
     override fun setRemoteStream(stream: RemoteStream?) = Unit
     override fun registerRemoteTrack(track: RealtimeVideoTrack, resolvedMediaSize: IntSize, interactionListener: (InteractionFrame) -> Unit) = Unit
     override suspend fun waitUntilRemoteFrameReady() = Unit

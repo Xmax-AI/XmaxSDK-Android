@@ -26,7 +26,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 
 /**
- * Coordinates image decoding, repeated frame delivery, and local preview resources.
+ * Coordinates image decoding, repeated frame delivery, and preview.
  */
 internal class ImageController(
     /**
@@ -57,10 +57,11 @@ internal class ImageController(
         get() = synchronized(stateLock) { activeTrack }
 
     /**
-     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from encoded image data.
+     *
+     * The stream retains the media aspect ratio and uses the model's default frame rate. Dimensions
+     * respect model pixel-area limits and four-pixel alignment; the generation canvas is selected
+     * separately.
      *
      * @param imageData Encoded image file bytes, not raw pixels.
      */
@@ -71,9 +72,11 @@ internal class ImageController(
     }
 
     /**
-     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
-     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
-     * rate and a separately selected model canvas.
+     * Creates a continuous video frame stream from an Android bitmap.
+     *
+     * The stream retains the media aspect ratio and uses the model's default frame rate. Dimensions
+     * respect model pixel-area limits and four-pixel alignment; the generation canvas is selected
+     * separately.
      *
      * @param bitmap The Android image to process or display.
      */
@@ -84,10 +87,11 @@ internal class ImageController(
     }
 
     /**
-     * Creates a local image stream from a readable URI; your app owns read permissions.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from a local image URI.
+     *
+     * Your app must hold read permission. The stream retains the media aspect ratio and uses the
+     * model's default frame rate. Dimensions respect model pixel-area limits and four-pixel
+     * alignment; the generation canvas is selected separately.
      *
      * @param uri A media URI your app can read.
      */
@@ -98,7 +102,9 @@ internal class ImageController(
     }
 
     /**
-     * Stops and releases the current image source; does nothing for other source types.
+     * Stops the local image stream.
+     *
+     * Other input sources are unaffected.
      */
     suspend fun stopLocalImageStream() {
         val track = synchronized(stateLock) {

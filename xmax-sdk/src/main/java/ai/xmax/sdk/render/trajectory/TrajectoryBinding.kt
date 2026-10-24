@@ -17,7 +17,7 @@ import android.os.Handler
 import android.os.Looper
 
 /**
- * Forwards rendering-layer touch input to media interaction.
+ * Connects rendering touch input to media interactions.
  */
 internal class TrajectoryBinding(
     /**

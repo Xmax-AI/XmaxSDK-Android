@@ -43,7 +43,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 
 /**
- * The Agora-based RTC engine and room lifecycle manager.
+ * Manages RTC leases, connection waits, and event validity.
  *
  * @param callbackScope The scope dispatching asynchronous callbacks.
  */
@@ -281,7 +281,7 @@ internal class RtcManager(
     }
 
     /**
-     * Applies encoding settings to the primary video stream.
+     * Applies the uplink encoder configuration.
      *
      * @param configuration Uplink dimensions, frame rate, bitrate, and encoding preference.
      */
@@ -801,7 +801,7 @@ internal class RtcManager(
     }
 
     /**
-     * Sets the RTC event listener; null unregisters it.
+     * Sets the RTC connection and media event listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -955,7 +955,7 @@ internal class RtcManager(
     }
 
     /**
-     * Sets the RTC quality listener; null unregisters it.
+     * Sets the RTC network and media quality listener.
      *
      * @param listener The event listener, or null to unregister it.
      */

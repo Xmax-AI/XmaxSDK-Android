@@ -13,16 +13,17 @@ package ai.xmax.sdk
 import java.io.File
 
 /**
- * The image and video storage API; suspending calls return transfer results or throw failures.
- * Cancellation propagates to the transfer. Progress arrives on the transfer thread; your app must dispatch UI
- * updates to the main thread.
- * Downloads write a temporary file before replacing the destination; concurrent writes to the same
+ * An interface for uploading and downloading media files.
+ *
+ * Suspending calls return transfer results or throw failures. Cancellation propagates to the
+ * transfer. Progress arrives on the transfer thread; your app must dispatch UI updates to the main
+ * thread. Downloads preserve the existing destination on failure; concurrent writes to the same
  * destination are rejected.
  */
 public interface XmaxStorageManaging {
 
     /**
-     * Uploads image bytes; fileName forms the object name, and contentType must identify an image.
+     * Uploads encoded image data.
      *
      * @param data Encoded image file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -38,7 +39,7 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * Uploads a readable image file, inferring its MIME type from the extension when contentType is null.
+     * Uploads a local image file.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -52,7 +53,7 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * The local-path overload of [uploadImageFile], with the same parameter meanings as the File overload.
+     * Uploads a local image file.
      *
      * @param filePath A readable local file path.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -66,7 +67,7 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * Uploads image bytes and returns the result after the server content safety check passes.
+     * Uploads encoded image data and checks its content before returning.
      *
      * @param data Encoded image file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -82,7 +83,9 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * Uploads a local image and checks content safety; rejected images throw UNSAFE_IMAGE.
+     * Uploads a local image file and checks its content before returning.
+     *
+     * Content rejected by the service produces [XmaxErrorCode.UNSAFE_IMAGE].
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -96,7 +99,7 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * The local-path overload of [uploadImageFileWithSafetyCheck].
+     * Uploads a local image file and checks its content before returning.
      *
      * @param filePath A readable local file path.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -110,7 +113,7 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * Uploads video bytes; fileName forms the object name, and contentType must identify video.
+     * Uploads encoded video data.
      *
      * @param data Encoded video file bytes.
      * @param fileName The filename, including its extension, used to form the object name.
@@ -126,7 +129,7 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * Uploads a readable video file, inferring its MIME type from the extension when contentType is null.
+     * Uploads a local video file.
      *
      * @param file A readable local file.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -140,7 +143,7 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * The local-path overload of [uploadVideoFile].
+     * Uploads a local video file.
      *
      * @param filePath A readable local file path.
      * @param contentType The media MIME type, or null to infer it from the extension.
@@ -154,7 +157,7 @@ public interface XmaxStorageManaging {
     ): XmaxUploadedFile
 
     /**
-     * Downloads an image from HTTP(S), returning the destination path and actual byte count.
+     * Downloads an image to the specified local file.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.
@@ -168,7 +171,7 @@ public interface XmaxStorageManaging {
     ): XmaxDownloadedFile
 
     /**
-     * The destination-path overload of [downloadImage].
+     * Downloads an image to the specified local file.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destinationPath The destination path replaced after a successful download.
@@ -182,7 +185,7 @@ public interface XmaxStorageManaging {
     ): XmaxDownloadedFile
 
     /**
-     * Downloads a video from HTTP(S), returning the destination path and actual byte count.
+     * Downloads a video to the specified local file.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destination The destination file replaced after a successful download.
@@ -196,7 +199,7 @@ public interface XmaxStorageManaging {
     ): XmaxDownloadedFile
 
     /**
-     * The destination-path overload of [downloadVideo].
+     * Downloads a video to the specified local file.
      *
      * @param remoteUrl The HTTP or HTTPS URL to download.
      * @param destinationPath The destination path replaced after a successful download.

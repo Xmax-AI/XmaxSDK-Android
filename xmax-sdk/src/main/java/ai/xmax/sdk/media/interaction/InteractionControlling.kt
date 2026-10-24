@@ -13,12 +13,12 @@ package ai.xmax.sdk.media.interaction
 import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
- * The trajectory input lifecycle of a generation task.
+ * An interface for generation trajectory input.
  */
 internal interface InteractionControlling {
 
     /**
-     * Enables interaction submission for a generation task.
+     * Starts accepting interactions for a generation task.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
@@ -29,12 +29,12 @@ internal interface InteractionControlling {
     )
 
     /**
-     * Stops interaction submission and discards pending trajectories.
+     * Stops accepting interactions and clears pending trajectories.
      */
     suspend fun stopInteraction()
 
     /**
-     * Submits a trajectory for the currently displayed image.
+     * Submits a touch trajectory.
      *
      * @param frame The current trajectory and displayed image dimensions.
      */

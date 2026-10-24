@@ -16,7 +16,9 @@ import ai.xmax.sdk.XmaxErrorCode
 import kotlin.math.round
 
 /**
- * Calculates default encoder bitrate bounds from dimensions and frame rate, in kbps.
+ * The shared encoding bitrate budget.
+ *
+ * Default bounds are calculated from video dimensions and frame rate, in kbps.
  */
 internal object EncodingBitratePolicy {
 
@@ -26,8 +28,9 @@ internal object EncodingBitratePolicy {
     private const val BITRATE_SCALE = 0.6
 
     /**
-     * The minimum budget is 100 kbps; the maximum is scaled and rounded from dimensions and frame rate, never
-     * below that minimum.
+     * Resolves default bitrate bounds from video dimensions and frame rate.
+     *
+     * The minimum is 100 kbps. The scaled, rounded maximum is never below that minimum.
      *
      * @param width The frame width, in pixels.
      * @param height The frame height, in pixels.
@@ -237,7 +240,7 @@ internal object EncodingBitratePolicy {
     }
 
     /**
-     * Interpolates between adjacent reference points and extrapolates proportionally beyond endpoint values.
+     * Interpolates between references and extrapolates proportionally beyond endpoints.
      *
      * @param value The pixel area or frame rate for lookup.
      * @param points Bitrate reference points sorted by their input values.

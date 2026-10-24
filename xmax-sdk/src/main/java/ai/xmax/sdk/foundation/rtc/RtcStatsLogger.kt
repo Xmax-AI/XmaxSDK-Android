@@ -16,7 +16,9 @@ import ai.xmax.sdk.UplinkVideoStatistics
 import ai.xmax.sdk.DownlinkVideoStatistics
 
 /**
- * Formats consistent uplink and downlink statistics logs, displaying unavailable values as a dash.
+ * Formats RTC statistics for Xmax logs.
+ *
+ * Unavailable values are displayed as a dash.
  */
 internal object RtcStatsLogger {
 

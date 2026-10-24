@@ -13,7 +13,7 @@ package ai.xmax.sdk.foundation.media
 import ai.xmax.sdk.VideoRotation
 
 /**
- * Video, audio, and timeline metadata for a local media file.
+ * The video, audio, and timeline metadata of a local media file.
  */
 internal data class MediaFileMetadata(
     /**

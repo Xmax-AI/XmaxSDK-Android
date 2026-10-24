@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * The realtime video encoder's quality preference.
+ * The encoding preference for realtime video.
  */
 public enum class RealtimeVideoEncoderPreference {
 
@@ -32,9 +32,10 @@ public enum class RealtimeVideoEncoderPreference {
 }
 
 /**
- * Realtime video dimensions, frame rate, and uplink encoding settings.
- * Local images and videos use this as their media baseline; the model canvas is separate and quality
- * adaptation does not change the baseline.
+ * The dimensions, frame rate, and uplink encoding settings for realtime video.
+ *
+ * Local images and videos use this as their media baseline; the generation canvas is separate and
+ * quality adaptation does not change the baseline.
  */
 public data class RealtimeVideoFormat @JvmOverloads constructor(
     /**

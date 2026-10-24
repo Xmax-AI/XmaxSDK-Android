@@ -13,12 +13,12 @@ package ai.xmax.sdk.service.realtime
 import ai.xmax.sdk.RealtimeModel
 
 /**
- * The realtime session API and heartbeat lifecycle capabilities.
+ * An interface for session requests and heartbeat lifecycle.
  */
 internal interface RealtimeSessionServicing {
 
     /**
-     * Creates a realtime session and returns its RTC connection details.
+     * Creates a realtime session for the requested model.
      *
      * @param model The model defining server capabilities and input constraints.
      * @return The server session identifier, state, and available RTC connection details.
@@ -28,7 +28,7 @@ internal interface RealtimeSessionServicing {
     ): RealtimeSession
 
     /**
-     * Starts periodic heartbeats for a session.
+     * Starts a session heartbeat, replacing the previous task.
      *
      * @param sessionId The server session identifier.
      * @param onFailure Receives the session identifier and error when renewal fails.
@@ -39,12 +39,12 @@ internal interface RealtimeSessionServicing {
     )
 
     /**
-     * Stops the heartbeat, preventing invalidated late results from reporting failures.
+     * Stops the heartbeat and invalidates pending failure notifications.
      */
     suspend fun stopHeartbeat()
 
     /**
-     * Closes a realtime session.
+     * Closes a server session.
      *
      * @param sessionId The server session identifier.
      */

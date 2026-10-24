@@ -11,8 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * Measured uplink video statistics; unavailable metrics are null rather than substituted configuration
- * values.
+ * Uplink video statistics. Unavailable metrics are null.
  */
 public data class UplinkVideoStatistics(
     /**
@@ -52,7 +51,7 @@ public data class UplinkVideoStatistics(
 )
 
 /**
- * Measured statistics for one primary downlink video stream; unavailable metrics are null.
+ * Downlink video statistics. Unavailable metrics are null.
  */
 public data class DownlinkVideoStatistics(
     /**

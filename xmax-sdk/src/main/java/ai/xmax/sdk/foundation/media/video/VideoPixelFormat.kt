@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * Pixel formats supported by platform-neutral video frames.
+ * A pixel format supported by video frames.
  */
 internal enum class VideoPixelFormat(
     /**

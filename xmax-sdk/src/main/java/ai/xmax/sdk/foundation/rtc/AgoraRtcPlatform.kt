@@ -75,7 +75,7 @@ internal fun isAgoraVideoPublished(
         state and Constants.USER_STATE_ENABLE_LOCAL_VIDEO != 0
 
 /**
- * The Agora implementation of media capture, encoding, rooms, and remote rendering.
+ * An Agora adapter for RTC engine operations.
  *
  * @param context The Android context used for system services and media resources.
  */
@@ -334,7 +334,7 @@ private class AgoraRtcPlatform(
     }
 
     /**
-     * Applies encoding settings to the primary video stream.
+     * Applies the uplink encoder configuration.
      *
      * @param configuration Uplink dimensions, frame rate, bitrate, and encoding preference.
      * @return The RTC result: nonnegative if accepted, negative on failure.
@@ -727,7 +727,7 @@ private class AgoraRtcPlatform(
     }
 
     /**
-     * Sets the RTC event listener; null unregisters it.
+     * Sets the RTC connection and media event listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -736,7 +736,7 @@ private class AgoraRtcPlatform(
     ) { this.listener.set(listener) }
 
     /**
-     * Sets the RTC quality listener; null unregisters it.
+     * Sets the RTC network and media quality listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -1179,7 +1179,7 @@ private class AgoraRtcPlatform(
             }
 
             /**
-             * Receives uplink and downlink network quality samples.
+             * Receives uplink and downlink network quality.
              *
              * @param uid The RTC-assigned numeric user identifier.
              * @param txQuality The RTC uplink network quality rating.

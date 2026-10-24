@@ -13,14 +13,11 @@ package ai.xmax.sdk
 import ai.xmax.sdk.XmaxRealtimeLifecycleManager.OperationKind
 import ai.xmax.sdk.XmaxRealtimeLifecycleManager.TerminationScope
 import ai.xmax.sdk.media.MediaControlling
-import ai.xmax.sdk.render.video.RealtimeVideoFrameDispatcher
 import ai.xmax.sdk.service.network.ApiServicing
-import ai.xmax.sdk.service.media.MediaService
 import androidx.compose.ui.unit.IntSize
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -36,52 +33,77 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.withContext
 
 /**
- * Coordinates local media, server sessions, generation tasks, and remote presentation for the public realtime
- * API.
- * XmaxRealtimeLifecycleManager owns lifecycle state and operations; RealtimeCallbacks delivers app notifications.
- * Components are created on demand. Each runtime identifies its failure sources so callbacks from released
- * resources cannot affect a later connection.
+ * Implements the public realtime API and sequences media, connection, and generation workflows.
  *
- * @param dispatcher The dispatcher for background operations; defaults to `Dispatchers.Default`.
+ * @param components The assembled managers, controllers, services, and timing recorder.
+ * @param dispatcher The dispatcher for automatic quality adjustments; defaults to `Dispatchers.Default`.
  */
 internal class XmaxRealtimeManager(
     /**
-     * The model and realtime configuration.
+     * The realtime configuration supplied at creation.
      */
     override val options: RealtimeConfiguration,
 
-    /**
-     * The factory creating realtime components with failure callbacks and a frame dispatcher.
-     */
-    private val componentFactory: ((XmaxError) -> Unit, (XmaxError) -> Unit, RealtimeVideoFrameDispatcher) -> XmaxRealtimeComponents,
-
-    /**
-     * The dispatcher for app state and video frame callbacks.
-     */
-    private val callbacks: RealtimeCallbacks = RealtimeCallbacks(),
-
+    components: XmaxRealtimeComponents,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
-
-    /**
-     * The recorder for generation startup timing.
-     */
-    private val timing: RealtimeTiming = RealtimeTiming(),
 
     /**
      * The monotonic clock returning milliseconds for quality adjustment intervals.
      */
     private val qualityNow: () -> Long = { System.nanoTime() / 1_000_000 },
-
-    /**
-     * The manager routing current runtime failures to lifecycle termination.
-     */
-    private val errorManager: XmaxRealtimeErrorManager = XmaxRealtimeErrorManager(dispatcher),
 ) : XmaxRealtimeManaging {
 
+    // Dependencies
+
     /**
-     * Creates a realtime manager.
+     * The lifecycle owner that admits operations and merges termination requests.
+     */
+    private val lifecycleManager = components.lifecycleManager
+
+    /**
+     * The manager that owns the server session and RTC connection.
+     */
+    private val connectionManager = components.connectionManager
+
+    /**
+     * The manager that sends generation requests and confirms result streams.
+     */
+    private val generationManager = components.generationManager
+
+    /**
+     * The manager that logs and forwards media and connection failures.
+     */
+    private val errorManager = components.errorManager
+
+    /**
+     * The controller that manages local media, preview, and interactions.
+     */
+    private val mediaController = components.mediaController
+
+    /**
+     * The controller that manages remote tracks, first-frame readiness, and rendering.
+     */
+    private val renderController = components.renderController
+
+    /**
+     * The controller that manages RTC connections, signaling, and transport quality.
+     */
+    private val streamController = components.streamController
+
+    /**
+     * The service that resolves media dimensions and model input constraints.
+     */
+    private val mediaService = components.mediaService
+
+    /**
+     * The recorder for generation startup stage durations.
+     */
+    private val timing = components.timing
+
+    /**
+     * Creates a realtime manager using the default SDK components.
      *
-     * @param options The model and realtime configuration.
+     * @param options The realtime configuration supplied at creation.
      * @param context The Android context used for system services and media resources.
      * @param apiService The client for server API requests.
      */
@@ -92,20 +114,17 @@ internal class XmaxRealtimeManager(
     ) :
         this(
             options,
-            { onError, onMediaError, frames ->
-                XmaxRealtimeFactory.make(
-                    context,
-                    apiService,
-                    options.model,
-                    onError,
-                    onMediaError,
-                    frames,
-                )
-            },
+            XmaxRealtimeFactory.make(
+                options,
+                context,
+                apiService,
+            ),
         )
 
+    // State
+
     /**
-     * The automatic quality adjustment job.
+     * The coroutine scope for automatic quality adjustments.
      */
     private val qualityScope = CoroutineScope(SupervisorJob() + dispatcher)
 
@@ -115,74 +134,23 @@ internal class XmaxRealtimeManager(
     private val qualityRevision = AtomicLong()
 
     /**
-     * The active runtime, created and released by serialized lifecycle operations.
+     * Whether an adaptive quality request is already pending.
      */
-    @Volatile private var runtime: Runtime? = null
+    private val qualityPending = AtomicBoolean(false)
 
     /**
-     * The persistent local preview volume.
-     *
-     * Volume settings survive media release; null uses the source default.
-     */
-    @Volatile private var configuredLocalAudioVolume: Float? = null
-
-    /**
-     * The app-configured downlink volume, or the default when unset.
-     */
-    @Volatile private var configuredRemoteAudioVolume: Float? = null
-
-    /**
-     * The lock protecting quality and statistics listener registrations.
-     *
-     * Protect only listener configuration and existing bindings; do not create components, operate media, or
-     * call app code while holding this lock.
-     */
-    private val listenerLock = Any()
-
-    /**
-     * The network quality listener.
-     */
-    private var networkQualityListener: RealtimeNetworkQualityListener? = null
-
-    /**
-     * The device performance alarm listener.
-     */
-    private var performanceAlarmListener: RealtimePerformanceAlarmListener? = null
-
-    /**
-     * The uplink video statistics listener.
-     */
-    private var uplinkVideoStatisticsListener: UplinkVideoStatisticsListener? = null
-
-    /**
-     * The downlink video statistics listener.
-     */
-    private var downlinkVideoStatisticsListener: DownlinkVideoStatisticsListener? = null
-
-    /**
-     * The manager owning realtime operations and state.
-     */
-    private val lifecycleManager = XmaxRealtimeFactory.assemble(
-        callbacks,
-        dispatcher,
-        errorManager,
-        hasLocalMedia = { runtime?.components?.media?.currentTrack != null },
-        cleanup = ::cleanup,
-    )
-
-    /**
-     * The current media and generation state.
+     * The current connection and generation state.
      */
     override val currentState: RealtimeState get() = lifecycleManager.currentState
 
     /**
-     * The current camera media format, unaffected by transmission quality changes.
+     * The camera's resolved media format, or null for other input sources.
      */
     override val currentCameraVideoFormat: RealtimeVideoFormat?
-        get() = runtime?.components?.media?.currentTrack?.takeIf { it.position != null }?.videoFormat
+        get() = mediaController.currentTrack?.takeIf { it.position != null }?.videoFormat
 
     /**
-     * The preset matching the current camera dimensions.
+     * The preset matching current camera dimensions, independent of frame rate or encoding level.
      */
     override val currentCameraPreset: RealtimeCameraPreset?
         get() = currentCameraVideoFormat?.let { format ->
@@ -192,13 +160,13 @@ internal class XmaxRealtimeManager(
         }
 
     /**
-     * The successfully applied uplink level for the current connection.
+     * The uplink level successfully applied to the current connection.
      */
     override val uplinkQualityLevel: RealtimeQualityLevel?
         get() = currentQualityLevel(downlink = false)
 
     /**
-     * The successfully submitted downlink level for the current connection.
+     * The downlink level successfully submitted for the current connection.
      */
     override val downlinkQualityLevel: RealtimeQualityLevel?
         get() = currentQualityLevel(downlink = true)
@@ -212,21 +180,20 @@ internal class XmaxRealtimeManager(
     private fun currentQualityLevel(
         downlink: Boolean,
     ): RealtimeQualityLevel? {
-        val owner = runtime ?: return null
         val state = currentState.connectionState
         if (state != RealtimeConnectionState.CONNECTED && state != RealtimeConnectionState.GENERATING) return null
 
-        if (downlink && owner.qualityTaskId == null) return null
+        if (downlink && currentState.taskId == null) return null
 
-        val configuration = owner.components.stream.qualityConfiguration ?: return null
+        val configuration = streamController.qualityConfiguration ?: return null
         val level = if (downlink) configuration.downlinkLevel else configuration.uplinkLevel
         return level?.let { value -> RealtimeQualityLevel.entries.first { it.rawValue == value } }
     }
 
     /**
-     * Adjusts uplink encoding quality during generation without disabling automatic adaptation.
+     * Changes the uplink encoding level while allowing subsequent automatic adaptation.
      *
-     * @param level The target uplink level.
+     * @param level The requested uplink quality level.
      */
     override suspend fun setUplinkQualityLevel(
         level: RealtimeQualityLevel,
@@ -238,9 +205,9 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Adjusts downlink output quality during generation without disabling automatic adaptation.
+     * Changes the downlink output level while allowing subsequent automatic adaptation.
      *
-     * @param level The target downlink level.
+     * @param level The requested downlink quality level.
      */
     override suspend fun setDownlinkQualityLevel(
         level: RealtimeQualityLevel,
@@ -252,10 +219,10 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Serializes manual quality updates with generation changes and connection cleanup.
+     * Changes the requested uplink or downlink quality level.
      *
-     * @param level The target transmission quality level.
-     * @param downlink Whether to adjust the downlink.
+     * @param level The requested transport quality level.
+     * @param downlink Whether to change downlink output rather than uplink encoding.
      */
     private suspend fun setQualityLevel(
         level: RealtimeQualityLevel,
@@ -263,28 +230,27 @@ internal class XmaxRealtimeManager(
     ) {
         lifecycleManager.run(OperationKind.CONFIGURATION) { token ->
             token.ensureCurrent()
-            val owner = runtime ?: throw invalid("Quality levels can only be changed while generating")
             val state = currentState
             val taskId = state.taskId
-            if (state.connectionState != RealtimeConnectionState.GENERATING || taskId == null || owner.qualityTaskId != taskId) {
+            if (state.connectionState != RealtimeConnectionState.GENERATING || taskId == null) {
                 throw invalid("Quality levels can only be changed while generating")
             }
 
-            val configuration = owner.components.stream.qualityConfiguration
+            val configuration = streamController.qualityConfiguration
                 ?: throw invalid("No quality configuration is available")
             if (!downlink && configuration.uplinkLevel == null) {
                 throw invalid("No uplink quality configuration is available")
             }
 
             qualityRevision.incrementAndGet()
-            owner.components.connection.applyQualityLevel(
+            connectionManager.applyQualityLevel(
                 level.rawValue,
                 downlink,
                 taskId,
             ) {
                 token.ensureCurrent()
                 val current = currentState
-                val ownsTask = runtime === owner && owner.qualityTaskId == taskId && current.taskId == taskId
+                val ownsTask = current.taskId == taskId
                 if (!ownsTask || current.connectionState != RealtimeConnectionState.GENERATING) {
                     throw CancellationException("Quality adjustment belongs to an inactive generation")
                 }
@@ -293,144 +259,137 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * The current local preview playback volume.
+     * The local preview volume, in the range `0...1`.
      */
-    override val localAudioVolume: Float get() = configuredLocalAudioVolume ?: 0.45f
+    override val localAudioVolume: Float get() = mediaController.localAudioVolume
 
     /**
-     * The downlink playback volume from 0 to 1, defaulting to 1.
+     * The remote generated audio volume, in the range `0...1`.
      */
-    override val remoteAudioVolume: Float get() = configuredRemoteAudioVolume ?: 1f
+    override val remoteAudioVolume: Float get() = streamController.remoteAudioVolume
 
     /**
-     * Replaces the state listener and asynchronously delivers the current snapshot on the main thread; null
-     * unregisters it.
+     * Sets the realtime state listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * The current snapshot and subsequent changes are delivered asynchronously on the main thread.
+     *
+     * @param listener The state change handler, or null to remove the listener.
      */
     override suspend fun setStateListener(
         listener: RealtimeStateListener?,
     ) {
-        callbacks.setStateListener(
-            listener,
-            currentState,
-        )
+        lifecycleManager.setStateListener(listener)
     }
 
     /**
-     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the uplink video statistics listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * The listener remains registered after disconnection.
+     *
+     * @param listener The main-thread statistics handler, or null to remove it.
      */
     override suspend fun setUplinkVideoStatisticsListener(
         listener: UplinkVideoStatisticsListener?,
     ) {
-        synchronized(listenerLock) {
-            uplinkVideoStatisticsListener = listener
-            runtime?.takeIf { it.listenersApplied }?.components?.stream?.setUplinkVideoStatisticsListener(listener)
-        }
+        streamController.setUplinkVideoStatisticsListener(listener)
     }
 
     /**
-     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the downlink video statistics listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * The listener remains registered after disconnection.
+     *
+     * @param listener The main-thread statistics handler, or null to remove it.
      */
     override suspend fun setDownlinkVideoStatisticsListener(
         listener: DownlinkVideoStatisticsListener?,
     ) {
-        synchronized(listenerLock) {
-            downlinkVideoStatisticsListener = listener
-            runtime?.takeIf { it.listenersApplied }?.components?.stream?.setDownlinkVideoStatisticsListener(listener)
-        }
+        streamController.setDownlinkVideoStatisticsListener(listener)
     }
 
     /**
-     * Receives final remote video frames before display.
+     * Sets serialized remote video output without changing playback.
+     *
      * Callbacks run serially on an SDK background dispatcher; slow consumers receive only the latest pending
      * frame.
      * Frame pixels may be retained for asynchronous encoding. Null unregisters the listener. Stopping,
      * disconnecting, or changing tasks discards pending old frames;
      * callbacks already executing may finish. A video view binding is not required.
      *
-     * @param listener The event listener, or null to unregister it.
+     * @param listener The video frame handler, or null to stop output.
      */
     override suspend fun setRemoteVideoFrameListener(
         listener: RealtimeVideoFrameListener?,
     ) {
-        callbacks.remoteVideoFrames.setListener(listener)
+        renderController.setRemoteVideoFrameListener(listener)
     }
 
     /**
-     * Sets the RTC network quality listener; null unregisters it.
+     * Sets the network quality listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * @param listener The uplink and downlink quality handler, or null to remove it.
      */
     override suspend fun setNetworkQualityListener(
         listener: RealtimeNetworkQualityListener?,
     ) {
-        synchronized(listenerLock) {
-            networkQualityListener = listener
-            runtime?.takeIf { it.listenersApplied }?.components?.stream?.setNetworkQualityListener(listener)
-        }
+        streamController.setNetworkQualityListener(listener)
     }
 
     /**
-     * Sets the RTC performance alarm listener; null unregisters it.
+     * Sets the device performance alarm listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * @param listener The device performance alarm handler, or null to remove it.
      */
     override suspend fun setPerformanceAlarmListener(
         listener: RealtimePerformanceAlarmListener?,
     ) {
-        synchronized(listenerLock) {
-            performanceAlarmListener = listener
-            runtime?.takeIf { it.listenersApplied }?.components?.stream?.setPerformanceAlarmListener(listener)
-        }
+        streamController.setPerformanceAlarmListener(listener)
     }
 
     /**
-     * Sets local preview volume from 0 to 1; a successful setting survives close and media recreation.
+     * Sets the local media preview volume.
      *
-     * @param volume The playback volume, from 0 to 1.
+     * The setting is retained after closing and creating local media again.
+     *
+     * @param volume The preview volume, in the range `0...1`.
      */
     override suspend fun setLocalAudioVolume(
         volume: Float,
     ) {
-        execute(OperationKind.SETTING) { _, c ->
+        execute(OperationKind.SETTING) { _ ->
             validateAudioVolume(volume)
-            c.media.setLocalAudioVolume(volume)
-            configuredLocalAudioVolume = volume
+            mediaController.setLocalAudioVolume(volume)
         }
     }
 
     /**
-     * Sets remote playback volume from 0 to 1; a successful setting survives close.
-     * Creating a camera or image source resets it to 0; creating a video source resets it to 1.
+     * Sets the remote audio playback volume.
      *
-     * @param volume The playback volume, from 0 to 1.
+     * The setting is retained before connection or subscription and applied before remote audio playback.
+     * Call this method after creating the local stream to override its initial volume.
+     *
+     * @param volume The remote playback volume, in the range `0...1`.
      */
     override suspend fun setRemoteAudioVolume(
         volume: Float,
     ) {
-        execute(OperationKind.SETTING) { _, c ->
+        execute(OperationKind.SETTING) { _ ->
             validateAudioVolume(volume)
-            c.stream.setRemoteAudioVolume(volume)
-            configuredRemoteAudioVolume = (volume * 100f).roundToInt() / 100f
+            streamController.setRemoteAudioVolume(volume)
         }
     }
 
     /**
-     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
-     * follow the model's constraints.
-     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
-     * disconnection without local playback.
+     * Creates a local camera stream and starts its preview.
      *
-     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
-     * @param position The front or rear camera to use.
-     * @param useMicrophone Whether to use the microphone; your app must obtain recording permission first.
+     * Bind the returned track to a preview view. The state becomes [RealtimeConnectionState.READY] after
+     * the preview receives a valid frame. Your app must obtain camera permission before calling this method.
+     *
+     * @param videoFormat The camera capture and encoding format, subject to the model's constraints.
+     * @param position The camera position to use initially.
+     * @param useMicrophone Whether to capture microphone audio while connected, without local playback.
+     * Your app must obtain recording permission before enabling it.
+     * @return A media stream containing the local camera video track.
      */
     override suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
@@ -448,9 +407,9 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Updates a ready, disconnected camera preview while retaining its track and view binding.
+     * Updates a ready, disconnected camera format while preserving stream and view bindings.
      *
-     * @param videoFormat Model-supported dimensions, frame rate, and encoding settings.
+     * @param videoFormat The supported camera dimensions, frame rate, and encoding settings.
      */
     override suspend fun updateCameraFormat(
         videoFormat: RealtimeVideoFormat,
@@ -459,7 +418,7 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Changes camera resolution while preserving the current frame rate, bitrate, and encoding preference.
+     * Updates camera dimensions while preserving frame rate and encoding settings.
      *
      * @param preset The target resolution preset supported by the model.
      */
@@ -475,33 +434,33 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Resolves the new camera format from the current configuration within a serialized media operation.
+     * Updates the camera format using its current settings.
      *
-     * @param resolve Computes the requested format from the current one.
+     * @param resolve A function deriving the requested format from the current camera format.
      */
     private suspend fun updateCameraFormat(
         resolve: (RealtimeVideoFormat) -> RealtimeVideoFormat,
     ) {
-        execute(OperationKind.MEDIA) { token, c ->
-            requireDisconnected(c)
+        execute(OperationKind.MEDIA) { token ->
+            ensureLocalMediaCanChange()
             val current = currentCameraVideoFormat
             if (currentState.connectionState != RealtimeConnectionState.READY || current == null) {
                 throw invalid("Camera preview must be ready before updating its format")
             }
 
             token.ensureCurrent()
-            c.media.updateCameraFormat(resolve(current))
+            mediaController.updateCameraFormat(resolve(current))
             token.ensureCurrent()
         }
     }
 
     /**
-     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from encoded image data.
      *
-     * @param imageData Encoded image file bytes, not raw pixels.
+     * The stream retains the media aspect ratio; the model selects the generation canvas separately.
+     *
+     * @param imageData Encoded image data in a supported format, such as JPEG or PNG.
+     * @return A media stream containing the local image video track.
      */
     override suspend fun createLocalImageStream(
         imageData: ByteArray,
@@ -509,11 +468,12 @@ internal class XmaxRealtimeManager(
         mediaOperation(sourceRemoteAudioVolume = 0f) { it.createLocalImageStream(imageData) }
 
     /**
-     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
-     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
-     * rate and a separately selected model canvas.
+     * Creates a continuous video frame stream from an Android bitmap.
      *
-     * @param bitmap The Android image to process or display.
+     * The stream retains the media aspect ratio; the model selects the generation canvas separately.
+     *
+     * @param bitmap The Android bitmap to use as local input.
+     * @return A media stream containing the local image video track.
      */
     override suspend fun createLocalImageStream(
         bitmap: Bitmap,
@@ -521,12 +481,12 @@ internal class XmaxRealtimeManager(
         mediaOperation(sourceRemoteAudioVolume = 0f) { it.createLocalImageStream(bitmap) }
 
     /**
-     * Creates a local image stream from a readable URI; your app owns read permissions.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from a local image URI.
      *
-     * @param uri A media URI your app can read.
+     * The stream retains the media aspect ratio; the model selects the generation canvas separately.
+     *
+     * @param uri The local image URI for which your app holds read permission.
+     * @return A media stream containing the local image video track.
      */
     override suspend fun createLocalImageStream(
         uri: Uri,
@@ -534,13 +494,13 @@ internal class XmaxRealtimeManager(
         mediaOperation(sourceRemoteAudioVolume = 0f) { it.createLocalImageStream(uri) }
 
     /**
-     * Creates a local video stream from a URI, including its audio track when present.
-     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
-     * output.
+     * Creates a looping audio and video stream from a local video URI.
      *
-     * @param uri A media URI your app can read.
+     * The stream retains the video's display aspect ratio and uses the model's default frame rate.
+     * The generation canvas is resolved separately.
+     *
+     * @param uri The local video URI for which your app holds read permission.
+     * @return A media stream containing the local file video track.
      */
     override suspend fun createLocalVideoStream(
         uri: Uri,
@@ -560,6 +520,7 @@ internal class XmaxRealtimeManager(
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @param sampleMethod The sampling method used when the server reads the network video.
      * @param onFinish The completion callback for the network video task, or null to omit it.
+     * @return A media stream containing the local preview video track.
      */
     override suspend fun createNetworkVideoStream(
         uri: Uri,
@@ -576,17 +537,15 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Binds video collected, decoded, or processed by your app; your app owns camera or player startup,
-     * shutdown, and release.
-     * Video is provided by default; the source may optionally supply audio and a preview inside the SDK
-     * container.
-     * When videoFormat is absent, uses source dimensions and the model's default frame rate, subject to model
-     * validation and alignment.
-     * The external source must deliver frames matching sink.videoFormat.
+     * Binds an external video source and resolves its media format.
+     *
+     * Your app owns camera or player startup, shutdown, and release. The source may optionally supply audio
+     * and a preview inside the SDK container. It must deliver frames matching the sink's video format.
      *
      * @param source The external media source whose lifecycle your app owns.
      * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
-     * source or parsed media defaults.
+     * source dimensions and the model's default frame rate, subject to model validation and alignment.
+     * @return A local stream for SDK preview and generation.
      */
     override suspend fun createExternalVideoStream(
         source: RealtimeExternalVideoSource,
@@ -598,13 +557,17 @@ internal class XmaxRealtimeManager(
         ) }
 
     /**
-     * Unbinds external input after disconnection without closing your app's camera or player.
+     * Unbinds the external video source.
+     *
+     * Disconnect realtime first. Your app remains responsible for stopping its camera or player.
      */
     override suspend fun stopExternalVideoStream() { mediaOperation { it.stopExternalVideoStream() } }
 
     /**
-     * One operation owns stopping, source replacement, and resumption, preventing stale frames or callbacks
-     * from taking over new input.
+     * Replaces the external video source and resumes any active or pending generation request.
+     *
+     * Compatible media formats reuse the RTC connection; changed formats reconnect with the retained
+     * generation conditions. Replacing a preview-only source does not start generation.
      *
      * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
      * source or parsed media defaults.
@@ -618,34 +581,34 @@ internal class XmaxRealtimeManager(
         // Preserve the caller's dispatcher; cancellation is owned by this SDK replacement operation.
         val preparationContext = currentCoroutineContext().minusKey(Job)
 
-        return execute(OperationKind.REPLACEMENT) { token, c ->
+        return execute(OperationKind.REPLACEMENT) { token ->
             // Validate input and retain generation conditions for cancellation takeover or reconnection.
-            if (!c.media.isExternalVideo) {
+            if (!mediaController.isExternalVideo) {
                 throw invalid("The current local media source is not an external video")
             }
 
             token.inheritGenerationContext(
-                c.generation.cachedContext,
-                c.generation.cachedFaceRestoration,
+                generationManager.cachedContext,
+                generationManager.cachedFaceRestoration,
             )
             token.setFailureScope(TerminationScope.CONNECTION)
 
             // Stop the old task while retaining the room; the new media format determines whether reconnection is necessary.
-            c.generation.stop(currentState.taskId.orEmpty())
+            generationManager.stop(currentState.taskId.orEmpty())
 
             token.commit(
                 RealtimeState(
-                    if (c.connection.currentSessionId.isNotEmpty()) {
+                    if (connectionManager.currentSessionId.isNotEmpty()) {
                         RealtimeConnectionState.CONNECTED
                     } else {
                         RealtimeConnectionState.READY
                     },
-                    sessionId = c.connection.currentSessionId.takeIf(String::isNotEmpty),
+                    sessionId = connectionManager.currentSessionId.takeIf(String::isNotEmpty),
                 ),
             )
 
             // Unbind old frames before asking your app to switch its player and return the new source.
-            val local = c.media.replaceExternalVideoStream(videoFormat) {
+            val local = mediaController.replaceExternalVideoStream(videoFormat) {
                 withContext(preparationContext) {
                     targetSource()
                 }.also {
@@ -659,13 +622,13 @@ internal class XmaxRealtimeManager(
             val format = checkNotNull(local.videoTrack?.videoFormat)
 
             if (
-                c.connection.currentSessionId.isNotEmpty() &&
-                !c.connection.acceptsInput(
+                connectionManager.currentSessionId.isNotEmpty() &&
+                !connectionManager.acceptsInput(
                     format,
-                    c.media.hasAudio,
+                    mediaController.hasAudio,
                 )
             ) {
-                c.connection.disconnect()
+                connectionManager.disconnect()
                 token.ensureCurrent()
                 token.commit(RealtimeState(RealtimeConnectionState.READY))
             }
@@ -679,20 +642,18 @@ internal class XmaxRealtimeManager(
             }
 
             // Resume an existing or pending generation request with its retained prompt and references.
-            val remote = c.connection.currentRemoteStream
-                ?: connect(
+            val remote = connectionManager.currentRemoteStream
+                ?: performConnect(
                     token,
-                    c,
                     local,
                     resetGeneration = false,
                 )
 
             timing.measure {
-                start(
+                performStartGeneration(
                     token,
-                    c,
                     token.requestedContext,
-                    token.requestedFaceRestoration ?: c.generation.cachedFaceRestoration,
+                    token.requestedFaceRestoration ?: generationManager.cachedFaceRestoration,
                 )
             }
 
@@ -704,29 +665,36 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Stops and releases the current camera source; does nothing for other source types.
+     * Stops the local camera stream.
+     *
+     * Disconnect realtime first. Other source types are left unchanged.
      */
     override suspend fun stopLocalCameraStream() { mediaOperation { it.stopLocalCameraStream() } }
 
     /**
-     * Stops and releases the current image source; does nothing for other source types.
+     * Stops the local image stream.
+     *
+     * Disconnect realtime first. Other source types are left unchanged.
      */
     override suspend fun stopLocalImageStream() { mediaOperation { it.stopLocalImageStream() } }
 
     /**
-     * Stops the current video source and releases decoding and preview resources; does nothing for other
-     * source types.
+     * Stops the local file video stream.
+     *
+     * Disconnect realtime first. Other source types are left unchanged.
      */
     override suspend fun stopLocalVideoStream() { mediaOperation { it.stopLocalVideoStream() } }
 
     /**
-     * Requires disconnection before local media changes; failures after preparation or resource shutdown
-     * clean up all media.
+     * Creates or stops local media and publishes the resulting preview state.
+     *
+     * Local media changes require disconnection. Camera readiness is updated after the first valid preview
+     * frame; failures after media changes release the affected realtime resources.
      *
      * @param sourceRemoteAudioVolume The new source's default remote volume, or null to retain the current
      * setting.
-     * @param waitForCameraPreview Whether to wait for camera preview readiness; defaults to false.
-     * @param action The operation to perform.
+     * @param waitForCameraPreview Whether preview readiness determines when the camera becomes ready.
+     * @param action The media creation or stop operation.
      * @return The operation's successful result.
      */
     private suspend fun <T> mediaOperation(
@@ -734,25 +702,24 @@ internal class XmaxRealtimeManager(
         waitForCameraPreview: Boolean = false,
         action: suspend (MediaControlling) -> T,
     ): T =
-        execute(OperationKind.MEDIA) { token, c ->
-            requireDisconnected(c)
+        execute(OperationKind.MEDIA) { token ->
+            ensureLocalMediaCanChange()
             if (sourceRemoteAudioVolume != null) {
                 token.commit(RealtimeState(RealtimeConnectionState.PREPARING))
             } else {
                 token.setFailureScope(TerminationScope.ALL)
             }
 
-            val result = action(c.media)
+            val result = action(mediaController)
             token.ensureCurrent()
             token.setFailureScope(TerminationScope.ALL)
             sourceRemoteAudioVolume?.let { volume ->
-                c.stream.setRemoteAudioVolume(volume)
-                configuredRemoteAudioVolume = volume
+                streamController.setRemoteAudioVolume(volume)
             }
             if (!waitForCameraPreview) {
                 token.complete(
                     RealtimeState(
-                        if (c.media.currentTrack == null) {
+                        if (mediaController.currentTrack == null) {
                             RealtimeConnectionState.IDLE
                         } else {
                             RealtimeConnectionState.READY
@@ -765,15 +732,20 @@ internal class XmaxRealtimeManager(
         }
 
     /**
-     * Switches cameras during generation by stopping the task, retaining the connection, and restarting with
-     * cached conditions once the camera settles.
+     * Switches between the front and rear cameras.
+     *
+     * During generation, XmaxSDK stops the current task, switches cameras, and resumes with cached
+     * conditions. The RTC connection remains open. Switching is unavailable while connection or generation
+     * startup is in progress.
+     *
+     * @return The local stream with its existing video track and updated camera position.
      */
     override suspend fun switchCamera(): RealtimeMediaStream =
-        execute(OperationKind.SWITCH) { token, c ->
+        execute(OperationKind.SWITCH) { token ->
             val wasGenerating = currentState.connectionState == RealtimeConnectionState.GENERATING
             if (wasGenerating) {
                 token.setFailureScope(TerminationScope.CONNECTION)
-                c.generation.stop(currentState.taskId.orEmpty())
+                generationManager.stop(currentState.taskId.orEmpty())
                 token.commit(
                     currentState.copy(
                         connectionState = RealtimeConnectionState.CONNECTED,
@@ -782,15 +754,14 @@ internal class XmaxRealtimeManager(
                 )
             }
 
-            val stream = c.media.switchCamera()
+            val stream = mediaController.switchCamera()
             token.ensureCurrent()
             if (wasGenerating) {
                 delay(500L)
-                timing.measure { start(
+                timing.measure { performStartGeneration(
                     token,
-                    c,
                     null,
-                    c.generation.cachedFaceRestoration,
+                    generationManager.cachedFaceRestoration,
                 ) }
             }
 
@@ -798,69 +769,67 @@ internal class XmaxRealtimeManager(
         }
 
     /**
-     * Connects an active local stream created by this manager and returns the remote stream for rendering.
+     * Establishes a realtime connection using a local stream created by this manager.
      *
-     * @param localStream The local input stream.
+     * @param localStream The active local media stream owned by this manager.
+     * @return The connection's remote stream, which can be bound to a result view.
      */
     override suspend fun connect(
         localStream: RealtimeMediaStream,
     ): RealtimeMediaStream =
-        execute(OperationKind.CONNECTION) { token, c -> connect(
+        execute(OperationKind.CONNECTION) { token -> performConnect(
             token,
-            c,
             localStream,
             completesOperation = true,
         ) }
 
     /**
-     * Validates stream ownership and commits CONNECTED only for the current operation; connection completion
-     * does not start generation.
+     * Establishes a realtime connection for the local stream.
      *
-     * @param token The lifecycle ownership token for this operation.
-     * @param c The realtime components used by this operation.
-     * @param localStream The local input stream.
+     * @param token The validity token for the connection operation.
+     * @param localStream The active local stream created by this manager.
      * @param resetGeneration Whether to clear cached generation conditions; defaults to true.
-     * @param completesOperation Whether CONNECTED completes this operation or precedes generation startup.
+     * @param completesOperation Whether to complete the operation when connected or leave it active for
+     * generation startup.
+     * @return The remote media stream for the session.
      */
-    private suspend fun connect(
+    private suspend fun performConnect(
         token: XmaxRealtimeLifecycleManager.Token,
-        c: XmaxRealtimeComponents,
         localStream: RealtimeMediaStream,
         resetGeneration: Boolean = true,
         completesOperation: Boolean = false,
     ): RealtimeMediaStream {
-        requireDisconnected(c)
+        ensureLocalMediaCanChange()
         val videoFormat = localStream.videoTrack?.videoFormat
-        if (videoFormat == null || !c.media.owns(localStream)) throw invalid("The local stream must be created and started by this realtime manager")
+        if (videoFormat == null || !mediaController.owns(localStream)) throw invalid("The local stream must be created and started by this realtime manager")
 
         token.setFailureScope(TerminationScope.CONNECTION)
         token.commit(RealtimeState(RealtimeConnectionState.CONNECTING))
 
         try {
-            if (resetGeneration) c.generation.reset()
-            c.connection.prepareQuality(
+            if (resetGeneration) generationManager.reset()
+            connectionManager.prepareQuality(
                 videoFormat,
                 options,
-                publishLocalMedia = c.media.networkVideoReference == null,
+                publishLocalMedia = mediaController.networkVideoReference == null,
             )
-            c.media.startMicrophoneCapture()
+            mediaController.startMicrophoneCapture()
             token.ensureCurrent()
-            val owner = runtime
-            val remote = c.connection.connect(
+            val remote = connectionManager.connect(
                 options.model,
                 videoFormat,
-                c.media.hasAudio,
-                publishLocalMedia = c.media.networkVideoReference == null,
+                mediaController.hasAudio,
+                publishLocalMedia = mediaController.networkVideoReference == null,
                 isCurrent = { try { token.ensureCurrent(); true } catch (
                     _: CancellationException,
                 ) { false } },
                 onHeartbeatFailure = { sessionId, error ->
-                    // Check both runtime identity and session identity so an old heartbeat cannot terminate a later connection.
-                    if (runtime === owner && c.connection.currentSessionId == sessionId) {
+                    // An expired heartbeat must not terminate a later connection using these shared components.
+                    if (connectionManager.currentSessionId == sessionId) {
                         errorManager.forward(
                             error,
                             TerminationScope.CONNECTION,
-                            isCurrent = { runtime === owner && c.connection.currentSessionId == sessionId },
+                            isCurrent = { connectionManager.currentSessionId == sessionId },
                         )
                     }
                 },
@@ -868,7 +837,7 @@ internal class XmaxRealtimeManager(
             currentCoroutineContext().ensureActive()
             val connected = RealtimeState(
                 RealtimeConnectionState.CONNECTED,
-                sessionId = c.connection.currentSessionId,
+                sessionId = connectionManager.currentSessionId,
             )
             if (completesOperation) token.complete(connected) else token.commit(connected)
             return remote
@@ -877,26 +846,24 @@ internal class XmaxRealtimeManager(
         ) {
             cleanupAfterFailure(
                 error,
-                { c.connection.disconnect() },
-                { c.media.stopMicrophoneCapture() },
+                { connectionManager.disconnect() },
+                { mediaController.stopMicrophoneCapture() },
             )
             throw error
         }
     }
 
     /**
-     * Starts generation on an existing connection; the first call requires conditions, and later null values
-     * reuse the cache.
-     * An active task updates its conditions; a new task enters GENERATING only after remote confirmation and
-     * first-frame readiness.
-     * Both overloads share replacement ordering: a new call cancels the pending old call with
-     * CancellationException,
-     * without reporting a business failure. Disconnect and close cancel all pending generation without
-     * automatically resuming it after cleanup.
+     * Starts generation or updates conditions for the active task.
      *
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
-     * @param faceRestoration Whether to enable face restoration through `face_replace`.
+     * Requires an open connection. New tasks become [RealtimeConnectionState.GENERATING] after result-stream
+     * confirmation and first-frame readiness. Both overloads prefer the latest request: a new call cancels
+     * the pending request with [CancellationException] without reporting a business failure.
+     * [disconnect] and [close] cancel pending generation without resuming it after cleanup.
+     *
+     * @param context The generation conditions. Required for the first request; null reuses cached
+     * conditions thereafter.
+     * @param faceRestoration Whether to restore the original face.
      */
     override suspend fun startGeneration(
         context: RealtimeContext?,
@@ -906,10 +873,9 @@ internal class XmaxRealtimeManager(
             OperationKind.GENERATION,
             context,
             faceRestoration,
-        ) { token, c ->
-            measureStartup { start(
+        ) { token ->
+            measureStartup { performStartGeneration(
                 token,
-                c,
                 context,
                 faceRestoration,
             ) }
@@ -917,13 +883,17 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Connects when necessary, then starts or updates generation and returns the remote stream; uses the
-     * other overload's replacement semantics.
+     * Connects the current local stream if needed and starts generation.
      *
-     * @param localStream The local input stream.
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
-     * @param faceRestoration Whether to enable face restoration through `face_replace`.
+     * Local video file playback continues during connection and generation. An existing connection is
+     * reused. Bind the returned remote stream to a realtime video view to display results. Pending requests
+     * follow the same latest-request cancellation rules as the conditions-only overload.
+     *
+     * @param localStream The active local media stream owned by this manager.
+     * @param context The generation conditions. Required for the first request; null reuses cached
+     * conditions thereafter.
+     * @param faceRestoration Whether to restore the original face.
+     * @return The remote media stream for the current RTC connection.
      */
     override suspend fun startGeneration(
         localStream: RealtimeMediaStream,
@@ -934,22 +904,21 @@ internal class XmaxRealtimeManager(
             OperationKind.GENERATION,
             context,
             faceRestoration,
-        ) { token, c ->
+        ) { token ->
             measureStartup {
-                if (!c.media.owns(localStream)) throw invalid("The local stream must be created and started by this realtime manager")
+                if (!mediaController.owns(localStream)) throw invalid("The local stream must be created and started by this realtime manager")
 
-                val remote = if (c.connection.currentSessionId.isNotEmpty()) {
-                    c.connection.currentRemoteStream ?: throw XmaxError(
+                val remote = if (connectionManager.currentSessionId.isNotEmpty()) {
+                    connectionManager.currentRemoteStream ?: throw XmaxError(
                         XmaxErrorCode.RTC_ERROR,
                         "Realtime connection has no remote stream",
                     )
                 } else {
                     try {
                         // File video continues supplying frames, but local audio stops as soon as generation is requested.
-                        c.media.setLocalAudioPreviewMuted(true)
-                        connect(
+                        mediaController.setLocalAudioPreviewMuted(true)
+                        performConnect(
                             token,
-                            c,
                             localStream,
                         )
                     } catch (
@@ -957,14 +926,13 @@ internal class XmaxRealtimeManager(
                     ) {
                         cleanupAfterFailure(
                             error,
-                            { c.media.setLocalAudioPreviewMuted(false) },
+                            { mediaController.setLocalAudioPreviewMuted(false) },
                         )
                         throw error
                     }
                 }
-                start(
+                performStartGeneration(
                     token,
-                    c,
                     context,
                     faceRestoration,
                 )
@@ -984,23 +952,20 @@ internal class XmaxRealtimeManager(
         if (currentState.connectionState == RealtimeConnectionState.GENERATING) action() else timing.measure(action)
 
     /**
-     * Starts or updates generation and commits the generating state after a remote frame is ready to display.
+     * Starts generation or updates the active task's conditions.
      *
-     * @param token The lifecycle ownership token for this operation.
-     * @param c The realtime components used by this operation.
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
-     * @param faceRestoration Whether to enable face restoration through `face_replace`.
+     * @param token The token used to verify that the current operation remains valid.
+     * @param context The requested conditions, or null to reuse the most recent successful conditions.
+     * @param faceRestoration Whether to restore the original face.
      */
-    private suspend fun start(
+    private suspend fun performStartGeneration(
         token: XmaxRealtimeLifecycleManager.Token,
-        c: XmaxRealtimeComponents,
         context: RealtimeContext?,
         faceRestoration: Boolean,
     ) {
         val current = currentState
-        val format = c.media.currentVideoFormat
-        if (c.connection.currentSessionId.isEmpty() || format == null ||
+        val format = mediaController.currentVideoFormat
+        if (connectionManager.currentSessionId.isEmpty() || format == null ||
             current.connectionState !in setOf(
                 RealtimeConnectionState.CONNECTED,
                 RealtimeConnectionState.GENERATING,
@@ -1008,14 +973,14 @@ internal class XmaxRealtimeManager(
             throw invalid("Realtime connection is not open")
         }
 
-        val resolvedContext = (context ?: c.generation.cachedContext)?.let { supplied ->
-            c.media.networkVideoReference?.let { supplied.copy(referenceVideo = it) } ?: supplied
+        val resolvedContext = (context ?: generationManager.cachedContext)?.let { supplied ->
+            mediaController.networkVideoReference?.let { supplied.copy(referenceVideo = it) } ?: supplied
         }
-        if ((c.media.isLocalVideo || c.media.isLocalImage) && resolvedContext?.referenceVideo != null) {
+        if ((mediaController.isLocalVideo || mediaController.isLocalImage) && resolvedContext?.referenceVideo != null) {
             throw invalid("Local image or video frame input cannot be combined with a server video URL")
         }
 
-        val generationSize = MediaService(options.model).resolveGenerationSize(
+        val generationSize = mediaService.resolveGenerationSize(
             IntSize(
                 format.width,
                 format.height,
@@ -1029,7 +994,7 @@ internal class XmaxRealtimeManager(
             format.width.toLong() * generationFormat.height != format.height.toLong() * generationFormat.width
         token.commit(current)
         if (current.connectionState == RealtimeConnectionState.GENERATING && current.taskId != null) {
-            c.generation.update(
+            generationManager.update(
                 taskId = current.taskId,
                 videoFormat = format,
                 context = resolvedContext,
@@ -1041,19 +1006,18 @@ internal class XmaxRealtimeManager(
             return
         }
 
-        c.generation.validateContext(resolvedContext)
-        val target = c.connection.prepareQuality(
+        generationManager.validateContext(resolvedContext)
+        val target = connectionManager.prepareQuality(
             format,
             options,
-            publishLocalMedia = c.media.networkVideoReference == null,
+            publishLocalMedia = mediaController.networkVideoReference == null,
         )
-        val owner = checkNotNull(runtime)
         token.setFailureScope(TerminationScope.CONNECTION)
         var taskId = ""
 
         try {
-            c.media.setLocalAudioPreviewMuted(true)
-            taskId = c.generation.start(
+            mediaController.setLocalAudioPreviewMuted(true)
+            taskId = generationManager.start(
                 videoFormat = format,
                 context = resolvedContext,
                 faceRestoration = faceRestoration,
@@ -1065,19 +1029,24 @@ internal class XmaxRealtimeManager(
             currentCoroutineContext().ensureActive()
             token.ensureCurrent()
 
-            owner.qualityTaskId = taskId
-            c.connection.completeInitialQuality()
+            connectionManager.completeInitialQuality()
             token.complete(
                 current.copy(
                     connectionState = RealtimeConnectionState.GENERATING,
                     taskId = taskId,
                 ),
                 onComplete = {
-                    c.stream.activateNetworkVideoCompletion(
-                        c.media.networkVideoFinishHandler?.let { onFinish ->
+                    streamController.setAdaptiveQualityListener { quality ->
+                        adaptQuality(
+                            quality,
+                            taskId,
+                        )
+                    }
+                    streamController.activateNetworkVideoCompletion(
+                        mediaController.networkVideoFinishHandler?.let { onFinish ->
                             {
                                 val snapshot = currentState
-                                if (runtime?.components === c && snapshot.taskId == taskId &&
+                                if (snapshot.taskId == taskId &&
                                     snapshot.connectionState == RealtimeConnectionState.GENERATING
                                 ) onFinish()
                             }
@@ -1092,15 +1061,17 @@ internal class XmaxRealtimeManager(
         ) {
             cleanupAfterFailure(
                 error,
-                { if (taskId.isNotEmpty()) c.generation.stop(taskId) },
-                { c.media.setLocalAudioPreviewMuted(false) },
+                { if (taskId.isNotEmpty()) generationManager.stop(taskId) },
+                { mediaController.setLocalAudioPreviewMuted(false) },
             )
             throw error
         }
     }
 
     /**
-     * Ends generation and closes the session and RTC connection, retaining local media and listeners.
+     * Disconnects realtime while preserving the local media preview.
+     *
+     * Listeners remain registered after disconnection.
      */
     override suspend fun disconnect() {
         invalidateQualitySamples()
@@ -1108,9 +1079,11 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Ends generation and closes the session and RTC connection, retaining local media and listeners.
+     * Disconnects for the specified reason while preserving available local media.
      *
-     * @param reason The reason for the state transition or failure.
+     * Listeners remain registered after disconnection.
+     *
+     * @param reason The reason for disconnection.
      */
     override suspend fun disconnect(
         reason: RealtimeReason,
@@ -1120,8 +1093,10 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Cancels pending operations and waits for all realtime resources to be released; listeners remain
-     * registered and the manager can be reused.
+     * Closes the realtime lifecycle and releases the connection, local media, and RTC engine.
+     *
+     * Concurrent calls await the same cleanup task. Listeners remain registered, and local streams can be
+     * created again after closing completes.
      */
     override suspend fun close() {
         invalidateQualitySamples()
@@ -1129,53 +1104,19 @@ internal class XmaxRealtimeManager(
     }
 
     /**
-     * Releases task, connection, or all media resources, attempting every independent cleanup step.
+     * Runs a realtime operation with lifecycle admission, failure cleanup, and SDK error reporting.
      *
-     * @param target The resources to terminate.
-     */
-    private suspend fun cleanup(
-        target: TerminationScope,
-    ) {
-        val owner = runtime ?: return
-        owner.qualityTaskId = null
-        owner.components.stream.resetQualitySamples()
-        val c = owner.components
-        cleanupResources(
-            { if (target == TerminationScope.ALL) {
-                synchronized(listenerLock) {
-                    // Unbind old components first; registrations made during cleanup are retained for the next runtime.
-                    owner.listenersApplied = false
-                    c.stream.setAdaptiveQualityListener(null)
-                    c.stream.setNetworkQualityListener(null)
-                    c.stream.setPerformanceAlarmListener(null)
-                    c.stream.setUplinkVideoStatisticsListener(null)
-                    c.stream.setDownlinkVideoStatisticsListener(null)
-                }
-            } },
-            { XmaxRealtimeFactory.cleanup(
-                c,
-                target,
-                currentState.taskId.orEmpty(),
-            ) },
-            { if (target == TerminationScope.ALL) synchronized(listenerLock) { runtime = null } },
-        )
-    }
-
-    /**
-     * Admits operations and normalizes errors, using the operation token to determine failure cleanup.
-     *
-     * @param kind The operation or media source kind.
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
-     * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
-     * @param action The operation to perform.
+     * @param kind The kind of realtime operation.
+     * @param context The conditions retained for generation or external-source replacement, if applicable.
+     * @param faceRestoration Whether to restore the original face for a generation request.
+     * @param action The operation receiving the current validity token.
      * @return The operation's successful result.
      */
     private suspend fun <T> execute(
         kind: OperationKind,
         context: RealtimeContext? = null,
         faceRestoration: Boolean = false,
-        action: suspend (XmaxRealtimeLifecycleManager.Token, XmaxRealtimeComponents) -> T,
+        action: suspend (XmaxRealtimeLifecycleManager.Token) -> T,
     ): T {
         invalidateQualitySamples()
         return lifecycleManager.run(
@@ -1185,10 +1126,7 @@ internal class XmaxRealtimeManager(
             faceRestoration = faceRestoration,
         ) { token ->
             try {
-                action(
-                    token,
-                    components(),
-                )
+                action(token)
             } catch (
                 error: Throwable,
             ) {
@@ -1211,69 +1149,14 @@ internal class XmaxRealtimeManager(
      */
     private fun invalidateQualitySamples() {
         qualityRevision.incrementAndGet()
-        runtime?.components?.stream?.resetQualitySamples()
+        streamController.resetQualitySamples()
     }
 
     /**
-     * Returns the realtime components, creating them and restoring listeners and volumes when needed.
-     *
-     * @return Components sharing the same RTC manager.
+     * Verifies that no realtime connection prevents local media changes.
      */
-    private suspend fun components(): XmaxRealtimeComponents {
-        val owner = runtime ?: Runtime().also { created ->
-            created.components = componentFactory(
-                { error -> errorManager.forward(
-                    error,
-                    TerminationScope.CONNECTION,
-                    isCurrent = { runtime === created },
-                ) },
-                { error -> errorManager.forward(
-                    error,
-                    TerminationScope.ALL,
-                    isCurrent = { runtime === created },
-                ) },
-                callbacks.remoteVideoFrames,
-            )
-            runtime = created
-        }
-        if (!owner.audioSettingsApplied) {
-            // Restore settings before media creation or startup; leave restoration pending after failure or cancellation so the next operation retries.
-            configuredLocalAudioVolume?.let { owner.components.media.setLocalAudioVolume(it) }
-            configuredRemoteAudioVolume?.let { owner.components.stream.setRemoteAudioVolume(it) }
-            owner.audioSettingsApplied = true
-        }
-
-        if (!owner.listenersApplied) {
-            owner.components.stream.setAdaptiveQualityListener { handleAdaptiveQuality(
-                owner,
-                it,
-            ) }
-            owner.components.media.setCameraPreviewReadyListener {
-                if (runtime === owner) {
-                    lifecycleManager.localPreviewDidBecomeReady()
-                }
-            }
-            synchronized(listenerLock) {
-                owner.components.stream.setNetworkQualityListener(networkQualityListener)
-                owner.components.stream.setPerformanceAlarmListener(performanceAlarmListener)
-                owner.components.stream.setUplinkVideoStatisticsListener(uplinkVideoStatisticsListener)
-                owner.components.stream.setDownlinkVideoStatisticsListener(downlinkVideoStatisticsListener)
-                owner.listenersApplied = true
-            }
-        }
-
-        return owner.components
-    }
-
-    /**
-     * Rejects local media replacement unless generation and its connection are disconnected.
-     *
-     * @param c The realtime components used by this operation.
-     */
-    private fun requireDisconnected(
-        c: XmaxRealtimeComponents,
-    ) {
-        if (c.connection.currentSessionId.isNotEmpty() || currentState.connectionState in setOf(
+    private fun ensureLocalMediaCanChange() {
+        if (connectionManager.currentSessionId.isNotEmpty() || currentState.connectionState in setOf(
             RealtimeConnectionState.CONNECTING,
             RealtimeConnectionState.CONNECTED,
             RealtimeConnectionState.GENERATING,
@@ -1306,31 +1189,27 @@ internal class XmaxRealtimeManager(
     )
 
     /**
-     * Evaluates connection quality only while its generation task remains current.
+     * Attempts automatic adaptation for the current task, skipping samples while busy.
      *
-     * @param owner The runtime owning this sample.
-     * @param quality The directional network quality.
+     * @param quality The sampled uplink and downlink network quality.
+     * @param taskId The identifier of the task associated with this sample.
      */
-    private fun handleAdaptiveQuality(
-        owner: Runtime,
+    private fun adaptQuality(
         quality: RealtimeNetworkQuality,
+        taskId: String,
     ) {
-        if (runtime !== owner) return
-
-        val stream = owner.components.stream
         val revision = qualityRevision.get()
-        val taskId = owner.qualityTaskId
         val state = currentState
-        if (taskId == null || state.taskId != taskId || state.connectionState != RealtimeConnectionState.GENERATING || lifecycleManager.isBusy) {
-            stream.resetQualitySamples()
+        if (state.taskId != taskId || state.connectionState != RealtimeConnectionState.GENERATING || lifecycleManager.isBusy) {
+            streamController.resetQualitySamples()
             return
         }
 
-        if (!owner.qualityPending.compareAndSet(
+        if (!qualityPending.compareAndSet(
             false,
             true,
         )) {
-            stream.resetQualitySamples()
+            streamController.resetQualitySamples()
             return
         }
 
@@ -1340,20 +1219,20 @@ internal class XmaxRealtimeManager(
              * Discards samples only while their original generation and foreground revision remain current.
              */
             fun resetSamplesIfCurrent() {
-                if (runtime === owner && owner.qualityTaskId == taskId && qualityRevision.get() == revision) {
-                    stream.resetQualitySamples()
+                if (currentState.taskId == taskId && qualityRevision.get() == revision) {
+                    streamController.resetQualitySamples()
                 }
             }
 
             try {
                 val accepted = lifecycleManager.runAdaptiveConfiguration { token ->
                     /**
-                     * Rejects adjustments belonging to a replaced runtime, generation, or foreground request.
+                     * Rejects adjustments belonging to a replaced generation or foreground request.
                      */
                     fun ensureCurrent() {
                         token.ensureCurrent()
                         val current = currentState
-                        if (runtime !== owner || owner.qualityTaskId != taskId || current.taskId != taskId ||
+                        if (current.taskId != taskId ||
                             qualityRevision.get() != revision || current.connectionState != RealtimeConnectionState.GENERATING
                         ) {
                             throw CancellationException("Adaptive quality belongs to an inactive generation")
@@ -1361,7 +1240,7 @@ internal class XmaxRealtimeManager(
                     }
 
                     ensureCurrent()
-                    val change = stream.proposeQuality(
+                    val change = streamController.proposeQuality(
                         quality,
                         sampleAt,
                     )
@@ -1373,7 +1252,7 @@ internal class XmaxRealtimeManager(
                         if (candidate == null) continue
 
                         try {
-                            owner.components.connection.applyQualityLevel(
+                            connectionManager.applyQualityLevel(
                                 candidate.to,
                                 downlink,
                                 taskId,
@@ -1404,40 +1283,9 @@ internal class XmaxRealtimeManager(
                 resetSamplesIfCurrent()
                 XmaxLogger.realtime.warn(message = { "Adaptive quality failed: ${ErrorMessageFormatter.format(error)}" })
             } finally {
-                owner.qualityPending.set(false)
+                qualityPending.set(false)
             }
         }
-    }
-
-    /**
-     * The media, connection, and quality state of one realtime runtime.
-     */
-    private class Runtime {
-
-        /**
-         * The current runtime components.
-         */
-        lateinit var components: XmaxRealtimeComponents
-
-        /**
-         * Whether volume settings have been applied to this runtime.
-         */
-        var audioSettingsApplied = false
-
-        /**
-         * Whether listeners have been bound to this runtime.
-         */
-        var listenersApplied = false
-
-        /**
-         * The task associated with current uplink and downlink quality state.
-         */
-        @Volatile var qualityTaskId: String? = null
-
-        /**
-         * Whether a quality adjustment is pending.
-         */
-        val qualityPending = AtomicBoolean(false)
     }
 
 }

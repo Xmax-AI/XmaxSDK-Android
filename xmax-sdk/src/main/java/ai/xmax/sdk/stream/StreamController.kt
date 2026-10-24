@@ -58,7 +58,7 @@ import kotlinx.coroutines.withTimeout
 import kotlin.math.roundToInt
 
 /**
- * Coordinates RTC rooms, media streams, encoding, and quality events.
+ * Coordinates RTC rooms, media streams, encoding, and quality.
  */
 internal class StreamController(
     /**
@@ -127,7 +127,13 @@ internal class StreamController(
     /**
      * The playback volume for remote generation audio.
      */
-    private val remoteAudioVolume = AtomicInteger(100)
+    private val remoteAudioVolumeValue = AtomicInteger(100)
+
+    /**
+     * The successfully configured remote playback volume, from 0 to 1.
+     */
+    override val remoteAudioVolume: Float
+        get() = remoteAudioVolumeValue.get() / 100f
 
     init {
         rtcManager.setEventListener(this)
@@ -209,7 +215,7 @@ internal class StreamController(
     override fun resetQuality() = qualityController.resetQuality()
 
     /**
-     * Updates uplink dimensions, frame rate, and encoder bitrate.
+     * Sets the realtime video encoder configuration.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      */
@@ -220,7 +226,7 @@ internal class StreamController(
     }
 
     /**
-     * Receives internal adaptation samples without occupying the public network listener.
+     * Sets the internal adaptation listener independently of your app's network listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -231,8 +237,9 @@ internal class StreamController(
     }
 
     /**
-     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the uplink video statistics listener.
+     *
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -243,8 +250,9 @@ internal class StreamController(
     }
 
     /**
-     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the downlink video statistics listener.
+     *
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -255,7 +263,7 @@ internal class StreamController(
     }
 
     /**
-     * Sets the RTC network quality listener; null unregisters it.
+     * Sets the network quality listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -266,7 +274,7 @@ internal class StreamController(
     }
 
     /**
-     * Sets the RTC performance alarm listener; null unregisters it.
+     * Sets the device performance alarm listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -277,7 +285,9 @@ internal class StreamController(
     }
 
     /**
-     * Sets result audio volume from 0 to 1 and retains it for future subscriptions.
+     * Sets remote generated audio volume.
+     *
+     * The volume is retained for future subscriptions.
      *
      * @param volume The playback volume, from 0 to 1.
      */
@@ -296,7 +306,7 @@ internal class StreamController(
             rtcVolume,
             it,
         ) }
-        remoteAudioVolume.set(rtcVolume)
+        remoteAudioVolumeValue.set(rtcVolume)
     }
 
     /**
@@ -601,7 +611,7 @@ internal class StreamController(
     }
 
     /**
-     * Subscribes to result audio and applies remote playback volume.
+     * Subscribes to generated audio after remote video is ready.
      */
     override fun activateRemoteAudio() {
         eventGate.withLock {
@@ -617,7 +627,7 @@ internal class StreamController(
     }
 
     /**
-     * Updates the current task's conditions without creating another server session.
+     * Sends an active task's condition update.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
@@ -642,7 +652,7 @@ internal class StreamController(
     }
 
     /**
-     * Sends a stop signal for the generation task.
+     * Stops generation and clears its result stream.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      */
@@ -685,7 +695,7 @@ internal class StreamController(
     }
 
     /**
-     * Submits media-normalized trajectories for the current task.
+     * Sends a generation task's trajectory.
      *
      * @param taskId The identifier associating the generation request with its result stream.
      * @param points Normalized media trajectory points from 0 to 1.
@@ -1024,7 +1034,7 @@ internal class StreamController(
         if (synchronized(stateLock) { userId in state.subscribedRemoteAudioUserIds }) return
 
         rtcManager.setRemoteAudioVolume(
-            remoteAudioVolume.get(),
+            remoteAudioVolumeValue.get(),
             userId,
         )
         rtcManager.subscribeRemoteAudio(
@@ -1292,7 +1302,7 @@ internal class StreamController(
 }
 
 /**
- * The generation confirmation timeout.
+ * The generation confirmation timeout configuration.
  */
 internal data class StreamGenerationTiming(
     /**

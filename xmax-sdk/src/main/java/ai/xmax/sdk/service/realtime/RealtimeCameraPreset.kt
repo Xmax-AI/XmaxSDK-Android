@@ -13,7 +13,7 @@ package ai.xmax.sdk
 import androidx.compose.ui.unit.IntSize
 
 /**
- * A camera resolution shortcut; supported sizes depend on the model.
+ * A camera resolution preset whose availability depends on the selected model.
  */
 public enum class RealtimeCameraPreset(
     /**

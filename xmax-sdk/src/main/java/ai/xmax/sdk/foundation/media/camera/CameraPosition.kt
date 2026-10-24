@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * The camera lens position.
+ * The camera used for capture.
  */
 public enum class CameraPosition(
     /**

@@ -13,7 +13,7 @@ package ai.xmax.sdk.stream.quality
 import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
- * The fixed media baseline and successfully applied directional quality levels for a connection.
+ * The media baseline and directional quality levels for a connection.
  */
 internal data class QualityConfiguration(
     /**
@@ -52,7 +52,7 @@ internal data class QualityConfiguration(
 }
 
 /**
- * Proposed directional quality adjustments; null leaves that direction unchanged.
+ * The directional quality proposals for one sample; null leaves a direction unchanged.
  */
 internal data class QualityChange(
     /**

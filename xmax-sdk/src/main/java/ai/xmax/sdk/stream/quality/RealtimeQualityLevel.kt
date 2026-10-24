@@ -11,8 +11,9 @@
 package ai.xmax.sdk
 
 /**
- * A transmission quality tier, from highest-quality L1 to lowest-bandwidth L5, independent of network quality
- * ratings.
+ * A transport quality level, from highest quality at L1 to lowest bandwidth at L5.
+ *
+ * Transport levels are independent of network quality ratings.
  */
 public enum class RealtimeQualityLevel(
     /**

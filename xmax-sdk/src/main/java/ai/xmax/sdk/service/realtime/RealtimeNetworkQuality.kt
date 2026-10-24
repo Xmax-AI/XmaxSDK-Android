@@ -57,7 +57,7 @@ public enum class RealtimeNetworkQualityLevel(
 }
 
 /**
- * Uplink and downlink network quality for a realtime session.
+ * The uplink and downlink quality of a realtime session.
  */
 public data class RealtimeNetworkQuality(
     /**
@@ -72,7 +72,7 @@ public data class RealtimeNetworkQuality(
 )
 
 /**
- * The realtime network quality listener.
+ * A realtime network quality listener.
  */
 public fun interface RealtimeNetworkQualityListener {
 

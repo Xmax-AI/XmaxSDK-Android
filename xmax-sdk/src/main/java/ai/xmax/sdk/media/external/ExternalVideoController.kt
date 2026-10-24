@@ -20,8 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Binds app-owned frame input while retaining SDK track ownership, model validation, and media failure
- * cleanup.
+ * Binds an external video source to local preview and RTC.
  */
 internal class ExternalVideoController(
     /**

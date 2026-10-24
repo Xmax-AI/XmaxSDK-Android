@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * Local media sources supported by realtime generation.
+ * A local media source for realtime generation.
  */
 public enum class RealtimeMediaSource(
     /**

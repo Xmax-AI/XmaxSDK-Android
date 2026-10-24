@@ -17,12 +17,12 @@ import ai.xmax.sdk.VideoFrame
 import android.view.View
 
 /**
- * The engine capabilities abstracted from the RTC vendor.
+ * An engine interface separate from connection waits, timeouts, and leases.
  */
 internal interface RtcPlatform {
 
     /**
-     * Applies encoding settings to the primary video stream.
+     * Applies the uplink encoder configuration.
      *
      * @param configuration Uplink dimensions, frame rate, bitrate, and encoding preference.
      * @return The RTC result: nonnegative if accepted, negative on failure.
@@ -208,7 +208,7 @@ internal interface RtcPlatform {
     ): Int
 
     /**
-     * Sets the RTC event listener; null unregisters it.
+     * Sets the RTC connection and media event listener.
      *
      * @param listener The event listener, or null to unregister it.
      */
@@ -217,7 +217,7 @@ internal interface RtcPlatform {
     )
 
     /**
-     * Sets the RTC quality listener; null unregisters it.
+     * Sets the RTC network and media quality listener.
      *
      * @param listener The event listener, or null to unregister it.
      */

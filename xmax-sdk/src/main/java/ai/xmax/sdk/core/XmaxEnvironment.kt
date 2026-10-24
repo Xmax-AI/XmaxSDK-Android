@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * The Xmax service environment selected when creating a client.
+ * The Xmax service environment.
  */
 public enum class XmaxEnvironment {
 

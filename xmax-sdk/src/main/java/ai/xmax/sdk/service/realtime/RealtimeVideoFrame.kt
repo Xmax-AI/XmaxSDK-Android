@@ -13,11 +13,12 @@ package ai.xmax.sdk
 import java.nio.ByteBuffer
 
 /**
- * An owned remote video output frame with tightly packed I420 Y, U, and V planes.
- * XmaxSDK copies the pixels independently of the native RTC frame; your app may retain this object for
- * asynchronous encoding without releasing it.
- * Each data accessor returns an independent read-only view; changing its position does not affect other
- * consumers.
+ * A processed frame from the realtime video pipeline.
+ *
+ * Pixels are owned by XmaxSDK and stored as tightly packed I420 Y, U, and V planes, independently
+ * of the native RTC frame. Your app may retain the frame for asynchronous encoding without
+ * releasing it. Each data accessor returns an independent read-only view; changing its position
+ * does not affect other consumers.
  */
 public class RealtimeVideoFrame internal constructor(
     /**

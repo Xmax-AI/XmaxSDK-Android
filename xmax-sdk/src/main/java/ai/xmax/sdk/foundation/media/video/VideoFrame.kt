@@ -13,7 +13,7 @@ package ai.xmax.sdk
 import java.util.UUID
 
 /**
- * A platform-neutral video frame with pixels and timing metadata.
+ * A video frame with pixel data and timing information.
  *
  * @param planes The pixel planes in the format's required order.
  */
@@ -42,7 +42,7 @@ internal class VideoFrame(
 ) {
 
     /**
-     * The dimensions and pixels of an image or video.
+     * The pixel planes in the format's required order.
      */
     val planes: List<VideoFramePlane> = planes.toList()
 
@@ -67,7 +67,7 @@ internal class VideoFrame(
      *
      * @param timestampUs The monotonic frame timestamp, in microseconds.
      * @param rotation The source rotation; defaults to `this.rotation`.
-     * @return A frame with the requested pixel format, dimensions, and orientation.
+     * @return A frame sharing the same pixel planes with the requested timestamp and rotation.
      */
     fun updating(
         timestampUs: Long,

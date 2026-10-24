@@ -14,7 +14,7 @@ import ai.xmax.sdk.UplinkVideoStatistics
 import ai.xmax.sdk.DownlinkVideoStatistics
 
 /**
- * A vendor-neutral RTC network quality rating.
+ * An RTC network quality rating.
  */
 internal enum class RtcQualityLevel {
 
@@ -55,7 +55,7 @@ internal enum class RtcQualityLevel {
 }
 
 /**
- * Receives vendor-neutral video statistics, network quality, and performance fallback events.
+ * A listener for RTC quality and performance fallback.
  */
 internal interface RtcQualityListener {
 
@@ -78,7 +78,7 @@ internal interface RtcQualityListener {
     )
 
     /**
-     * Receives uplink and downlink network quality samples.
+     * Receives uplink and downlink network quality.
      *
      * @param uplink The uplink network quality rating.
      * @param downlink The downlink network quality rating.
@@ -89,7 +89,7 @@ internal interface RtcQualityListener {
     )
 
     /**
-     * Receives device performance limits and a suggested video format.
+     * Receives performance limitation or recovery events.
      *
      * @param limited Whether device performance is limited.
      * @param suggestedWidth The suggested width, in pixels.

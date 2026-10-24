@@ -24,6 +24,7 @@ internal abstract class StreamControllingStub(
     history: QualityHistory = QualityHistory(),
     now: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : StreamControlling {
+    override val remoteAudioVolume: Float get() = 1f
     private val quality = QualityController(RtcManagingStub(), history = history, now = now)
 
     override val qualityConfiguration: QualityConfiguration? get() = quality.qualityConfiguration

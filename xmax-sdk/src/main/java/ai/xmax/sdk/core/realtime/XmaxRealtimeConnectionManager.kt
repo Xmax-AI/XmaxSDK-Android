@@ -27,9 +27,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 
 /**
- * Owns the server session, RTC room, local publication, and remote tracks as one connection.
- * operationMutex serializes connection, disconnection, and rollback to prevent reuse of unreleased resources.
- * stateLock protects session and track snapshots without suspending while held.
+ * Manages server sessions, RTC connections, and remote media resources.
+ *
+ * Connection setup, disconnection, and rollback are serialized to prevent reuse of unreleased
+ * resources.
  */
 internal class XmaxRealtimeConnectionManager(
     /**
@@ -95,7 +96,7 @@ internal class XmaxRealtimeConnectionManager(
         private set
 
     /**
-     * Prepares uplink encoding and downlink dimensions from the fixed media baseline.
+     * Prepares the initial encoder and remote dimensions for a connection.
      *
      * @param baseline The resolved local media format.
      * @param options The model configuration for this connection.
@@ -132,14 +133,14 @@ internal class XmaxRealtimeConnectionManager(
     }
 
     /**
-     * Persists the initial returned-video level once generation is ready.
+     * Records the successfully applied initial quality after generation becomes ready.
      */
     fun completeInitialQuality() {
         streamController.completeInitialQuality(downlink = true)
     }
 
     /**
-     * Resolves returned dimensions from media aspect ratio and a transmission level.
+     * Resolves the returned video format using the media aspect ratio and quality level.
      *
      * @param baseline The fixed, resolved local media format.
      * @param level The requested downlink level.
@@ -169,7 +170,9 @@ internal class XmaxRealtimeConnectionManager(
     }
 
     /**
-     * Applies a transport level and commits its policy and history only after success.
+     * Applies a quality level to uplink encoding or downlink output.
+     *
+     * The policy and history are committed only after successful application.
      *
      * @param level The requested quality level.
      * @param downlink Whether to update returned video instead of local encoding.
@@ -316,11 +319,11 @@ internal class XmaxRealtimeConnectionManager(
     }
 
     /**
-     * Creates a session, joins RTC, publishes media when required, and registers rendering and heartbeats.
-     * Each asynchronous result must still belong to the current operation. Failures roll back under the
-     * operation lock, preserving the original error and cancellation.
-     * Heartbeat failures return through onHeartbeatFailure without waiting for connection cleanup in the
-     * heartbeat coroutine.
+     * Establishes a realtime session and prepares its remote stream.
+     *
+     * Only results belonging to the current operation are accepted. Setup failures release
+     * connection resources while preserving the original error or cancellation; heartbeat failures
+     * are forwarded for lifecycle cleanup.
      *
      * @param model The model defining server capabilities and input constraints.
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
@@ -420,7 +423,9 @@ internal class XmaxRealtimeConnectionManager(
     }
 
     /**
-     * Clears the connection snapshot and releases its resources without stopping local media.
+     * Disconnects RTC, releases remote rendering resources, and closes the server session.
+     *
+     * Local media remains available.
      *
      * @return The closed session identifier, or null if no session was active.
      */
@@ -485,7 +490,10 @@ internal class XmaxRealtimeConnectionManager(
     }
 
     /**
-     * Treats connection results that lost ownership as cancellation rather than a new app-visible failure.
+     * Verifies that a connection operation still belongs to the current lifecycle.
+     *
+     * Results that lost ownership are reported as cancellation rather than a new app-visible
+     * failure.
      *
      * @param isCurrent Checks whether this operation still owns the result.
      */

@@ -14,11 +14,10 @@ import android.graphics.Bitmap
 import android.net.Uri
 
 /**
- * The public API for local media, connections, and generation; each manager owns one local media source at a
- * time.
+ * An interface for local media, realtime connections, and video generation.
  *
- * Disconnect before creating or stopping local media. Use [replaceExternalVideoStream] for external source
- * replacement.
+ * Each manager owns one local media source at a time. Disconnect before creating or stopping local media.
+ * Use [replaceExternalVideoStream] for external source replacement.
  * Generation requests prefer the latest call; XmaxSDK cancels old requests and waits for rollback without
  * requiring app-side serialization.
  * [disconnect] and [close] cancel affected pending operations and wait for cleanup.
@@ -36,13 +35,14 @@ public interface XmaxRealtimeManaging {
     public val options: RealtimeConfiguration
 
     /**
-     * The current state snapshot; [RealtimeState.reason] reports asynchronous failures.
+     * The current connection and generation state; [RealtimeState.reason] reports asynchronous failures.
      */
     public val currentState: RealtimeState
 
     /**
-     * The current camera media format, or null without a camera source; transmission quality changes do not
-     * alter it.
+     * The camera's resolved media format, or null for other input sources.
+     *
+     * Transmission quality changes do not alter the media format.
      */
     public val currentCameraVideoFormat: RealtimeVideoFormat?
 
@@ -52,7 +52,7 @@ public interface XmaxRealtimeManaging {
     public val currentCameraPreset: RealtimeCameraPreset?
 
     /**
-     * Updates a ready, disconnected camera preview while retaining its track and view binding.
+     * Updates a ready, disconnected camera format while preserving stream and view bindings.
      *
      * @param videoFormat New dimensions, capture frame rate, and encoding settings; dimensions must match a
      * supported model format.
@@ -63,7 +63,7 @@ public interface XmaxRealtimeManaging {
     )
 
     /**
-     * Changes camera resolution while preserving the current frame rate, bitrate, and encoding preference.
+     * Updates camera dimensions while preserving frame rate and encoding settings.
      *
      * @param preset The target resolution preset supported by the model.
      * @throws XmaxError If state, preset, operation conflicts, or capture configuration prevent the update.
@@ -85,9 +85,11 @@ public interface XmaxRealtimeManaging {
     public val downlinkQualityLevel: RealtimeQualityLevel?
 
     /**
-     * Adjusts uplink encoding quality during generation without changing capture dimensions or the model
-     * canvas.
-     * Later network samples may still change the level; a manual choice does not lock adaptation.
+     * Changes the uplink encoding level during generation without changing capture or generation
+     * dimensions.
+     *
+     * Subsequent network samples may change the level; a manual choice does not disable automatic
+     * adaptation.
      *
      * @param level The target uplink level.
      * @throws XmaxError If generation, local publication, operation admission, or encoding configuration does
@@ -98,7 +100,7 @@ public interface XmaxRealtimeManaging {
     )
 
     /**
-     * Adjusts downlink quality during generation while keeping automatic adaptation enabled.
+     * Changes the downlink output level while allowing subsequent automatic adaptation.
      *
      * @param level The target downlink level.
      * @throws XmaxError If generation, operation admission, or signaling fails to permit the update.
@@ -118,81 +120,89 @@ public interface XmaxRealtimeManaging {
     public val remoteAudioVolume: Float
 
     /**
-     * Replaces the state listener and asynchronously delivers the current snapshot on the main thread; null
-     * unregisters it.
+     * Sets the realtime state listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * The current snapshot and subsequent changes are delivered asynchronously on the main thread.
+     *
+     * @param listener The state change handler, or null to remove the listener.
      */
     public suspend fun setStateListener(
         listener: RealtimeStateListener?,
     )
 
     /**
-     * Receives final remote video frames before display.
-     * Callbacks run serially on an SDK background dispatcher; slow consumers receive only the latest pending
-     * frame.
-     * Frame pixels may be retained for asynchronous encoding. Null unregisters the listener. Stopping,
-     * disconnecting, or changing tasks discards pending old frames;
-     * callbacks already executing may finish. A video view binding is not required.
+     * Sets serialized remote video output without changing playback.
      *
-     * @param listener The event listener, or null to unregister it.
+     * Callbacks run serially on an SDK background dispatcher; slow consumers receive only the
+     * latest pending frame. Frame pixels may be retained for asynchronous encoding. Stopping,
+     * disconnecting, or changing tasks discards pending old frames; callbacks already executing may
+     * finish. A video view binding is not required.
+     *
+     * @param listener The video frame handler, or null to stop output.
      */
     public suspend fun setRemoteVideoFrameListener(
         listener: RealtimeVideoFrameListener?,
     )
 
     /**
-     * Sets the RTC network quality listener; null unregisters it.
+     * Sets the network quality listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * @param listener The uplink and downlink quality handler, or null to remove it.
      */
     public suspend fun setNetworkQualityListener(
         listener: RealtimeNetworkQualityListener?,
     )
 
     /**
-     * Sets the main-thread uplink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the uplink video statistics listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
+     *
+     * @param listener The main-thread uplink statistics handler, or null to remove it.
      */
     public suspend fun setUplinkVideoStatisticsListener(
         listener: UplinkVideoStatisticsListener?,
     )
 
     /**
-     * Sets the main-thread downlink statistics listener; null unregisters it. The listener survives
-     * disconnection.
+     * Sets the downlink video statistics listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * Callbacks run on the main thread. The listener remains registered after disconnection.
+     *
+     * @param listener The main-thread downlink statistics handler, or null to remove it.
      */
     public suspend fun setDownlinkVideoStatisticsListener(
         listener: DownlinkVideoStatisticsListener?,
     )
 
     /**
-     * Sets the RTC performance alarm listener; null unregisters it.
+     * Sets the device performance alarm listener.
      *
-     * @param listener The event listener, or null to unregister it.
+     * @param listener The device performance alarm handler, or null to remove it.
      */
     public suspend fun setPerformanceAlarmListener(
         listener: RealtimePerformanceAlarmListener?,
     )
 
     /**
-     * Sets local preview volume from 0 to 1; a successful setting survives close and media recreation.
+     * Sets the local media preview volume.
      *
-     * @param volume The playback volume, from 0 to 1.
+     * The setting is retained after closing and creating local media again.
+     *
+     * @param volume The preview volume, in the range `0...1`.
      */
     public suspend fun setLocalAudioVolume(
         volume: Float,
     )
 
     /**
-     * Sets remote playback volume from 0 to 1; a successful setting survives close.
-     * Creating a camera or image source resets it to 0; creating a video source resets it to 1.
+     * Sets the remote audio playback volume.
      *
-     * @param volume The playback volume, from 0 to 1.
+     * The setting is retained after closing. Creating a camera or image source resets it to 0;
+     * creating a video source resets it to 1. Call this method after creating the local stream to
+     * override its initial volume.
+     *
+     * @param volume The remote playback volume, in the range `0...1`.
      */
     public suspend fun setRemoteAudioVolume(
         volume: Float,
@@ -227,12 +237,14 @@ public interface XmaxRealtimeManaging {
     }
 
     /**
-     * Creates camera input with the current model's default video format.
+     * Creates a local camera stream using the model's default video format.
+     *
      * The microphone is disabled by default; your app must obtain required permissions first.
      *
      * @param position The camera position; defaults to `CameraPosition.FRONT`.
      * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
      * false.
+     * @return A media stream containing the local camera video track.
      */
     public suspend fun createLocalCameraStream(
         position: CameraPosition = CameraPosition.FRONT,
@@ -244,15 +256,17 @@ public interface XmaxRealtimeManaging {
     )
 
     /**
-     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
-     * follow the model's constraints.
-     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
-     * disconnection without local playback.
+     * Creates a local camera stream and starts its preview.
+     *
+     * Your app must obtain camera permission before creation and recording permission before
+     * enabling the microphone. Microphone capture starts on connection and stops on disconnection,
+     * without local playback. Input dimensions must satisfy the model constraints.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @param position The front or rear camera to use.
      * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
      * false.
+     * @return A media stream containing the local camera video track.
      */
     public suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
@@ -261,58 +275,70 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
-     * Stops and releases the current camera source; does nothing for other source types.
+     * Stops the local camera stream.
+     *
+     * Other input sources are unaffected.
      */
     public suspend fun stopLocalCameraStream()
 
     /**
-     * Decodes image bytes into a local stream that repeatedly supplies frames at the media's aspect ratio.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from encoded image data.
+     *
+     * The stream retains the media aspect ratio and uses the model's default frame rate. Dimensions
+     * respect model pixel-area limits and four-pixel alignment; the generation canvas is selected
+     * separately.
      *
      * @param imageData Encoded image file bytes, not raw pixels.
+     * @return A media stream containing the local image video track.
      */
     public suspend fun createLocalImageStream(
         imageData: ByteArray,
     ): RealtimeMediaStream
 
     /**
-     * Creates a local image stream from a Bitmap while retaining its aspect ratio.
-     * Uses Bitmap dimensions limited by model pixel area and four-pixel alignment, with the default frame
-     * rate and a separately selected model canvas.
+     * Creates a continuous video frame stream from an Android bitmap.
      *
-     * @param bitmap The Android image to process or display.
+     * The stream retains the media aspect ratio and uses the model's default frame rate. Dimensions
+     * respect model pixel-area limits and four-pixel alignment; the generation canvas is selected
+     * separately.
+     *
+     * @param bitmap The Android bitmap to use as local input.
+     * @return A media stream containing the local image video track.
      */
     public suspend fun createLocalImageStream(
         bitmap: Bitmap,
     ): RealtimeMediaStream
 
     /**
-     * Creates a local image stream from a readable URI; your app owns read permissions.
-     * Uses orientation-corrected image dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The model canvas is selected separately; the server fits the image and removes padding from output.
+     * Creates a continuous video frame stream from a local image URI.
+     *
+     * Your app must hold read permission. The stream retains the media aspect ratio and uses the
+     * model's default frame rate. Dimensions respect model pixel-area limits and four-pixel
+     * alignment; the generation canvas is selected separately.
      *
      * @param uri A media URI your app can read.
+     * @return A media stream containing the local image video track.
      */
     public suspend fun createLocalImageStream(
         uri: Uri,
     ): RealtimeMediaStream
 
     /**
-     * Stops and releases the current image source; does nothing for other source types.
+     * Stops the local image stream.
+     *
+     * Other input sources are unaffected.
      */
     public suspend fun stopLocalImageStream()
 
     /**
-     * Creates a local video stream from a URI, including its audio track when present.
-     * Uses orientation-corrected media dimensions, limited by model pixel area and aligned to four pixels,
-     * with the model's default frame rate.
-     * The SDK selects a separate generation canvas; the server fits the media and removes padding from
-     * output.
+     * Creates a looping audio and video stream from a local video URI.
+     *
+     * Your app must hold read permission. The stream retains the video's display aspect ratio and
+     * uses the model's default frame rate. Dimensions respect model pixel-area limits and
+     * four-pixel alignment; the generation canvas is resolved separately.
      *
      * @param uri A media URI your app can read.
+     * @return A media stream containing the local file video track.
      */
     public suspend fun createLocalVideoStream(
         uri: Uri,
@@ -331,6 +357,7 @@ public interface XmaxRealtimeManaging {
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @param sampleMethod The server video sampling method; defaults to `RealtimeVideoSampleMethod.TIME`.
      * @param onFinish The completion callback for the network video task, or null to omit it.
+     * @return A media stream containing the local preview video track.
      */
     public suspend fun createNetworkVideoStream(
         uri: Uri,
@@ -340,17 +367,17 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
-     * Binds video collected, decoded, or processed by your app; your app owns camera or player startup,
-     * shutdown, and release.
-     * Video is provided by default; the source may optionally supply audio and a preview inside the SDK
-     * container.
-     * When videoFormat is absent, uses source dimensions and the model's default frame rate, subject to model
-     * validation and alignment.
-     * The external source must deliver frames matching sink.videoFormat.
+     * Binds an external video source with optional audio for realtime generation.
+     *
+     * Your app owns camera or player startup, shutdown, and release. The source may optionally
+     * supply a preview inside the SDK container. When videoFormat is absent, source dimensions and
+     * the model's default frame rate apply, subject to model validation and alignment. Frames must
+     * match the sink's video format.
      *
      * @param source The external media source whose lifecycle your app owns.
      * @param videoFormat Input dimensions, frame rate, and optional uplink encoding settings; null uses
      * source or parsed media defaults.
+     * @return A local stream for SDK preview and generation.
      */
     public suspend fun createExternalVideoStream(
         source: RealtimeExternalVideoSource,
@@ -358,7 +385,7 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
-     * Unbinds external input after disconnection without closing your app's camera or player.
+     * Unbinds external video and preview without releasing your app's capture resources.
      */
     public suspend fun stopExternalVideoStream()
 
@@ -385,54 +412,59 @@ public interface XmaxRealtimeManaging {
     ): RealtimeStreamReplacement
 
     /**
-     * Stops the current video source and releases decoding and preview resources; does nothing for other
-     * source types.
+     * Stops the local file video stream.
+     *
+     * Other input sources are unaffected.
      */
     public suspend fun stopLocalVideoStream()
 
     /**
-     * Switches cameras; during generation, stops the task and restarts with cached conditions after
+     * Switches between the front and rear cameras.
+     *
+     * During generation, XmaxSDK stops the current task and resumes with cached conditions after
      * switching.
+     *
+     * @return The local stream with its existing video track and updated camera position.
      */
     public suspend fun switchCamera(): RealtimeMediaStream
 
     /**
-     * Connects an active local stream created by this manager and returns the remote stream for rendering.
+     * Establishes a realtime connection using a local stream created by this manager.
      *
-     * @param localStream The local input stream.
+     * @param localStream The active local media stream owned by this manager.
+     * @return The connection's remote stream, which can be bound to a result view.
      */
     public suspend fun connect(
         localStream: RealtimeMediaStream,
     ): RealtimeMediaStream
 
     /**
-     * Ends generation and closes the session and RTC connection, retaining local media; the final state is
-     * READY or IDLE.
+     * Disconnects realtime while preserving the local media preview.
+     *
+     * Generation ends and the connection is released. The final state is READY when local media
+     * remains, or IDLE otherwise.
      */
     public suspend fun disconnect()
 
     /**
-     * Disconnects with a specific reason, such as [RealtimeReason.OrientationChanged] after a display
-     * orientation change.
+     * Disconnects for the specified reason while preserving available local media.
      *
-     * @param reason The reason for the state transition or failure.
+     * @param reason The reason for disconnection.
      */
     public suspend fun disconnect(
         reason: RealtimeReason,
     )
 
     /**
-     * Starts generation on an existing connection; the first call requires conditions, and later null values
-     * reuse the cache.
-     * An active task updates its conditions; a new task enters GENERATING only after remote confirmation and
-     * first-frame readiness.
-     * Both overloads share replacement ordering: a new call cancels the pending old call with
-     * CancellationException,
-     * without reporting a business failure. Disconnect and close cancel all pending generation without
-     * automatically resuming it after cleanup.
+     * Starts generation or updates conditions for the active task.
      *
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
+     * Requires an open connection. New tasks become GENERATING after result-stream confirmation and
+     * first-frame readiness. Both overloads prefer the latest request: a new call cancels the
+     * pending request with CancellationException without reporting a business failure. Disconnect
+     * and close cancel pending generation without resuming it after cleanup.
+     *
+     * @param context The generation conditions. Required for the first request; null reuses cached
+     * conditions thereafter.
      * @param faceRestoration Whether to restore the original face; defaults to false and is sent on every
      * call.
      */
@@ -442,14 +474,19 @@ public interface XmaxRealtimeManaging {
     )
 
     /**
-     * Connects when necessary, then starts or updates generation and returns the remote stream; uses the
-     * other overload's replacement semantics.
+     * Connects the current local stream if needed and starts generation.
      *
-     * @param localStream The local input stream.
-     * @param context Generation prompts and reference media; null reuses cached conditions, which must exist
-     * for the first request.
+     * Local video file playback continues during connection and generation. An existing connection
+     * is reused. Bind the returned remote stream to a realtime video view to display results.
+     * Pending requests follow the same latest-request cancellation rules as the conditions-only
+     * overload.
+     *
+     * @param localStream The active local media stream owned by this manager.
+     * @param context The generation conditions. Required for the first request; null reuses cached
+     * conditions thereafter.
      * @param faceRestoration Whether to restore the original face; defaults to false and is sent on every
      * call.
+     * @return The remote media stream for the current RTC connection.
      */
     public suspend fun startGeneration(
         localStream: RealtimeMediaStream,
@@ -458,8 +495,10 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
-     * Cancels pending operations and waits for all realtime resources to be released; listeners remain
-     * registered and the manager can be reused.
+     * Closes the realtime lifecycle and releases the connection, local media, and RTC engine.
+     *
+     * Concurrent calls await the same cleanup task. Listeners remain registered, and local streams
+     * can be created again after closing completes.
      */
     public suspend fun close()
 }

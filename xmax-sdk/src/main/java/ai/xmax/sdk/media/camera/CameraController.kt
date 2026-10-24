@@ -95,6 +95,11 @@ internal class CameraController(
     private var isMicrophoneCapturing = false
 
     /**
+     * The preview readiness listener retained when native capture resources are released.
+     */
+    @Volatile private var previewReadyListener: RealtimeCameraPreviewReadyListener? = null
+
+    /**
      * The current camera track snapshot.
      */
     val currentTrack: RealtimeVideoTrack?
@@ -114,14 +119,16 @@ internal class CameraController(
     fun setPreviewReadyListener(
         listener: RealtimeCameraPreviewReadyListener?,
     ) {
+        previewReadyListener = listener
         rtcManager.setCameraPreviewReadyListener(listener)
     }
 
     /**
-     * Creates and starts camera input after your app obtains the required permissions. Input dimensions
-     * follow the model's constraints.
-     * The microphone is disabled by default; when enabled, capture starts on connection and stops on
-     * disconnection without local playback.
+     * Creates a local camera stream and starts its preview.
+     *
+     * Your app must obtain camera permission before creation and recording permission before
+     * enabling the microphone. Microphone capture starts on connection and stops on disconnection,
+     * without local playback. Input dimensions must satisfy the model constraints.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @param position The front or rear camera to use.
@@ -151,6 +158,7 @@ internal class CameraController(
             permissionManager.ensureCameraPermission()
             if (useMicrophone) permissionManager.ensureMicrophonePermission()
             rtcManager.switchCamera(position)
+            rtcManager.setCameraPreviewReadyListener(previewReadyListener)
             rtcManager.startVideoCapture(
                 width = resolvedFormat.width,
                 height = resolvedFormat.height,
@@ -253,7 +261,9 @@ internal class CameraController(
     }
 
     /**
-     * Stops and releases the current camera source; does nothing for other source types.
+     * Stops the local camera stream.
+     *
+     * Other input sources are unaffected.
      */
     suspend fun stopLocalCameraStream() {
         val track = synchronized(stateLock) {

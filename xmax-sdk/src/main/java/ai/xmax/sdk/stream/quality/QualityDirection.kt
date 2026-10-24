@@ -14,7 +14,9 @@ import ai.xmax.sdk.RealtimeNetworkQualityLevel
 import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
- * One direction's quality state machine, committing a candidate level only after successful application.
+ * The sampling and adaptation policy for one transport direction.
+ *
+ * A candidate level is committed only after successful application.
  *
  * @param level The quality level to apply or retain; 1 is highest.
  */

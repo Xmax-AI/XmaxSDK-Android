@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * A 48 kHz mono PCM frame for RTC external audio input.
+ * A 48 kHz mono PCM frame for external RTC audio input.
  *
  * Construction copies PCM bytes so later changes to the input array cannot change this frame.
  *

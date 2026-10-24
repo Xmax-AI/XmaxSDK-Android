@@ -22,8 +22,9 @@ import java.nio.ByteBuffer
 import java.util.ArrayDeque
 
 /**
- * Reuses ExoPlayer PCM on the AudioTrack playback clock without submitting prebuffered audio to RTC ahead of
- * playback.
+ * Forwards playback-synchronized PCM to RTC while preserving local audio preview.
+ *
+ * The AudioTrack playback clock prevents prebuffered audio from reaching RTC ahead of playback.
  *
  * @param delegate The sink performing audio playback.
  */

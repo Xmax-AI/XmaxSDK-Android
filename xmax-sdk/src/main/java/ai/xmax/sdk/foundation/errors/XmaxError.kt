@@ -13,7 +13,7 @@ package ai.xmax.sdk
 import kotlinx.coroutines.CancellationException
 
 /**
- * The SDK's public error codes.
+ * An error code reported by XmaxSDK.
  */
 public enum class XmaxErrorCode {
 
@@ -94,7 +94,9 @@ public enum class XmaxErrorCode {
 }
 
 /**
- * An SDK failure; the active operation determines cleanup scope independently of the error.
+ * An error thrown or reported by XmaxSDK.
+ *
+ * The active operation determines cleanup scope independently of the error.
  *
  * @param message The message to send or log.
  * @param cause The underlying exception that caused this error.

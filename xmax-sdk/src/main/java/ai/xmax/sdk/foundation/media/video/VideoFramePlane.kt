@@ -14,7 +14,8 @@ import java.nio.ByteBuffer
 
 /**
  * A plane of video pixel data.
- * Construction validates byte ranges and row stride, throwing [XmaxError] for invalid configuration.
+ *
+ * Byte ranges and row stride must describe a valid plane; invalid configuration throws [XmaxError].
  *
  * @param data The bytes containing this plane's valid range.
  * @param byteLength The valid byte count, or null to use the remaining bytes after the offset.
@@ -38,7 +39,7 @@ internal class VideoFramePlane(
 ) {
 
     /**
-     * The underlying bytes owned by this plane.
+     * The backing bytes for this plane.
      */
     private val bytes: ByteArray = if (copyData) data.copyOf() else data
 

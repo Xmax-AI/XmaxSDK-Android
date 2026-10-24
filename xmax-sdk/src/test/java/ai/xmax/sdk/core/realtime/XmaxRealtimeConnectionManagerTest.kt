@@ -137,6 +137,7 @@ private class SessionServiceStub : RealtimeSessionServicing {
 }
 
 private class RenderControllerStub : RenderControlling {
+    override fun setRemoteVideoFrameListener(listener: RealtimeVideoFrameListener?) = Unit
     var registeredTrack: RealtimeVideoTrack? = null
     var resetTrack: RealtimeVideoTrack? = null
     var resolvedMediaSize: IntSize? = null

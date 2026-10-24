@@ -11,7 +11,7 @@
 package ai.xmax.sdk
 
 /**
- * SDK client configuration.
+ * The credentials, service environment, and logging options for an Xmax client.
  *
  * @param apiKey The API key issued by the developer platform; do not log or expose it.
  */
@@ -60,7 +60,9 @@ public class XmaxConfiguration @JvmOverloads constructor(
     }
 
     /**
-     * Rejects an empty API key without validating credentials with the server.
+     * Verifies that the API key is not empty.
+     *
+     * Credential validity is checked by the server when an authenticated request is made.
      */
     public fun validate() {
         if (apiKey.isEmpty()) {
