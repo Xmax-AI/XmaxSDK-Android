@@ -234,8 +234,8 @@ internal class RoomController(
     /**
      * Resolves the downlink bitrate budget.
      *
-     * The minimum is 100 kbps; the maximum is estimated from output dimensions at 24 fps and
-     * clamped to 100 through 10,000 kbps.
+     * The minimum is 500 kbps; the maximum is estimated from output dimensions at 24 fps and
+     * clamped to 500 through 10,000 kbps.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @return The minimum and maximum downlink encoder bitrates, in kbps.
@@ -248,8 +248,8 @@ internal class RoomController(
             videoFormat.height,
             fps = 24,
         )
-        return 100 to maximum.coerceIn(
-            100,
+        return 500 to maximum.coerceIn(
+            500,
             10_000,
         )
     }

@@ -71,7 +71,7 @@ class StreamControllerTest {
         confirmation.await()
         controller.updateDownlinkVideoResolution("task", target) {}
         assertEquals(1, changes().size)
-        assertEquals(100, changes().single().getJSONObject("params").getInt("min_bitrate"))
+        assertEquals(500, changes().single().getJSONObject("params").getInt("min_bitrate"))
 
         assertTrue(runCatching { controller.updateDownlinkVideoResolution("old-task", target) {} }.isFailure)
         assertTrue(runCatching {

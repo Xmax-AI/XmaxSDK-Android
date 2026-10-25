@@ -855,7 +855,7 @@ class XmaxRealtimeManagerTest {
         assertTrue(signal.getJSONObject("params").getBoolean("face_replace"))
         assertEquals("[1024,1920]", signal.getJSONObject("params").getJSONArray("size").toString())
         assertEquals("[616,1120]", signal.getJSONObject("params").getJSONArray("target_size").toString())
-        assertEquals(100, signal.getJSONObject("params").getInt("min_bitrate"))
+        assertEquals(500, signal.getJSONObject("params").getInt("min_bitrate"))
         assertEquals(EncodingBitratePolicy.resolve(616, 1120, 24).second,
             signal.getJSONObject("params").getInt("max_bitrate"))
         val taskId = signal.getString("uid")
@@ -884,7 +884,7 @@ class XmaxRealtimeManagerTest {
         assertEquals(taskId, resize.getString("uid"))
         assertEquals("[528,960]", resize.getJSONObject("params").getJSONArray("target_size").toString())
         assertFalse(resize.getJSONObject("params").has("size"))
-        assertEquals(100, resize.getJSONObject("params").getInt("min_bitrate"))
+        assertEquals(500, resize.getJSONObject("params").getInt("min_bitrate"))
         assertEquals(EncodingBitratePolicy.resolve(528, 960, 24).second,
             resize.getJSONObject("params").getInt("max_bitrate"))
         manager.startGeneration(null)
