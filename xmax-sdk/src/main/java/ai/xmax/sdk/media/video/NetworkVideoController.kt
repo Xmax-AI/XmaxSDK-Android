@@ -21,7 +21,7 @@ import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
 import ai.xmax.sdk.XmaxLogger
-import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.XmaxRealtimeVideoView
 import ai.xmax.sdk.cleanupResources
 import ai.xmax.sdk.render.video.VideoRenderBinding
 import ai.xmax.sdk.render.video.VideoRenderRegistry
@@ -203,7 +203,7 @@ private class NetworkVideoPreview(
     /**
      * The view hosting local network video preview.
      */
-    private var view: XmaxVideoView? = null
+    private var view: XmaxRealtimeVideoView? = null
 
     /**
      * The texture view receiving player output.
@@ -242,7 +242,7 @@ private class NetworkVideoPreview(
      * @param contentMode Aspect-preserving fit or fill scaling.
      */
     fun attach(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
         contentMode: VideoContentMode,
     ) {
         this.view = view
@@ -315,7 +315,7 @@ private class NetworkVideoPreview(
      * @param view The view to bind or unbind.
      */
     fun detach(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
     ) {
         if (this.view !== view) return
 

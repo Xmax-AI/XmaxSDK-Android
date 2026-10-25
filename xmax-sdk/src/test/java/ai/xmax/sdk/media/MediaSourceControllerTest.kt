@@ -15,7 +15,7 @@ import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.VideoRotation
 import ai.xmax.sdk.XmaxError
-import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.XmaxRealtimeVideoView
 import ai.xmax.sdk.foundation.media.MediaFileMetadata
 import ai.xmax.sdk.foundation.media.MediaFileMetadataManaging
 import ai.xmax.sdk.media.video.VideoPlayerControlling
@@ -87,7 +87,7 @@ class MediaSourceControllerTest {
         override suspend fun stop() = Unit
         override suspend fun setLocalAudioPreviewMuted(muted: Boolean) = Unit
         override suspend fun setLocalAudioVolume(volume: Float) = Unit
-        override fun attachPreview(view: XmaxVideoView, contentMode: VideoContentMode) = Unit
-        override fun detachPreview(view: XmaxVideoView) = Unit
+        override fun attachPreview(view: XmaxRealtimeVideoView, contentMode: VideoContentMode) = Unit
+        override fun detachPreview(view: XmaxRealtimeVideoView) = Unit
     }
 }

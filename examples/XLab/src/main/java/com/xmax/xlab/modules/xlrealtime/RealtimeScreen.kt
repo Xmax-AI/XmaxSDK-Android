@@ -118,7 +118,7 @@ import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.XmaxClient
 import ai.xmax.sdk.XmaxConfiguration
 import ai.xmax.sdk.XmaxLoggerOption
-import ai.xmax.sdk.XmaxRealtimeVideo
+import ai.xmax.sdk.XmaxRealtimeDualVideo
 import ai.xmax.sdk.UplinkVideoStatistics
 import ai.xmax.sdk.DownlinkVideoStatistics
 import ai.xmax.sdk.RealtimeNetworkQuality
@@ -1391,7 +1391,7 @@ private fun SdkRealtimePreview(
             .background(Color(0xFF050506)),
         contentAlignment = Alignment.Center,
     ) {
-        XmaxRealtimeVideo(
+        XmaxRealtimeDualVideo(
             localTrack = localStream?.videoTrack,
             remoteTrack = remoteStream?.videoTrack,
             modifier = Modifier.fillMaxSize(),

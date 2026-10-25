@@ -12,7 +12,7 @@ package ai.xmax.sdk.media.video
 
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.RealtimeVideoFormat
-import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.XmaxRealtimeVideoView
 import ai.xmax.sdk.foundation.media.MediaFileMetadata
 import android.net.Uri
 
@@ -64,7 +64,7 @@ internal interface VideoPlayerControlling {
      * @param contentMode Aspect-preserving fit or fill scaling.
      */
     fun attachPreview(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
         contentMode: VideoContentMode,
     )
 
@@ -74,7 +74,7 @@ internal interface VideoPlayerControlling {
      * @param view The view to bind or unbind.
      */
     fun detachPreview(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
     )
 
     /**

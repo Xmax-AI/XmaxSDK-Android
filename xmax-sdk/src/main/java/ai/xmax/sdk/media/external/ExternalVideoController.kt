@@ -271,7 +271,7 @@ internal class ExternalVideoController(
         /**
          * The weakly held display target.
          */
-        private var view: WeakReference<XmaxVideoView>? = null
+        private var view: WeakReference<XmaxRealtimeVideoView>? = null
 
         /**
          * The aspect-preserving display mode.
@@ -358,7 +358,7 @@ internal class ExternalVideoController(
          * @param mode The aspect-preserving fit or fill mode.
          */
         fun attach(
-            view: XmaxVideoView,
+            view: XmaxRealtimeVideoView,
             mode: VideoContentMode,
         ) {
             synchronized(lock) {
@@ -376,7 +376,7 @@ internal class ExternalVideoController(
          * @param view The target to detach.
          */
         fun detach(
-            view: XmaxVideoView,
+            view: XmaxRealtimeVideoView,
         ) {
             synchronized(lock) {
                 if (this.view?.get() === view) {

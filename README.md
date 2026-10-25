@@ -197,6 +197,14 @@ When upgrading to **1.0.12**, replace `setRemoteVideoFrameListener(...)` with
 External sources providing their own preview must override `providesPreview` to
 `true`; otherwise XmaxSDK renders the submitted frames.
 
+The current source renames single-track views to `XmaxRealtimeVideo` and
+`XmaxRealtimeVideoView`, and dual-track views to `XmaxRealtimeDualVideo` and
+`XmaxRealtimeDualVideoView`. The examples below use these new names; use a source
+dependency until the next release is published. Version 1.0.12 uses `XmaxVideo`
+and `XmaxVideoView` for single tracks, and `XmaxRealtimeVideo` and
+`XmaxRealtimeVideoView` for dual tracks. The old names are not retained as aliases
+in the current source.
+
 When upgrading from **1.0.10 or earlier**, also remove the `videoFormat` argument from
 `createLocalImageStream(...)` and `createLocalVideoStream(uri)` calls and rebuild
 your application. The SDK now derives image and local video input formats from
@@ -274,7 +282,7 @@ import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.XmaxClient
 import ai.xmax.sdk.XmaxConfiguration
-import ai.xmax.sdk.XmaxRealtimeVideoView
+import ai.xmax.sdk.XmaxRealtimeDualVideoView
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
@@ -287,8 +295,9 @@ val realtime = client.createRealtimeManager(
     options = RealtimeConfiguration(model = RealtimeModel.X2_1_1_PREVIEW_CN),
 )
 
-val videoView = XmaxRealtimeVideoView(this).apply {
+val videoView = XmaxRealtimeDualVideoView(this).apply {
     videoContentMode = VideoContentMode.FILL
+    remoteVideoFadeInDuration = 0.3
 }
 setContentView(videoView)
 
@@ -310,9 +319,14 @@ lifecycleScope.launch {
 }
 ```
 
-`XmaxRealtimeVideoView` displays the local camera preview until the first generated
+`XmaxRealtimeDualVideoView` displays the local camera preview until the first generated
 frame arrives, then transitions to the remote video. Touch interaction is enabled by
 default after the generated video becomes visible.
+
+Set `remoteVideoFadeInDuration` to customize the remote fade-in duration in
+seconds. The default is `0.3`; zero, negative, or nonfinite values show the remote
+video without animation after its first frame arrives. Changes apply to the next
+transition without changing an active animation.
 
 Local camera, image, video, and external input dimensions are resized into the model's
 minimum and maximum pixel-area limits and aligned to multiples of four, preserving
@@ -480,29 +494,30 @@ Only one local input stream can be active at a time.
 
 ### Using Jetpack Compose
 
-Use `XmaxRealtimeVideo` to keep the local preview visible until the first generated
+Use `XmaxRealtimeDualVideo` to keep the local preview visible until the first generated
 frame arrives, then transition to the remote video:
 
 ```kotlin
-import ai.xmax.sdk.XmaxRealtimeVideo
+import ai.xmax.sdk.XmaxRealtimeDualVideo
 import ai.xmax.sdk.VideoContentMode
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 
-XmaxRealtimeVideo(
+XmaxRealtimeDualVideo(
     localTrack = localStream?.videoTrack,
     remoteTrack = remoteStream?.videoTrack,
     modifier = Modifier.fillMaxSize(),
     videoContentMode = VideoContentMode.FILL,
+    remoteVideoFadeInDuration = 0.3,
 )
 ```
 
-Use `XmaxVideo` to display a single local or remote track:
+Use `XmaxRealtimeVideo` to display a single local or remote track:
 
 ```kotlin
-import ai.xmax.sdk.XmaxVideo
+import ai.xmax.sdk.XmaxRealtimeVideo
 
-XmaxVideo(
+XmaxRealtimeVideo(
     track = localStream?.videoTrack,
     modifier = Modifier.fillMaxSize(),
     videoContentMode = VideoContentMode.FIT,
@@ -516,13 +531,14 @@ parameters change and unbind tracks when removed from the composition. Keep stre
 objects in lifecycle-aware Compose state; the caller remains responsible for
 managing media streams and the realtime manager's lifecycle.
 
-You can also embed `XmaxRealtimeVideoView` directly with `AndroidView`:
+You can also embed `XmaxRealtimeDualVideoView` directly with `AndroidView`:
 
 ```kotlin
 AndroidView(
-    factory = { context -> XmaxRealtimeVideoView(context) },
+    factory = { context -> XmaxRealtimeDualVideoView(context) },
     update = { view ->
         view.videoContentMode = VideoContentMode.FILL
+        view.remoteVideoFadeInDuration = 0.3
         view.localTrack = localStream?.videoTrack
         view.remoteTrack = remoteStream?.videoTrack
     },

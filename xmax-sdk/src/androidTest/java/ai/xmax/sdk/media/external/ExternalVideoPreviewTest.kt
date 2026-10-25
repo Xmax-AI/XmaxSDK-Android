@@ -52,10 +52,10 @@ class ExternalVideoPreviewTest {
         val scenario = ActivityScenario.launch<RealtimeVideoTestActivity>(
             Intent(instrumentation.targetContext, RealtimeVideoTestActivity::class.java),
         )
-        lateinit var view: XmaxVideoView
+        lateinit var view: XmaxRealtimeVideoView
         try {
             scenario.onActivity { activity ->
-                view = XmaxVideoView(activity).apply { track = stream.videoTrack }
+                view = XmaxRealtimeVideoView(activity).apply { track = stream.videoTrack }
                 activity.setContentView(view)
             }
             awaitColor(scenario, { view }, Color.RED)
@@ -77,7 +77,7 @@ class ExternalVideoPreviewTest {
 
     private fun awaitColor(
         scenario: ActivityScenario<RealtimeVideoTestActivity>,
-        view: () -> XmaxVideoView,
+        view: () -> XmaxRealtimeVideoView,
         expected: Int,
     ) {
         val deadline = SystemClock.elapsedRealtime() + 3000

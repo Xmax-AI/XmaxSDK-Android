@@ -12,7 +12,7 @@ package ai.xmax.sdk.render.video
 
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.VideoFrame
-import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.XmaxRealtimeVideoView
 import java.lang.ref.WeakReference
 
 /**
@@ -22,18 +22,18 @@ internal class VideoRenderBinding(
     /**
      * The function binding a track to a view and scaling mode.
      */
-    private val attachHandler: (XmaxVideoView, VideoContentMode) -> Unit,
+    private val attachHandler: (XmaxRealtimeVideoView, VideoContentMode) -> Unit,
 
     /**
      * The function detaching a track's view.
      */
-    private val detachHandler: (XmaxVideoView) -> Unit,
+    private val detachHandler: (XmaxRealtimeVideoView) -> Unit,
 ) {
 
     /**
      * Bindings between tracks and display components.
      */
-    private var attachedView: WeakReference<XmaxVideoView>? = null
+    private var attachedView: WeakReference<XmaxRealtimeVideoView>? = null
 
     /**
      * Creates a video rendering binding.
@@ -49,7 +49,7 @@ internal class VideoRenderBinding(
                 contentMode,
             )
         },
-        detachHandler = XmaxVideoView::clearImageFrame,
+        detachHandler = XmaxRealtimeVideoView::clearImageFrame,
     )
 
     /**
@@ -60,7 +60,7 @@ internal class VideoRenderBinding(
      */
     @Synchronized
     fun attach(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
         contentMode: VideoContentMode,
     ) {
         val previousView = attachedView?.get()
@@ -83,7 +83,7 @@ internal class VideoRenderBinding(
      */
     @Synchronized
     fun detach(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
     ) {
         if (attachedView?.get() === view) detach()
     }

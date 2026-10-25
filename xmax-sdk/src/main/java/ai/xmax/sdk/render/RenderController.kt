@@ -18,7 +18,7 @@ import ai.xmax.sdk.RealtimeMediaFrameListener
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
-import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.XmaxRealtimeVideoView
 import ai.xmax.sdk.foundation.rtc.RemoteStream
 import ai.xmax.sdk.foundation.rtc.RtcManaging
 import ai.xmax.sdk.media.interaction.InteractionFrame
@@ -91,7 +91,7 @@ internal class RenderController(
     /**
      * A weak reference to the current downlink video view.
      */
-    private var remoteView: WeakReference<XmaxVideoView>? = null
+    private var remoteView: WeakReference<XmaxRealtimeVideoView>? = null
 
     /**
      * The downlink video's aspect-fit or aspect-fill mode.
@@ -331,7 +331,7 @@ internal class RenderController(
      * @param contentMode Aspect-preserving fit or fill scaling.
      */
     private fun attachRemoteVideo(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
         contentMode: VideoContentMode,
     ): Unit = operationLock.withLock {
         remoteView = WeakReference(view)
@@ -351,7 +351,7 @@ internal class RenderController(
      * @param view The view to bind or unbind.
      */
     private fun detachRemoteVideo(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
     ): Unit = operationLock.withLock {
         if (remoteView?.get() !== view) return
 
@@ -406,7 +406,7 @@ internal class RenderController(
      */
     private fun bindRemoteView(
         current: RemoteGeneration,
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
     ) {
         // Rebind display resources and await a fresh first frame when a new task reuses the track.
         view.prepareRtcVideoRendering()

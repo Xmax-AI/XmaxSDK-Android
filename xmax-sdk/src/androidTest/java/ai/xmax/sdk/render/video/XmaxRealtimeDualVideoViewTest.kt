@@ -1,5 +1,5 @@
 //
-//  XmaxRealtimeVideoViewTest.kt
+//  XmaxRealtimeDualVideoViewTest.kt
 //  XmaxSDK
 //  Repo: https://github.com/Xmax-AI/XmaxSDK-Android
 //
@@ -14,8 +14,8 @@ package ai.xmax.sdk.render.video
 import ai.xmax.sdk.DefaultTrajectoryEffectRenderer
 import ai.xmax.sdk.RealtimeVideoTrack
 import ai.xmax.sdk.VideoContentMode
+import ai.xmax.sdk.XmaxRealtimeDualVideoView
 import ai.xmax.sdk.XmaxRealtimeVideoView
-import ai.xmax.sdk.XmaxVideoView
 import ai.xmax.sdk.foundation.rtc.RemoteStream
 import ai.xmax.sdk.foundation.rtc.RtcManaging
 import ai.xmax.sdk.render.RenderController
@@ -52,9 +52,83 @@ import org.junit.runner.RunWith
 
 public class RealtimeVideoTestActivity : Activity()
 
-/** Uses real hardware TextureViews and buffers; no RTC connection or media permissions needed. */
+/**
+ * Verifies dual-track presentation with real TextureViews and buffers, without RTC media permissions.
+ */
 @RunWith(AndroidJUnit4::class)
-public class XmaxRealtimeVideoViewTest {
+public class XmaxRealtimeDualVideoViewTest {
+
+    /**
+     * Verifies the default remote transition duration.
+     */
+    @Test
+    public fun remoteFadeInDefaultsToPointThreeSeconds() = withView { h ->
+        h.ui {
+            assertEquals(0.3, h.view.remoteVideoFadeInDuration, 0.0)
+        }
+    }
+
+    /**
+     * Verifies immediate presentation after the first frame when animation is disabled.
+     */
+    @Test
+    public fun disabledFadeStillWaitsForRemotePixels() = withView { h ->
+        val durations = listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)
+        for ((index, duration) in durations.withIndex()) {
+            val remote = h.textureTrack("immediate-$index")
+            var firstFrameAlpha: Float? = null
+            h.ui {
+                h.view.remoteVideoFadeInDuration = duration
+                h.view.remoteTrack = remote.track
+                val presentFrame = checkNotNull(h.remoteView.frameDisplayHandler)
+                h.remoteView.frameDisplayHandler = { track ->
+                    presentFrame(track)
+                    if (firstFrameAlpha == null) firstFrameAlpha = h.remoteView.alpha
+                }
+                assertSame(h.localView, h.frontView)
+            }
+            h.await { remote.texture.isAvailable }
+            h.assertColor(Color.GREEN)
+
+            remote.draw(Color.RED)
+            h.await { firstFrameAlpha != null }
+            h.ui {
+                assertEquals(1f, checkNotNull(firstFrameAlpha), 0f)
+                assertSame(h.remoteView, h.frontView)
+                h.view.remoteTrack = null
+                assertSame(h.localView, h.frontView)
+            }
+        }
+    }
+
+    /**
+     * Verifies that duration changes affect the next transition without changing an active fade.
+     */
+    @Test
+    public fun configuredFadeDurationAppliesWhenTheFirstFrameArrives() = withView { h ->
+        val remote = h.textureTrack("configured-fade")
+        var appliedDuration: Long? = null
+        h.ui {
+            h.view.remoteVideoFadeInDuration = 0.8
+            h.view.remoteTrack = remote.track
+            h.view.remoteVideoFadeInDuration = 0.6
+            val presentFrame = checkNotNull(h.remoteView.frameDisplayHandler)
+            h.remoteView.frameDisplayHandler = { track ->
+                presentFrame(track)
+                if (appliedDuration == null) appliedDuration = h.remoteView.animate().duration
+            }
+        }
+        h.await { remote.texture.isAvailable }
+        remote.draw(Color.RED)
+        h.await { appliedDuration != null }
+
+        h.ui {
+            assertEquals(600L, checkNotNull(appliedDuration))
+            h.view.remoteVideoFadeInDuration = 0.0
+            assertEquals(600L, h.remoteView.animate().duration)
+        }
+    }
+
     /** 外部预览不随本地轨道解绑，真实远端首帧出现后才覆盖，清空后立即回到原预览。 */
     @Test
     public fun externalPreviewSurvivesTrackRecreationAndWaitsForRemotePixels() = withView { h ->
@@ -66,7 +140,7 @@ public class XmaxRealtimeVideoViewTest {
                 localBindings++
                 view.displayDecodedVideoBitmap(bitmap(Color.GREEN), mode)
             },
-            detachHandler = XmaxVideoView::clearDecodedVideoPreview,
+            detachHandler = XmaxRealtimeVideoView::clearDecodedVideoPreview,
         ))
         h.ui {
             preview = FrameLayout(it).apply { setBackgroundColor(Color.BLUE) }
@@ -367,7 +441,7 @@ public class XmaxRealtimeVideoViewTest {
                 attachCount++
                 view.displayDecodedVideoBitmap(bitmap(Color.BLUE), mode)
             },
-            detachHandler = XmaxVideoView::clearDecodedVideoPreview,
+            detachHandler = XmaxRealtimeVideoView::clearDecodedVideoPreview,
         ))
         h.ui {
             h.view.remoteTrack = track
@@ -403,27 +477,27 @@ public class XmaxRealtimeVideoViewTest {
 
     private class Harness(val scenario: ActivityScenario<RealtimeVideoTestActivity>) {
         lateinit var root: FrameLayout
-        lateinit var view: XmaxRealtimeVideoView
-        lateinit var localView: XmaxVideoView
-        lateinit var remoteView: XmaxVideoView
+        lateinit var view: XmaxRealtimeDualVideoView
+        lateinit var localView: XmaxRealtimeVideoView
+        lateinit var remoteView: XmaxRealtimeVideoView
         val tracks = mutableListOf<RealtimeVideoTrack>()
         var localAttachCount = 0
         val frontView get() = view.getChildAt(view.childCount - 1)
 
         fun setUp() = ui { activity ->
             root = FrameLayout(activity)
-            view = XmaxRealtimeVideoView(activity)
+            view = XmaxRealtimeDualVideoView(activity)
             root.addView(view, FrameLayout.LayoutParams(200, 200))
             activity.setContentView(root)
-            localView = view.getChildAt(1) as XmaxVideoView
-            remoteView = view.getChildAt(0) as XmaxVideoView
+            localView = view.getChildAt(1) as XmaxRealtimeVideoView
+            remoteView = view.getChildAt(0) as XmaxRealtimeVideoView
             val localTrack = RealtimeVideoTrack("local")
             register(localTrack, VideoRenderBinding(
                 attachHandler = { target, mode ->
                     localAttachCount++
                     target.displayDecodedVideoBitmap(bitmap(Color.GREEN), mode)
                 },
-                detachHandler = XmaxVideoView::clearDecodedVideoPreview,
+                detachHandler = XmaxRealtimeVideoView::clearDecodedVideoPreview,
             ))
             view.localTrack = localTrack
         }

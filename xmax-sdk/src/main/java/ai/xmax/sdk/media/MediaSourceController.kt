@@ -17,7 +17,7 @@ import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.VideoRotation
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
-import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.XmaxRealtimeVideoView
 import ai.xmax.sdk.foundation.media.MediaFileMetadata
 import ai.xmax.sdk.foundation.media.MediaFileMetadataManaging
 import ai.xmax.sdk.media.video.VideoPlayerControlling
@@ -182,7 +182,7 @@ internal class MediaSourceController(
      * @param contentMode Aspect-preserving fit or fill scaling.
      */
     override fun attachPreview(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
         contentMode: VideoContentMode,
     ) {
         playerController.attachPreview(
@@ -197,7 +197,7 @@ internal class MediaSourceController(
      * @param view The view to bind or unbind.
      */
     override fun detachPreview(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
     ) {
         playerController.detachPreview(view)
     }

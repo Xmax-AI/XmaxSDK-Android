@@ -19,7 +19,7 @@ import ai.xmax.sdk.VideoFrame
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
 import ai.xmax.sdk.XmaxLogger
-import ai.xmax.sdk.XmaxVideoView
+import ai.xmax.sdk.XmaxRealtimeVideoView
 import ai.xmax.sdk.foundation.media.MediaFileMetadata
 import ai.xmax.sdk.media.MediaAudioFrameListener
 import ai.xmax.sdk.media.MediaVideoFrameListener
@@ -248,7 +248,7 @@ internal class VideoPlayerController(
      * @param contentMode Aspect-preserving fit or fill scaling.
      */
     override fun attachPreview(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
         contentMode: VideoContentMode,
     ) {
         previewDispatcher.attach(
@@ -263,7 +263,7 @@ internal class VideoPlayerController(
      * @param view The view to bind or unbind.
      */
     override fun detachPreview(
-        view: XmaxVideoView,
+        view: XmaxRealtimeVideoView,
     ) {
         previewDispatcher.detach(view)
     }
@@ -908,7 +908,7 @@ internal class VideoPlayerController(
         /**
          * The view to bind or unbind.
          */
-        val view: XmaxVideoView?,
+        val view: XmaxRealtimeVideoView?,
 
         /**
          * Aspect-preserving fit or fill scaling.
@@ -944,7 +944,7 @@ internal class VideoPlayerController(
         /**
          * The active preview view.
          */
-        private var view: WeakReference<XmaxVideoView>? = null
+        private var view: WeakReference<XmaxRealtimeVideoView>? = null
 
         /**
          * The local preview fit or fill mode.
@@ -963,7 +963,7 @@ internal class VideoPlayerController(
          * @param contentMode Aspect-preserving fit or fill scaling.
          */
         fun attach(
-            view: XmaxVideoView,
+            view: XmaxRealtimeVideoView,
             contentMode: VideoContentMode,
         ) {
             synchronized(previewLock) {
@@ -980,7 +980,7 @@ internal class VideoPlayerController(
          * @param view The view to bind or unbind.
          */
         fun detach(
-            view: XmaxVideoView,
+            view: XmaxRealtimeVideoView,
         ) {
             synchronized(previewLock) {
                 if (this.view?.get() === view) {
