@@ -192,18 +192,16 @@ XmaxSDK uses Agora RTC and supports `RealtimeModel.X2_1_1_PREVIEW_CN` and
 `XmaxConfiguration.environment`. The quality controls and unified remote
 audio/video output described below are available starting in version 1.0.12.
 
-When upgrading to **1.0.12**, replace `setRemoteVideoFrameListener(...)` with
+When upgrading from **1.0.11 or earlier**, replace `setRemoteVideoFrameListener(...)` with
 `setRemoteMediaFrameListener(...)` and handle its audio and video packet variants.
 External sources providing their own preview must override `providesPreview` to
 `true`; otherwise XmaxSDK renders the submitted frames.
 
-The current source renames single-track views to `XmaxRealtimeVideo` and
-`XmaxRealtimeVideoView`, and dual-track views to `XmaxRealtimeDualVideo` and
-`XmaxRealtimeDualVideoView`. The examples below use these new names; use a source
-dependency until the next release is published. Version 1.0.12 uses `XmaxVideo`
-and `XmaxVideoView` for single tracks, and `XmaxRealtimeVideo` and
-`XmaxRealtimeVideoView` for dual tracks. The old names are not retained as aliases
-in the current source.
+When upgrading to **1.0.13**, rename single-track components from `XmaxVideo` and
+`XmaxVideoView` to `XmaxRealtimeVideo` and `XmaxRealtimeVideoView`. Rename
+dual-track components from `XmaxRealtimeVideo` and `XmaxRealtimeVideoView` to
+`XmaxRealtimeDualVideo` and `XmaxRealtimeDualVideoView`. The old names are not
+retained as compatibility aliases. The examples below use the new names.
 
 When upgrading from **1.0.10 or earlier**, also remove the `videoFormat` argument from
 `createLocalImageStream(...)` and `createLocalVideoStream(uri)` calls and rebuild
@@ -234,7 +232,7 @@ Add XmaxSDK to your application module:
 
 ```kotlin
 dependencies {
-    implementation("ai.xmax:xmax-sdk:1.0.12")
+    implementation("ai.xmax:xmax-sdk:1.0.13")
 }
 ```
 
