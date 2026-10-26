@@ -83,17 +83,17 @@ class XmaxRealtimeManagerTest {
         val f = Fixture(StandardTestDispatcher(testScheduler))
         assertNull(f.manager.currentCameraVideoFormat)
         assertNull(f.manager.currentCameraPreset)
-        val initial = RealtimeVideoFormat(1024, 1920, 24, 1500, 3000)
+        val initial = RealtimeVideoFormat(1080, 1920, 24, 1500, 3000)
         f.media.reportPreviewReadyOnCreate = false
         val local = f.manager.createLocalCameraStream(initial, CameraPosition.BACK)
-        val updated = initial.copy(width = 1920, height = 1024)
+        val updated = initial.copy(width = 1920, height = 1080)
         val preparingError = runCatching { f.manager.updateCameraFormat(updated) }.exceptionOrNull()
         assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (preparingError as XmaxError).code)
         f.media.registeredCameraPreviewReadyListener!!.onCameraPreviewReady()
 
         f.manager.updateCameraFormat(updated)
         assertEquals(updated, f.manager.currentCameraVideoFormat)
-        assertNull(f.manager.currentCameraPreset)
+        assertEquals(RealtimeCameraPreset.RESOLUTION_1920X1080, f.manager.currentCameraPreset)
         assertSame(local.videoTrack, f.media.currentTrack)
         assertEquals(CameraPosition.BACK, local.videoTrack!!.position)
 
@@ -113,18 +113,23 @@ class XmaxRealtimeManagerTest {
     }
 
     @Test
-    fun `default camera uses preview format and rejects unsupported presets without losing preview`() = runTest {
+    fun `default camera uses x21 format and preset updates preserve preview`() = runTest {
         val f = Fixture(StandardTestDispatcher(testScheduler))
-        assertTrue(runCatching { f.manager.createLocalCameraStream(RealtimeCameraPreset.RESOLUTION_1152X1536) }.isFailure)
-        assertNull(f.media.currentTrack)
         val local = f.manager.createLocalCameraStream()
-        val expected = RealtimeVideoFormat(1024, 1920, 30)
+        val expected = RealtimeVideoFormat(1080, 1920, 30)
         assertEquals(expected, f.manager.currentCameraVideoFormat)
-        assertTrue(runCatching { f.manager.updateCameraFormat(RealtimeCameraPreset.RESOLUTION_1408X1408) }.isFailure)
-        assertEquals(expected, local.videoTrack!!.videoFormat)
+        assertEquals(RealtimeCameraPreset.RESOLUTION_1080X1920, f.manager.currentCameraPreset)
+        for (preset in RealtimeCameraPreset.entries) {
+            f.manager.updateCameraFormat(preset)
+            val format = expected.copy(width = preset.size.width, height = preset.size.height)
+            assertEquals(format, f.manager.currentCameraVideoFormat)
+            assertEquals(preset, f.manager.currentCameraPreset)
+            assertSame(local.videoTrack, f.media.currentTrack)
+        }
+        val previous = local.videoTrack!!.videoFormat
         f.media.createError = XmaxError(XmaxErrorCode.RTC_ERROR, "configuration failed")
-        assertTrue(runCatching { f.manager.updateCameraFormat(expected.copy(width = 1920, height = 1024)) }.isFailure)
-        assertEquals(expected, local.videoTrack.videoFormat)
+        assertTrue(runCatching { f.manager.updateCameraFormat(expected.copy(width = 1920, height = 1080)) }.isFailure)
+        assertEquals(previous, local.videoTrack.videoFormat)
         assertEquals(RealtimeConnectionState.READY, f.manager.currentState.connectionState)
         f.manager.close()
 
@@ -135,6 +140,20 @@ class XmaxRealtimeManagerTest {
         val image = runCatching { f.manager.updateCameraFormat(expected) }.exceptionOrNull()
         assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (image as XmaxError).code)
         f.manager.close()
+    }
+
+    @Test
+    fun `every x21 camera preset creates a stream at the default frame rate`() = runTest {
+        for (preset in RealtimeCameraPreset.entries) {
+            val f = Fixture(StandardTestDispatcher(testScheduler))
+            val stream = f.manager.createLocalCameraStream(preset)
+            val expected = RealtimeVideoFormat(preset.size.width, preset.size.height, 30)
+
+            assertEquals(expected, stream.videoTrack?.videoFormat)
+            assertEquals(preset, f.manager.currentCameraPreset)
+            assertEquals(RealtimeConnectionState.READY, f.manager.currentState.connectionState)
+            f.manager.close()
+        }
     }
 
     @Test
@@ -286,11 +305,11 @@ class XmaxRealtimeManagerTest {
             f.stream.confirmation.complete(Unit)
             f.manager.startGeneration(local, RealtimeContext("first"))
             val taskId = f.manager.currentState.taskId
-            val canvas = if (input.width > input.height) input.copy(width = 1920, height = 1024) else input.copy(width = 1024, height = 1920)
+            val canvas = if (input.width > input.height) input.copy(width = 1920, height = 1080) else input.copy(width = 1080, height = 1920)
             val initialTarget = if (input.width > input.height) RealtimeVideoFormat(1152, 648, 24) else RealtimeVideoFormat(648, 1152, 24)
             assertEquals(input, local.videoTrack?.videoFormat)
             assertEquals(canvas, f.stream.startedFormats.single())
-            assertEquals(listOf(true), f.stream.startedPadding)
+            assertEquals(listOf(false), f.stream.startedPadding)
             assertEquals(initialTarget, f.stream.encoderFormats.last())
             assertEquals(initialTarget, f.stream.startedTargets.single())
             assertEquals(input, f.media.interactionFormat)
@@ -305,7 +324,7 @@ class XmaxRealtimeManagerTest {
             f.manager.startGeneration(RealtimeContext("second"))
             assertEquals(taskId, f.manager.currentState.taskId)
             assertEquals(listOf(canvas), f.stream.updatedFormats)
-            assertEquals(listOf(true), f.stream.updatedPadding)
+            assertEquals(listOf(false), f.stream.updatedPadding)
             assertEquals(input, local.videoTrack?.videoFormat)
             assertEquals(l3, f.stream.downlinkUpdates.last())
             assertEquals(canvas, f.stream.startedFormats.single())
@@ -324,7 +343,7 @@ class XmaxRealtimeManagerTest {
             f.manager.startGeneration(RealtimeContext("second"))
             assertEquals(listOf(!network), f.stream.startedPadding)
             assertEquals(listOf(!network), f.stream.updatedPadding)
-            val canvas = format.copy(width = 1024, height = 1920)
+            val canvas = format.copy(width = 1080, height = 1920)
             assertEquals(listOf(canvas), f.stream.startedFormats)
             assertEquals(listOf(canvas), f.stream.updatedFormats)
             f.manager.close()
@@ -334,13 +353,17 @@ class XmaxRealtimeManagerTest {
     @Test
     fun `image video and external input share canvas selection and aspect based padding`() = runTest {
         val cases = listOf(
-            Triple(RealtimeVideoFormat(1200, 1600, 30), 1024 to 1920, true),
-            Triple(RealtimeVideoFormat(1280, 720, 24), 1920 to 1024, true),
-            Triple(RealtimeVideoFormat(1408, 1408, 30), 1024 to 1920, true),
-            Triple(RealtimeVideoFormat(1200, 1500, 30), 1024 to 1920, true),
-            Triple(RealtimeVideoFormat(1156, 1536, 30), 1024 to 1920, true),
-            Triple(RealtimeVideoFormat(1024, 1920, 30), 1024 to 1920, false),
-            Triple(RealtimeVideoFormat(1920, 1024, 30), 1920 to 1024, false),
+            Triple(RealtimeVideoFormat(1200, 1600, 30), 1152 to 1536, false),
+            Triple(RealtimeVideoFormat(1280, 720, 24), 1920 to 1080, false),
+            Triple(RealtimeVideoFormat(1080, 1920, 30), 1080 to 1920, false),
+            Triple(RealtimeVideoFormat(1920, 1080, 30), 1920 to 1080, false),
+            Triple(RealtimeVideoFormat(1408, 1408, 30), 1408 to 1408, false),
+            Triple(RealtimeVideoFormat(1152, 1536, 30), 1152 to 1536, false),
+            Triple(RealtimeVideoFormat(1536, 1152, 30), 1536 to 1152, false),
+            Triple(RealtimeVideoFormat(1200, 1500, 30), 1152 to 1536, true),
+            Triple(RealtimeVideoFormat(1156, 1536, 30), 1152 to 1536, true),
+            Triple(RealtimeVideoFormat(1024, 1920, 30), 1080 to 1920, true),
+            Triple(RealtimeVideoFormat(1920, 1024, 30), 1920 to 1080, true),
         )
         for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
             for ((input, dimensions, contain) in cases) {
@@ -368,7 +391,7 @@ class XmaxRealtimeManagerTest {
 
                 f.manager.setUplinkQualityLevel(RealtimeQualityLevel.L5)
                 val uplink = f.stream.encoderFormats.last()
-                assertTrue(uplink.width.toLong() * uplink.height >= RealtimeModel.X2_1_1_PREVIEW_CN.minimumInputPixels)
+                assertTrue(uplink.width.toLong() * uplink.height >= RealtimeModel.X2_1.minimumInputPixels)
                 f.manager.setDownlinkQualityLevel(RealtimeQualityLevel.L5)
                 val downlink = f.stream.downlinkUpdates.single()
                 assertTrue(downlink.width <= input.width / 2 && downlink.height <= input.height / 2)
@@ -388,7 +411,7 @@ class XmaxRealtimeManagerTest {
 
     @Test
     fun `camera buckets retain capture and generation sizes while quality changes transport only`() = runTest {
-        for (input in RealtimeModel.X2_1_1_PREVIEW_CN.supportedVideoFormats) {
+        for (input in RealtimeModel.X2_1.supportedVideoFormats) {
             val f = Fixture(StandardTestDispatcher(testScheduler))
             val local = f.manager.createLocalCameraStream(input, CameraPosition.FRONT)
             f.stream.confirmation.complete(Unit)
@@ -403,7 +426,7 @@ class XmaxRealtimeManagerTest {
             assertEquals(listOf(input), f.stream.updatedFormats)
             assertEquals(listOf(false), f.stream.startedPadding)
             assertEquals(listOf(false), f.stream.updatedPadding)
-            assertTrue(f.stream.encoderFormats.last().width.toLong() * f.stream.encoderFormats.last().height >= RealtimeModel.X2_1_1_PREVIEW_CN.minimumInputPixels)
+            assertTrue(f.stream.encoderFormats.last().width.toLong() * f.stream.encoderFormats.last().height >= RealtimeModel.X2_1.minimumInputPixels)
             f.manager.close()
         }
     }
@@ -510,15 +533,15 @@ class XmaxRealtimeManagerTest {
     @Test
     fun `adaptive uplink and downlink use original baselines without public listeners`() = runTest {
         val f = Fixture(StandardTestDispatcher(testScheduler), qualityNow = { testScheduler.currentTime })
-        val input = RealtimeVideoFormat(1024, 1920, 30)
+        val input = RealtimeVideoFormat(1080, 1920, 30)
         val local = f.manager.createLocalCameraStream(input, CameraPosition.FRONT)
         f.stream.confirmation.complete(Unit)
         f.manager.startGeneration(local, RealtimeContext("first"))
         val taskId = f.manager.currentState.taskId
         assertEquals(input, local.videoTrack?.videoFormat)
         assertEquals(input, f.stream.startedFormats.single())
-        assertEquals(RealtimeVideoFormat(896, 1680, 24), f.stream.encoderFormats.last())
-        assertEquals(RealtimeVideoFormat(896, 1680, 24), f.stream.startedTargets.single())
+        assertEquals(RealtimeVideoFormat(972, 1728, 24), f.stream.encoderFormats.last())
+        assertEquals(RealtimeVideoFormat(972, 1728, 24), f.stream.startedTargets.single())
         assertNull(f.stream.registeredNetworkQualityListener)
 
         repeat(3) {
@@ -526,14 +549,14 @@ class XmaxRealtimeManagerTest {
             f.stream.adaptiveListener?.invoke(RealtimeNetworkQuality(RealtimeNetworkQualityLevel.BAD, RealtimeNetworkQualityLevel.POOR))
             runCurrent()
         }
-        assertEquals(RealtimeVideoFormat(768, 1440, 24), f.stream.encoderFormats.last())
+        assertEquals(RealtimeVideoFormat(792, 1408, 24), f.stream.encoderFormats.last())
         assertTrue(f.stream.downlinkUpdates.isEmpty())
         repeat(3) {
             advanceTimeBy(1000)
             f.stream.adaptiveListener?.invoke(RealtimeNetworkQuality(RealtimeNetworkQualityLevel.POOR, RealtimeNetworkQualityLevel.BAD))
             runCurrent()
         }
-        assertEquals(listOf(RealtimeVideoFormat(768, 1440, 24)), f.stream.downlinkUpdates)
+        assertEquals(listOf(RealtimeVideoFormat(792, 1408, 24)), f.stream.downlinkUpdates)
         assertEquals(input, local.videoTrack?.videoFormat)
         assertEquals(taskId, f.manager.currentState.taskId)
         f.manager.startGeneration(RealtimeContext("second"))
@@ -639,7 +662,7 @@ class XmaxRealtimeManagerTest {
         f.manager.disconnect()
         f.manager.startGeneration(local, RealtimeContext("again"))
         assertEquals(f.stream.downlinkUpdates.single(), f.stream.startedTargets.last())
-        assertEquals(format.copy(width = 1024, height = 1920), f.stream.startedFormats.last())
+        assertEquals(format.copy(width = 1080, height = 1920), f.stream.startedFormats.last())
         f.manager.close()
     }
 
@@ -853,7 +876,7 @@ class XmaxRealtimeManagerTest {
         val signal = rtc.roomMessages.map { org.json.JSONObject(it) }.single { it.optString("event") == "start" }
         assertEquals(media.networkVideoReference!!.path, signal.getJSONObject("params").getString("ref_video_path"))
         assertTrue(signal.getJSONObject("params").getBoolean("face_replace"))
-        assertEquals("[1024,1920]", signal.getJSONObject("params").getJSONArray("size").toString())
+        assertEquals("[1080,1920]", signal.getJSONObject("params").getJSONArray("size").toString())
         assertEquals("[616,1120]", signal.getJSONObject("params").getJSONArray("target_size").toString())
         assertEquals(500, signal.getJSONObject("params").getInt("min_bitrate"))
         assertEquals(EncodingBitratePolicy.resolve(616, 1120, 24).second,
@@ -1851,7 +1874,7 @@ private class MediaStub : MediaControlling {
         if (hasAudio) microphoneStartCount += 1
     }
     override suspend fun updateCameraFormat(videoFormat: RealtimeVideoFormat) {
-        MediaService(RealtimeModel.X2_1_1_PREVIEW_CN).resolveMediaSize(
+        MediaService(RealtimeModel.X2_1).resolveMediaSize(
             IntSize(videoFormat.width, videoFormat.height), RealtimeMediaSource.CAMERA,
         )
         createError?.let { throw it }

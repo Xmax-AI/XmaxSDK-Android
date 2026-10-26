@@ -187,9 +187,11 @@ XmaxSDK is distributed through [**Maven Central**](#maven-central).
 
 ### Maven Central
 
-XmaxSDK uses Agora RTC and supports `RealtimeModel.X2_1_1_PREVIEW_CN` and
-`RealtimeModel.X2_1_1_PREVIEW_US`. Select China or global service routing through
-`XmaxConfiguration.environment`. The quality controls and unified remote
+The 1.1.0 development source uses Agora RTC and supports `RealtimeModel.X2_1`
+(`x2.1`) in both service environments. Select China or global service routing
+through `XmaxConfiguration.environment`. The examples below use the new model API;
+use a source dependency until 1.1.0 is published. Maven Central version 1.0.13
+still exposes the regional preview models. The quality controls and unified remote
 audio/video output described below are available starting in version 1.0.12.
 
 When upgrading from **1.0.11 or earlier**, replace `setRemoteVideoFrameListener(...)` with
@@ -290,7 +292,7 @@ val client = XmaxClient(
 )
 
 val realtime = client.createRealtimeManager(
-    options = RealtimeConfiguration(model = RealtimeModel.X2_1_1_PREVIEW_CN),
+    options = RealtimeConfiguration(model = RealtimeModel.X2_1),
 )
 
 val videoView = XmaxRealtimeDualVideoView(this).apply {
@@ -301,7 +303,7 @@ setContentView(videoView)
 
 lifecycleScope.launch {
     val localStream = realtime.createLocalCameraStream(
-        videoFormat = RealtimeVideoFormat(width = 1024, height = 1920, fps = 30),
+        videoFormat = RealtimeVideoFormat(width = 1080, height = 1920, fps = 30),
         position = CameraPosition.FRONT,
     )
     videoView.localTrack = localStream.videoTrack
@@ -328,7 +330,7 @@ transition without changing an active animation.
 
 Local camera, image, video, and external input dimensions are resized into the model's
 minimum and maximum pixel-area limits and aligned to multiples of four, preserving
-the exact aspect ratio where possible. Both preview models accept processed media
+the exact aspect ratio where possible. X2.1 accepts processed media
 between 200,000 and 2,100,000 pixels; smaller inputs are enlarged and larger inputs
 are reduced. Only camera requests must match a supported model resolution bucket.
 
@@ -434,26 +436,25 @@ val globalClient = XmaxClient(
 )
 
 val globalRealtime = globalClient.createRealtimeManager(
-    options = RealtimeConfiguration(model = RealtimeModel.X2_1_1_PREVIEW_US),
+    options = RealtimeConfiguration(model = RealtimeModel.X2_1),
 )
 ```
 
 `XmaxEnvironment.CHINA` uses `https://cloud.xmax.22duck.cn/open/api/v1`.
 For `XmaxEnvironment.GLOBAL`, realtime sessions use `https://api.xmax.ai/open/api/v1`,
 while storage and other API requests use `https://api.xmax.cloud/open/api/v1`.
-Use `RealtimeModel.X2_1_1_PREVIEW_CN` for China and
-`RealtimeModel.X2_1_1_PREVIEW_US` for the global environment. The default model is
-`X2_1_1_PREVIEW_CN`; selecting a model does not change the client's environment.
+Use `RealtimeModel.X2_1` in either environment. Selecting a model does not change
+the client's environment.
 
-Both preview models support generation canvases of `1024×1920` and `1920×1024`.
-The default camera format is `1024×1920` at 30 fps.
+X2.1 supports generation canvases of `1920×1080`, `1080×1920`, `1408×1408`,
+`1152×1536`, and `1536×1152`. The default camera format is `1080×1920` at 30 fps.
 The model's `supportedVideoFormats` lists these sizes with their recommended frame rates.
 
 Create a camera stream using a supported format:
 
 ```kotlin
 val localStream = realtime.createLocalCameraStream(
-    videoFormat = RealtimeVideoFormat(width = 1024, height = 1920, fps = 30),
+    videoFormat = RealtimeVideoFormat(width = 1080, height = 1920, fps = 30),
     position = CameraPosition.FRONT,
 )
 ```
@@ -462,14 +463,14 @@ Once the camera preview is `READY` and realtime is disconnected, change its
 resolution without replacing the track or rebinding the view:
 
 ```kotlin
-realtime.updateCameraFormat(RealtimeVideoFormat(width = 1920, height = 1024, fps = 30))
+realtime.updateCameraFormat(RealtimeVideoFormat(width = 1920, height = 1080, fps = 30))
 val currentFormat = realtime.currentCameraVideoFormat
 val currentPreset = realtime.currentCameraPreset
 ```
 
-Camera presets are available only when their dimensions match the selected
-model's supported formats. The retained presets do not match these preview models;
-use a full `RealtimeVideoFormat` instead, and `currentCameraPreset` is `null`.
+Camera presets match the five X2.1 formats. You can pass a `RealtimeCameraPreset`
+to `createLocalCameraStream(...)` or `updateCameraFormat(...)`; `currentCameraPreset`
+reports the preset matching the current dimensions.
 Unsupported formats or failed changes preserve the previous track configuration.
 These media settings are independent of L1–L5
 transmission quality levels. When no minimum uplink bitrate is specified, the
@@ -609,7 +610,7 @@ quality control only, disable it when creating the realtime manager:
 ```kotlin
 val manualRealtime = client.createRealtimeManager(
     options = RealtimeConfiguration(
-        model = RealtimeModel.X2_1_1_PREVIEW_CN,
+        model = RealtimeModel.X2_1,
         isAdaptiveQualityEnabled = false,
     ),
 )

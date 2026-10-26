@@ -129,11 +129,11 @@ public class XmaxClient(
      *
      * An Android context and network access are not required.
      *
-     * @param model The model whose input constraints apply; defaults to `RealtimeModel.X2_1_1_PREVIEW_CN`.
+     * @param model The model whose input constraints apply; defaults to `RealtimeModel.X2_1`.
      * @return A media sizing service for the specified model.
      */
     @JvmOverloads
     public fun createMediaService(
-        model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN,
+        model: RealtimeModel = RealtimeModel.X2_1,
     ): MediaServicing = MediaService(model)
 }

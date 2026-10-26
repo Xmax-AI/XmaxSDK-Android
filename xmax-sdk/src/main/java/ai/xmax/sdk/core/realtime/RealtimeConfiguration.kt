@@ -17,7 +17,7 @@ public data class RealtimeConfiguration @JvmOverloads constructor(
     /**
      * The model for new sessions; the client environment selects the service region.
      */
-    public val model: RealtimeModel = RealtimeModel.X2_1_1_PREVIEW_CN,
+    public val model: RealtimeModel = RealtimeModel.X2_1,
 
     /**
      * Whether uplink and downlink quality levels adapt automatically.

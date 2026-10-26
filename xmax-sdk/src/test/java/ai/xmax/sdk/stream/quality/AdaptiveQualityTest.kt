@@ -225,7 +225,7 @@ class AdaptiveQualityTest {
 
     @Test
     fun `uplink levels preserve media aspect and minimum area without changing the baseline`() {
-        val model = RealtimeModel.X2_1_1_PREVIEW_CN
+        val model = RealtimeModel.X2_1
         for (input in model.supportedVideoFormats + listOf(
             RealtimeVideoFormat(1200, 800, 24),
             RealtimeVideoFormat(1004, 600, 30),
@@ -260,7 +260,7 @@ class AdaptiveQualityTest {
     fun `minimum uplink area never enlarges an undersized baseline`() {
         val input = RealtimeVideoFormat(320, 480, 30)
         for (level in 1..5) {
-            val format = QualityVideoFormat.resolve(input, level, false, minimumInputPixels = RealtimeModel.X2_1_1_PREVIEW_CN.minimumInputPixels)
+            val format = QualityVideoFormat.resolve(input, level, false, minimumInputPixels = RealtimeModel.X2_1.minimumInputPixels)
             assertEquals(input.width, format.width)
             assertEquals(input.height, format.height)
         }
@@ -269,7 +269,7 @@ class AdaptiveQualityTest {
     @Test
     fun `downlink ignores uplink minimum area and bitrate overrides`() {
         val input = RealtimeVideoFormat(480, 640, 30, minimumBitrate = 800, maximumBitrate = 3000)
-        val minimum = RealtimeModel.X2_1_1_PREVIEW_CN.minimumInputPixels
+        val minimum = RealtimeModel.X2_1.minimumInputPixels
         val format = QualityVideoFormat.resolve(input, 5, true, minimumInputPixels = minimum)
         assertEquals(RealtimeVideoFormat(240, 320, 24), format)
         assertTrue(format.width.toLong() * format.height < minimum)
@@ -302,7 +302,7 @@ class AdaptiveQualityTest {
         val input = RealtimeVideoFormat(1024, 2048, 30)
         assertEquals(
             RealtimeVideoFormat(512, 1024, 16),
-            QualityVideoFormat.resolve(input, 5, false, minimumInputPixels = RealtimeModel.X2_1_1_PREVIEW_CN.minimumInputPixels),
+            QualityVideoFormat.resolve(input, 5, false, minimumInputPixels = RealtimeModel.X2_1.minimumInputPixels),
         )
         assertEquals(
             RealtimeVideoFormat(512, 1024, 24),

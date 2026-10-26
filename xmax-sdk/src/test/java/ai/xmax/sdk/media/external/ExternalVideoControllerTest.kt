@@ -27,7 +27,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExternalVideoControllerTest {
     private val media = object : MediaServicing by MediaService() {
-        override val model = RealtimeModel.X2_1_1_PREVIEW_CN
+        override val model = RealtimeModel.X2_1
         override fun resolveMediaSize(size: IntSize, source: RealtimeMediaSource) = size
     }
 
@@ -195,7 +195,7 @@ class ExternalVideoControllerTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val rtc = RtcManagingStub()
         val frames = mutableListOf<VideoFrame>()
-        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1_1_PREVIEW_CN), frames::add, {}, { throw it })
+        val controller = ExternalVideoController(rtc, MediaService(RealtimeModel.X2_1), frames::add, {}, { throw it })
         try {
             val small = Source(videoFormat = RealtimeVideoFormat(200, 200, 30))
             val resolved = RealtimeVideoFormat(448, 448, 30)

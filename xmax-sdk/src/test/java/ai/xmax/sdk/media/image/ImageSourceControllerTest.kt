@@ -106,12 +106,9 @@ class ImageSourceControllerTest {
 
     @Test
     fun `default image frame rate follows model`() = runTest {
-        val cases = listOf(
-            RealtimeModel.X2_1_1_PREVIEW_CN to IntSize(1024, 1_920),
-            RealtimeModel.X2_1_1_PREVIEW_CN to IntSize(1_920, 1_024),
-            RealtimeModel.X2_1_1_PREVIEW_US to IntSize(1024, 1_920),
-            RealtimeModel.X2_1_1_PREVIEW_US to IntSize(1_920, 1_024),
-        )
+        val cases = RealtimeModel.entries.flatMap { model ->
+            model.supportedVideoFormats.map { model to IntSize(it.width, it.height) }
+        }
 
         for ((model, size) in cases) {
             val controller = ImageSourceController(
