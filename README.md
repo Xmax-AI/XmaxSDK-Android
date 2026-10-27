@@ -187,29 +187,6 @@ XmaxSDK is distributed through [**Maven Central**](#maven-central).
 
 ### Maven Central
 
-The 1.1.0 development source uses Agora RTC and supports `RealtimeModel.X2_1`
-(`x2.1`) in both service environments. Select China or global service routing
-through `XmaxConfiguration.environment`. The examples below use the new model API;
-use a source dependency until 1.1.0 is published. Maven Central version 1.0.13
-still exposes the regional preview models. The quality controls and unified remote
-audio/video output described below are available starting in version 1.0.12.
-
-When upgrading from **1.0.11 or earlier**, replace `setRemoteVideoFrameListener(...)` with
-`setRemoteMediaFrameListener(...)` and handle its audio and video packet variants.
-External sources providing their own preview must override `providesPreview` to
-`true`; otherwise XmaxSDK renders the submitted frames.
-
-When upgrading to **1.0.13**, rename single-track components from `XmaxVideo` and
-`XmaxVideoView` to `XmaxRealtimeVideo` and `XmaxRealtimeVideoView`. Rename
-dual-track components from `XmaxRealtimeVideo` and `XmaxRealtimeVideoView` to
-`XmaxRealtimeDualVideo` and `XmaxRealtimeDualVideoView`. The old names are not
-retained as compatibility aliases. The examples below use the new names.
-
-When upgrading from **1.0.10 or earlier**, also remove the `videoFormat` argument from
-`createLocalImageStream(...)` and `createLocalVideoStream(uri)` calls and rebuild
-your application. The SDK now derives image and local video input formats from
-the media dimensions and model defaults.
-
 Configure the repositories used by your application in `settings.gradle.kts`:
 
 ```kotlin
@@ -227,9 +204,6 @@ Enable AndroidX in your application's `gradle.properties`:
 android.useAndroidX=true
 ```
 
-XmaxSDK no longer requires Jetifier or the VolcEngine repository. Keep them only
-if other dependencies in your application still need them.
-
 Add XmaxSDK to your application module:
 
 ```kotlin
@@ -237,10 +211,6 @@ dependencies {
     implementation("ai.xmax:xmax-sdk:1.0.13")
 }
 ```
-
-Gradle resolves Agora RTC and the SDK's other runtime dependencies transitively.
-To debug the SDK locally, open this repository and use the XLab example or a
-local module dependency.
 
 <br>
 
