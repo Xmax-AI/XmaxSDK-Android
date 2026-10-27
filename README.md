@@ -208,7 +208,7 @@ Add XmaxSDK to your application module:
 
 ```kotlin
 dependencies {
-    implementation("ai.xmax:xmax-sdk:1.0.13")
+    implementation("ai.xmax:xmax-sdk:1.1.0")
 }
 ```
 
