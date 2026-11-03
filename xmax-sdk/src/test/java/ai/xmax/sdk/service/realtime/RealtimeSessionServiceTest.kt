@@ -35,6 +35,87 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 public class RealtimeSessionServiceTest {
     @Test
+    public fun `first heartbeat is immediate and alone carries startup grace seconds`() = runTest {
+        for (graceSeconds in listOf(0, 9)) {
+            val payload = JSONObject().put("sessionUid", "session").put("status", "ACTIVE")
+            val api = RealtimeApiServiceStub(
+                ApiBehavior.Success(payload),
+                ApiBehavior.Success(payload),
+                ApiBehavior.Success(payload),
+            )
+            val sleeper = ManualHeartbeatSleeper()
+            val service = RealtimeSessionService(
+                apiService = api,
+                heartbeatSleeper = sleeper,
+                heartbeatScope = backgroundScope,
+            )
+
+            service.startHeartbeat("session", graceSeconds) { _, error -> throw error }
+            runCurrent()
+            assertEquals(1, api.requests.size)
+            assertEquals(ApiMethod.PUT, api.requests.single().method)
+            assertEquals("/session/session/heartbeat", api.requests.single().path)
+            val firstBody = JSONObject(api.requests.single().body!!)
+            assertEquals(1, firstBody.length())
+            assertEquals(graceSeconds, firstBody.getInt("firstHeartbeatGraceSeconds"))
+
+            repeat(2) {
+                sleeper.resume()
+                runCurrent()
+            }
+            assertEquals(3, api.requests.size)
+            assertTrue(api.requests.drop(1).all { it.body == null })
+            service.stopHeartbeat()
+        }
+    }
+
+    @Test
+    public fun `stop before first heartbeat runs prevents sending`() = runTest {
+        val api = RealtimeApiServiceStub()
+        val service = RealtimeSessionService(
+            apiService = api,
+            heartbeatScope = backgroundScope,
+        )
+
+        service.startHeartbeat("cancelled", 1) { _, error -> throw error }
+        service.stopHeartbeat()
+        runCurrent()
+        assertTrue(api.requests.isEmpty())
+    }
+
+    @Test
+    public fun `replacing a heartbeat cycle sends grace only for the new cycle's first request`() = runTest {
+        val payload = JSONObject().put("sessionUid", "session").put("status", "ACTIVE")
+        val api = RealtimeApiServiceStub(
+            ApiBehavior.Success(payload),
+            ApiBehavior.Success(payload),
+            ApiBehavior.Success(payload),
+        )
+        val sleeper = ManualHeartbeatSleeper()
+        val service = RealtimeSessionService(
+            apiService = api,
+            heartbeatSleeper = sleeper,
+            heartbeatScope = backgroundScope,
+        )
+
+        service.startHeartbeat("old", 1) { _, error -> throw error }
+        runCurrent()
+        service.startHeartbeat("new", 2) { _, error -> throw error }
+        runCurrent()
+        sleeper.resume()
+        runCurrent()
+
+        assertEquals(
+            listOf("/session/old/heartbeat", "/session/new/heartbeat", "/session/new/heartbeat"),
+            api.requests.map { it.path },
+        )
+        assertEquals(1, JSONObject(api.requests[0].body!!).getInt("firstHeartbeatGraceSeconds"))
+        assertEquals(2, JSONObject(api.requests[1].body!!).getInt("firstHeartbeatGraceSeconds"))
+        assertEquals(null, api.requests[2].body)
+        service.stopHeartbeat()
+    }
+
+    @Test
     public fun `missing or wrong Agora credentials close the allocated session`() = runTest {
         listOf("rtc_user_id", "rtc_app_id", "rtc_bot_id", "room_token").forEach { field ->
             val extra = JSONObject().put("room_id", "000123").put("rtc_user_id", "rtc-user")
@@ -227,7 +308,7 @@ public class RealtimeSessionServiceTest {
             heartbeatScope = this,
         )
 
-        service.startHeartbeat("session-5") { sessionId, error ->
+        service.startHeartbeat("session-5", firstHeartbeatGraceSeconds = 0) { sessionId, error ->
             failure.complete(sessionId to error)
         }
         sleeper.resume()
@@ -263,10 +344,9 @@ public class RealtimeSessionServiceTest {
             heartbeatScope = this,
         )
 
-        service.startHeartbeat("session-active") { _, _ ->
+        service.startHeartbeat("session-active", firstHeartbeatGraceSeconds = 0) { _, _ ->
             reportedFailure.set(true)
         }
-        sleeper.resume()
         runCurrent()
         sleeper.resume()
         runCurrent()
@@ -294,7 +374,7 @@ public class RealtimeSessionServiceTest {
             heartbeatScope = this,
         )
 
-        service.startHeartbeat("session-network") { sessionId, error ->
+        service.startHeartbeat("session-network", firstHeartbeatGraceSeconds = 0) { sessionId, error ->
             failure.complete(sessionId to error)
         }
         sleeper.resume()
@@ -321,7 +401,7 @@ public class RealtimeSessionServiceTest {
             heartbeatScope = this,
         )
 
-        service.startHeartbeat("session-6") { _, _ ->
+        service.startHeartbeat("session-6", firstHeartbeatGraceSeconds = 0) { _, _ ->
             reportedFailure.set(true)
         }
         sleeper.resume()

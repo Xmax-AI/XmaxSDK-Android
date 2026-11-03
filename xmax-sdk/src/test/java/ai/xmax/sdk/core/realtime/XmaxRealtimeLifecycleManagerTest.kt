@@ -36,6 +36,38 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class XmaxRealtimeLifecycleManagerTest {
     @Test
+    fun `state effects run only after operation completion is committed`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val changes = mutableListOf<RealtimeState>()
+        val lifecycle = XmaxRealtimeLifecycleManager(
+            callbacks = RealtimeCallbacks(dispatcher),
+            dispatcher = dispatcher,
+            onStateChanged = changes::add,
+            cleanup = {},
+        )
+        val generating = RealtimeState(
+            connectionState = RealtimeConnectionState.GENERATING,
+            sessionId = "session",
+            taskId = "task",
+        )
+        val failure = IllegalStateException("not committed")
+        runCatching {
+            lifecycle.run(OperationKind.GENERATION, failureScope = null) { token ->
+                token.complete(generating)
+                assertTrue(changes.isEmpty())
+                throw failure
+            }
+        }
+        assertTrue(changes.isEmpty())
+
+        lifecycle.run(OperationKind.GENERATION) { token ->
+            token.complete(generating)
+            assertTrue(changes.isEmpty())
+        }
+        assertEquals(listOf(generating), changes)
+    }
+
+    @Test
     fun `completion listeners can immediately enter the next operation`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val callbacks = RealtimeCallbacks(UnconfinedTestDispatcher(testScheduler))

@@ -38,6 +38,9 @@
     <string name="feed_os">最低系统</string>
     <string name="feed_latest_model">最新模型</string>
     <string name="feed_model_title">选择你的模型</string>
+    <string name="feed_credits">积分</string>
+    <string name="feed_credits_unavailable">暂不可用</string>
+    <string name="feed_credits_refresh_failed">积分刷新失败。</string>
     <string name="feed_model_count">模型：%1$d</string>
     <string name="feed_api_placeholder">输入 Xmax API Key</string>
     <string name="feed_api_prompt">还没有 API Key？</string>

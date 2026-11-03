@@ -38,6 +38,9 @@
     <string name="feed_os">MIN OS</string>
     <string name="feed_latest_model">LATEST MODEL</string>
     <string name="feed_model_title">Choose your model</string>
+    <string name="feed_credits">Credits</string>
+    <string name="feed_credits_unavailable">Unavailable</string>
+    <string name="feed_credits_refresh_failed">Could not refresh credits.</string>
     <string name="feed_model_count">MODELS: %1$d</string>
     <string name="feed_api_placeholder">Enter your Xmax API Key</string>
     <string name="feed_api_prompt">Need an API Key?</string>

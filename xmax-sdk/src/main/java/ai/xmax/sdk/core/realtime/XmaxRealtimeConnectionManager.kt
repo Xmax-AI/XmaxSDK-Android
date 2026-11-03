@@ -25,6 +25,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlin.math.ceil
 
 /**
  * Manages server sessions, RTC connections, and remote media resources.
@@ -57,6 +58,11 @@ internal class XmaxRealtimeConnectionManager(
      * Model media sizing rules for transport and returned video.
      */
     private val mediaService: MediaServicing = MediaService(),
+
+    /**
+     * The monotonic nanosecond clock for connection startup duration.
+     */
+    private val nowNanos: () -> Long = System::nanoTime,
 ) {
 
     /**
@@ -78,6 +84,21 @@ internal class XmaxRealtimeConnectionManager(
      * The server session used by the current connection.
      */
     private var activeSession: RealtimeSession? = null
+
+    /**
+     * The monotonic time immediately before creating the current server session.
+     */
+    private var connectionStartedAt: Long? = null
+
+    /**
+     * Whether the current session has entered generating and started HTTP heartbeats.
+     */
+    private var heartbeatStarted = false
+
+    /**
+     * The failure handler for the active session's HTTP heartbeats.
+     */
+    private var heartbeatFailureHandler: (suspend (String, XmaxError) -> Unit)? = null
 
     /**
      * The input format used for local publication.
@@ -350,6 +371,7 @@ internal class XmaxRealtimeConnectionManager(
         val timing = currentCoroutineContext()[RealtimeTiming.Attempt]
         timing?.mark(RealtimeTiming.Stage.CONNECTION_START)
         var session: RealtimeSession? = null
+        val startedAt = nowNanos()
 
         try {
             timing?.mark(RealtimeTiming.Stage.SESSION_START)
@@ -370,10 +392,6 @@ internal class XmaxRealtimeConnectionManager(
             }
             ensureCurrent(isCurrent)
 
-            sessionService.startHeartbeat(
-                session.id,
-                onHeartbeatFailure,
-            )
             val remoteTrack = RealtimeVideoTrack(
                 id = connection.botName ?: "video-remote",
                 videoFormat = currentTargetSize?.let {
@@ -396,6 +414,9 @@ internal class XmaxRealtimeConnectionManager(
             synchronized(stateLock) {
                 activeSession = session
                 activeRemoteTrack = remoteTrack
+                connectionStartedAt = startedAt
+                heartbeatStarted = false
+                heartbeatFailureHandler = onHeartbeatFailure
                 inputFormat = videoFormat
                 inputHasAudio = includeLocalAudio
             }
@@ -414,12 +435,44 @@ internal class XmaxRealtimeConnectionManager(
                 { currentTargetSize = null; streamController.resetQuality() },
                 { sessionService.stopHeartbeat() },
                 { val track = synchronized(stateLock) {
-                    activeRemoteTrack.also { activeSession = null; activeRemoteTrack = null }
+                    activeRemoteTrack.also {
+                        activeSession = null
+                        activeRemoteTrack = null
+                        connectionStartedAt = null
+                        heartbeatStarted = false
+                        heartbeatFailureHandler = null
+                    }
                 }; renderController.resetRemoteTrack(track) },
                 { streamController.disconnect() },
                 { session?.id?.let { closeSessionBestEffort(it) } },
             )
             throw XmaxError.from(error)
+        }
+    }
+
+    /**
+     * Starts HTTP heartbeats once after generating is committed for the current session.
+     *
+     * @param sessionId The server session entering generation.
+     */
+    fun startHeartbeat(
+        sessionId: String,
+    ) {
+        synchronized(stateLock) {
+            if (activeSession?.id != sessionId || heartbeatStarted) return
+            val startedAt = connectionStartedAt ?: return
+            val onFailure = heartbeatFailureHandler ?: return
+            val elapsedNanos = (nowNanos() - startedAt).coerceAtLeast(0L)
+            val graceSeconds = ceil(elapsedNanos / 1_000_000_000.0)
+                .coerceAtMost(Int.MAX_VALUE.toDouble())
+                .toInt()
+            heartbeatStarted = true
+
+            sessionService.startHeartbeat(
+                sessionId,
+                graceSeconds,
+                onFailure,
+            )
         }
     }
 
@@ -439,6 +492,9 @@ internal class XmaxRealtimeConnectionManager(
                 activeSession = null
                 activeRemoteTrack = null
                 currentTargetSize = null
+                connectionStartedAt = null
+                heartbeatStarted = false
+                heartbeatFailureHandler = null
             }
         }
 

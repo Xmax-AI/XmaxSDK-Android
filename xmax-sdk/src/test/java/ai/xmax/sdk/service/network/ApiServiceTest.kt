@@ -16,6 +16,8 @@ import ai.xmax.sdk.XmaxErrorCode
 import ai.xmax.sdk.XmaxConfiguration
 import ai.xmax.sdk.XmaxEnvironment
 import ai.xmax.sdk.XmaxSdk
+import ai.xmax.sdk.XmaxLogger
+import ai.xmax.sdk.XmaxLoggerOption
 import ai.xmax.sdk.foundation.runtime.RuntimeInfo
 import java.io.IOException
 import java.util.concurrent.CancellationException
@@ -28,6 +30,40 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 public class ApiServiceTest {
+    @Test
+    public fun `logs omit request parameters on success server rejection and network failure`() = runTest {
+        val logs = mutableListOf<String>()
+        XmaxLogger.configure(XmaxLoggerOption.business)
+        XmaxLogger.setSinkForTesting { _, _, message -> logs += message }
+        try {
+            for (status in listOf(200, 403, null)) {
+                logs.clear()
+                val body = JSONObject().put("firstHeartbeatGraceSeconds", 10)
+                val service = ApiService(
+                    apiKey = "private-api-key",
+                    baseUrl = "https://api.example.test/v1",
+                    transport = RecordingTransport {
+                        body.put("firstHeartbeatGraceSeconds", 99)
+                        if (status == null) throw IOException("offline")
+                        response(status, successEnvelope())
+                    },
+                )
+
+                runCatching { service.put("/session/id/heartbeat", body) }
+
+                val message = logs.single()
+                assertTrue(message.contains("PUT /session/id/heartbeat"))
+                assertFalse(message.contains("firstHeartbeatGraceSeconds"))
+                assertFalse(message.contains("private-api-key"))
+                assertFalse(message.contains("X-Api-Key"))
+                assertFalse(message.contains("Authorization"))
+            }
+        } finally {
+            XmaxLogger.configure(XmaxLoggerOption.none)
+            XmaxLogger.setSinkForTesting(null)
+        }
+    }
+
     @Test
     public fun `China and global services keep realtime and storage requests in their configured environment`() = runTest {
         val transport = RecordingTransport { response(200, successEnvelope()) }

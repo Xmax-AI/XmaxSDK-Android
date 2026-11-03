@@ -23,13 +23,102 @@ import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class XmaxRealtimeConnectionManagerTest {
+    @Test
+    fun `committed generating starts one heartbeat with rounded connection startup duration`() = runTest {
+        var now = 0L
+        val service = SessionServiceStub { now += 1_200_000_000L }
+        val manager = XmaxRealtimeConnectionManager(
+            service,
+            InteractionControllerStub(),
+            RenderControllerStub(),
+            StreamControllerStub(),
+            nowNanos = { now },
+        )
+        suspend fun connect() {
+            manager.connect(
+                model = RealtimeModel.X2_1,
+                videoFormat = RealtimeVideoFormat(704, 1280, 24),
+                includeLocalAudio = false,
+                isCurrent = { true },
+                onHeartbeatFailure = { _, _ -> },
+            )
+        }
+        connect()
+        assertTrue(service.heartbeatCalls.isEmpty())
+        manager.startHeartbeat("wrong-session")
+        assertTrue(service.heartbeatCalls.isEmpty())
+
+        now += 200_000_000L
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val lifecycle = XmaxRealtimeLifecycleManager(
+            callbacks = RealtimeCallbacks(dispatcher),
+            dispatcher = dispatcher,
+            onStateChanged = { state ->
+                if (state.connectionState == RealtimeConnectionState.GENERATING) {
+                    state.sessionId?.let(manager::startHeartbeat)
+                }
+            },
+            cleanup = {},
+        )
+        lifecycle.run(XmaxRealtimeLifecycleManager.OperationKind.GENERATION) { token ->
+            token.complete(RealtimeState(
+                connectionState = RealtimeConnectionState.GENERATING,
+                sessionId = "session-id",
+                taskId = "task",
+            ))
+            assertTrue(service.heartbeatCalls.isEmpty())
+        }
+        assertEquals(listOf("session-id" to 2), service.heartbeatCalls)
+
+        manager.startHeartbeat("session-id")
+        assertEquals(1, service.heartbeatCalls.size)
+        manager.disconnect()
+        manager.startHeartbeat("session-id")
+        assertEquals(1, service.heartbeatCalls.size)
+
+        now = 20_000_000_000L
+        connect()
+        now += 800_000_000L
+        manager.startHeartbeat("session-id")
+        assertEquals(listOf("session-id" to 2, "session-id" to 2), service.heartbeatCalls)
+        manager.disconnect()
+    }
+
+    @Test
+    fun `heartbeat grace rounds nanoseconds up to whole seconds`() = runTest {
+        for ((elapsed, expected) in listOf(0L to 0, 1L to 1, 1_000_000_000L to 1, 1_000_000_001L to 2)) {
+            var now = 0L
+            val service = SessionServiceStub()
+            val manager = XmaxRealtimeConnectionManager(
+                service,
+                InteractionControllerStub(),
+                RenderControllerStub(),
+                StreamControllerStub(),
+                nowNanos = { now },
+            )
+            manager.connect(
+                model = RealtimeModel.X2_1,
+                videoFormat = RealtimeVideoFormat(704, 1280, 24),
+                includeLocalAudio = false,
+                isCurrent = { true },
+                onHeartbeatFailure = { _, _ -> },
+            )
+            now = elapsed
+            manager.startHeartbeat("session-id")
+            assertEquals(listOf("session-id" to expected), service.heartbeatCalls)
+            manager.disconnect()
+        }
+    }
+
     @Test
     fun `connect activates session and remote track then disconnect releases all resources`() = runTest {
         val sessionService = SessionServiceStub()
@@ -54,7 +143,7 @@ class XmaxRealtimeConnectionManagerTest {
         assertEquals("stream-remote", remoteStream.id)
         assertEquals("bot-id", remoteStream.videoTrack?.id)
         assertSame(remoteStream.videoTrack, manager.currentRemoteStream?.videoTrack)
-        assertTrue(sessionService.heartbeatStarted)
+        assertFalse(sessionService.heartbeatStarted)
         assertSame(remoteStream.videoTrack, renderController.registeredTrack)
         assertEquals(IntSize(704, 1280), renderController.resolvedMediaSize)
 
@@ -103,8 +192,11 @@ class XmaxRealtimeConnectionManagerTest {
     }
 }
 
-private class SessionServiceStub : RealtimeSessionServicing {
+private class SessionServiceStub(
+    private val onCreate: () -> Unit = {},
+) : RealtimeSessionServicing {
     var heartbeatStarted = false
+    val heartbeatCalls = mutableListOf<Pair<String, Int>>()
     val closedSessionIds = mutableListOf<String>()
 
     override suspend fun createSession(model: RealtimeModel): RealtimeSession = RealtimeSession(
@@ -118,13 +210,15 @@ private class SessionServiceStub : RealtimeSessionServicing {
             botName = "bot-id",
         ),
         closeReason = null,
-    )
+    ).also { onCreate() }
 
     override fun startHeartbeat(
         sessionId: String,
+        firstHeartbeatGraceSeconds: Int,
         onFailure: RealtimeSessionHeartbeatFailureHandler,
     ) {
         heartbeatStarted = true
+        heartbeatCalls += sessionId to firstHeartbeatGraceSeconds
     }
 
     override suspend fun stopHeartbeat() {

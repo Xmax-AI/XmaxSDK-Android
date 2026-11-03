@@ -35,12 +35,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,9 +75,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.xmax.sdk.RealtimeModel
 import ai.xmax.sdk.XmaxSdk
+import ai.xmax.sdk.XmaxClient
+import ai.xmax.sdk.XmaxConfiguration
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.xmax.xlab.R
 import com.xmax.xlab.XLabLanguage
 import com.xmax.xlab.xLabStringResource
+import com.xmax.xlab.xLabEnvironment
 
 internal enum class XLabFeedAction {
     API_KEYS,
@@ -189,11 +197,32 @@ internal fun FeedScreen(
     language: XLabLanguage,
     selectedModel: RealtimeModel,
     scrollState: ScrollState,
+    isVisible: Boolean = true,
     onApiKeyChange: (String) -> Unit,
     onLanguageChange: (XLabLanguage) -> Unit,
     onModelChange: (RealtimeModel) -> Unit,
     onAction: (XLabFeedAction) -> Unit,
 ) {
+    val key = apiKey.trim()
+    val environment = xLabEnvironment(language)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var creditBalance by remember(key, environment) { mutableStateOf(CreditBalanceState()) }
+    LaunchedEffect(key, environment, lifecycle, isVisible) {
+        if (key.isEmpty() || !isVisible) return@LaunchedEffect
+
+        val client = XmaxClient(XmaxConfiguration(
+            apiKey = key,
+            environment = environment,
+        ))
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            pollCreditBalance(
+                initialBalance = creditBalance.balance,
+                fetchBalance = { client.getCreditBalance().currentBalance },
+                onUpdate = { creditBalance = it },
+            )
+        }
+    }
+
     CompositionLocalProvider(LocalTextStyle provides TextStyle.Default) {
         Box(
             modifier = Modifier
@@ -247,6 +276,7 @@ internal fun FeedScreen(
                 )
                 ModelRegistryCard(
                     apiKey = apiKey,
+                    creditBalance = creditBalance,
                     language = language,
                     selectedModel = selectedModel,
                     onApiKeyChange = onApiKeyChange,
@@ -595,6 +625,7 @@ private fun RuntimeMetric(label: String, value: String, modifier: Modifier = Mod
 @Composable
 private fun ModelRegistryCard(
     apiKey: String,
+    creditBalance: CreditBalanceState,
     language: XLabLanguage,
     selectedModel: RealtimeModel,
     onApiKeyChange: (String) -> Unit,
@@ -642,13 +673,23 @@ private fun ModelRegistryCard(
                 .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(12.dp))
                 .padding(start = 10.dp, top = 10.dp, end = 10.dp, bottom = 11.dp),
         ) {
-            Text(
-                text = "API KEY",
-                color = Color(0xFF7E8A9A),
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.9.sp,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "API KEY",
+                    color = Color(0xFF7E8A9A),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.9.sp,
+                )
+                Spacer(Modifier.weight(1f))
+                CreditBalancePill(
+                    state = creditBalance,
+                    language = language,
+                )
+            }
             ApiKeyField(
                 value = apiKey,
                 onValueChange = onApiKeyChange,
@@ -689,6 +730,50 @@ private fun ModelRegistryCard(
                 selectedLabel = xLabStringResource(R.string.feed_selected, language),
                 onClick = { onModelChange(model) },
                 modifier = if (index == 0) Modifier else Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CreditBalancePill(
+    state: CreditBalanceState,
+    language: XLabLanguage,
+) {
+    val label = xLabStringResource(R.string.feed_credits, language)
+    val failed = xLabStringResource(R.string.feed_credits_refresh_failed, language)
+    val unavailable = xLabStringResource(R.string.feed_credits_unavailable, language)
+    val value = if (state.balance == null && state.refreshFailed) unavailable else formatCreditBalance(state.balance)
+    val description = if (state.refreshFailed) "$label: $value. $failed" else "$label: $value"
+
+    Row(
+        modifier = Modifier
+            .background(Mint.copy(alpha = 0.07f), RoundedCornerShape(50))
+            .border(1.dp, Mint.copy(alpha = 0.14f), RoundedCornerShape(50))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .semantics(mergeDescendants = true) { contentDescription = description },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = label,
+            color = SecondaryText,
+            fontSize = 10.sp,
+        )
+        if (state.isLoading && state.balance == null) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(10.dp),
+                color = Mint,
+                strokeWidth = 1.dp,
+            )
+        } else {
+            Text(
+                text = value,
+                color = if (state.refreshFailed) StorageOrange else Mint,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

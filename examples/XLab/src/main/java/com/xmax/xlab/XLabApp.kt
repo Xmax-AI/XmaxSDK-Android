@@ -126,6 +126,7 @@ public fun XLabApp() {
                 language = language,
                 selectedModel = selectedModel,
                 scrollState = feedScrollState,
+                isVisible = destination == XLabDestination.FEED,
                 onApiKeyChange = {
                     apiKey = it
                     apiKeyStore.save(it)

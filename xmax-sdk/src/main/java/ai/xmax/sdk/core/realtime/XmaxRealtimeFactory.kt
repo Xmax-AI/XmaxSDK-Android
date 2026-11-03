@@ -75,6 +75,11 @@ internal object XmaxRealtimeFactory {
             dispatcher,
             hasLocalMedia = { mediaController.currentTrack != null },
             errorManager = errorManager,
+            onStateChanged = { state ->
+                if (state.connectionState == RealtimeConnectionState.GENERATING) {
+                    state.sessionId?.let(connectionManager::startHeartbeat)
+                }
+            },
             cleanup = { target ->
                 errorManager.invalidatePendingFailures(target)
                 try {

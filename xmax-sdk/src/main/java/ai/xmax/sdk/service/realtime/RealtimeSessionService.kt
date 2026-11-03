@@ -107,13 +107,15 @@ internal class RealtimeSessionService(
     }
 
     /**
-     * Starts a session heartbeat, replacing the previous task.
+     * Sends an immediate first heartbeat, then repeats periodically, replacing the previous task.
      *
      * @param sessionId The server session identifier.
+     * @param firstHeartbeatGraceSeconds The connection-to-generating time sent only with the first request.
      * @param onFailure Receives the session identifier and error when renewal fails.
      */
     override fun startHeartbeat(
         sessionId: String,
+        firstHeartbeatGraceSeconds: Int,
         onFailure: RealtimeSessionHeartbeatFailureHandler,
     ) {
         synchronized(heartbeatLock) {
@@ -124,6 +126,7 @@ internal class RealtimeSessionService(
                     HeartbeatContext(
                         version = version,
                         sessionId = sessionId,
+                        firstHeartbeatGraceSeconds = firstHeartbeatGraceSeconds,
                         onFailure = onFailure,
                     ),
                 )
@@ -162,13 +165,18 @@ internal class RealtimeSessionService(
     private suspend fun runHeartbeat(
         context: HeartbeatContext,
     ) {
+        var firstHeartbeatGraceSeconds: Int? = context.firstHeartbeatGraceSeconds
         while (isCurrent(context.version)) {
             try {
-                heartbeatSleeper.sleep()
+                if (firstHeartbeatGraceSeconds == null) heartbeatSleeper.sleep()
                 currentCoroutineContext().ensureActive()
                 if (!isCurrent(context.version)) return
 
-                val session = heartbeatSession(context.sessionId)
+                val session = heartbeatSession(
+                    context.sessionId,
+                    firstHeartbeatGraceSeconds,
+                )
+                firstHeartbeatGraceSeconds = null
                 if (!isCurrent(context.version)) return
 
                 ensureSessionActive(session)
@@ -195,12 +203,22 @@ internal class RealtimeSessionService(
      * Renews a server session and returns its updated metadata.
      *
      * @param sessionId The server session identifier.
+     * @param firstHeartbeatGraceSeconds The first request's startup duration in seconds; null omits its body.
      * @return The server session identifier, state, and available RTC connection details.
      */
     private suspend fun heartbeatSession(
         sessionId: String,
+        firstHeartbeatGraceSeconds: Int?,
     ): RealtimeSession =
-        apiService.put("/session/$sessionId/heartbeat") { payload ->
+        apiService.put(
+            path = "/session/$sessionId/heartbeat",
+            body = firstHeartbeatGraceSeconds?.let {
+                JSONObject().put(
+                    "firstHeartbeatGraceSeconds",
+                    it,
+                )
+            },
+        ) { payload ->
             makeSession(
                 payload,
                 requiresConnection = false,
@@ -341,6 +359,11 @@ internal class RealtimeSessionService(
          * The server session identifier.
          */
         val sessionId: String,
+
+        /**
+         * The connection-to-generating duration, rounded up to whole seconds.
+         */
+        val firstHeartbeatGraceSeconds: Int,
 
         /**
          * The callback receiving a session identifier and renewal failure.

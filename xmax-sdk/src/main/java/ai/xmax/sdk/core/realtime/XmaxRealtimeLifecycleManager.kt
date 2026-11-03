@@ -58,6 +58,11 @@ internal class XmaxRealtimeLifecycleManager(
     private val errorManager: XmaxRealtimeErrorManager = XmaxRealtimeErrorManager(dispatcher),
 
     /**
+     * Receives lifecycle states after they are committed.
+     */
+    private val onStateChanged: (RealtimeState) -> Unit = {},
+
+    /**
      * The suspending cleanup operation for a termination scope.
      */
     private val cleanup: suspend (TerminationScope) -> Unit,
@@ -813,6 +818,7 @@ internal class XmaxRealtimeLifecycleManager(
         if (state == next) return
 
         state = next
+        onStateChanged(next)
         callbacks.state(next)
     }
 

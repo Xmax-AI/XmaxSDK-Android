@@ -1497,6 +1497,9 @@ class XmaxRealtimeManagerTest {
         val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
         f.listen()
         f.manager.connect(local)
+        assertEquals(null, f.session.failure)
+        f.stream.confirmation.complete(Unit)
+        f.manager.startGeneration(local, RealtimeContext("test"))
         val error = XmaxError(XmaxErrorCode.SESSION_ERROR, "expired")
         f.session.heartbeatJob = backgroundScope.launch(dispatcher) { f.session.failure!!("session-1", error) }
         runCurrent()
@@ -1558,6 +1561,7 @@ class XmaxRealtimeManagerTest {
         f.stream.confirmation.completeExceptionally(failure)
         assertSame(failure, runCatching { f.manager.startGeneration(RealtimeContext("first")) }.exceptionOrNull())
         runCurrent()
+        assertTrue(f.session.heartbeatCalls.isEmpty())
         assertEquals(listOf(failure), f.errors)
         assertEquals(listOf("session-1"), f.session.closed)
         assertEquals("session-1", f.manager.currentState.sessionId)
@@ -1576,6 +1580,7 @@ class XmaxRealtimeManagerTest {
         val f = Fixture(StandardTestDispatcher(testScheduler), render)
         val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
         f.manager.connect(local)
+        assertTrue(f.session.heartbeatCalls.isEmpty())
         val remote = RemoteStream("room-1", "bot")
         val start = async { f.manager.startGeneration(RealtimeContext("first")) }
         runCurrent()
@@ -1586,11 +1591,13 @@ class XmaxRealtimeManagerTest {
         f.stream.confirmation.complete(Unit)
         runCurrent()
         assertFalse(start.isCompleted)
+        assertTrue(f.session.heartbeatCalls.isEmpty())
         assertEquals(0, f.stream.audioActivationCount)
         assertEquals(RealtimeConnectionState.CONNECTED, f.manager.currentState.connectionState)
         rtc.emitRemoteVideoFrame(remote, 704, 1280)
         start.await()
         assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
+        assertEquals(listOf("session-1"), f.session.heartbeatCalls.map { it.first })
         assertEquals(1, f.stream.audioActivationCount)
 
         f.manager.disconnect()
@@ -1602,6 +1609,7 @@ class XmaxRealtimeManagerTest {
         oldFrame(704, 1280)
         runCurrent()
         assertFalse(restart.isCompleted)
+        assertEquals(1, f.session.heartbeatCalls.size)
         assertEquals(RealtimeConnectionState.CONNECTED, f.manager.currentState.connectionState)
         assertEquals(1, f.stream.audioActivationCount)
         rtc.emitRemoteVideoFrame(remote, 704, 1280)
@@ -1609,6 +1617,7 @@ class XmaxRealtimeManagerTest {
         assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
         assertEquals(2, f.stream.audioActivationCount)
         assertEquals(2, f.session.count)
+        assertEquals(listOf("session-1", "session-2"), f.session.heartbeatCalls.map { it.first })
         f.manager.close()
     }
 
@@ -1812,6 +1821,7 @@ private class SessionStub : RealtimeSessionServicing {
     var createError: XmaxError? = null
     var failure: RealtimeSessionHeartbeatFailureHandler? = null
     var heartbeatJob: Job? = null
+    val heartbeatCalls = mutableListOf<Pair<String, Int>>()
     var count = 0
     val closed = mutableListOf<String>()
     override suspend fun createSession(model: RealtimeModel): RealtimeSession {
@@ -1819,7 +1829,10 @@ private class SessionStub : RealtimeSessionServicing {
         withContext(NonCancellable) { createBarrier?.await() }
         return RealtimeSession("session-${++count}", userId = "local", status = "ACTIVE", closeReason = null, connection = RealtimeSessionConnection("room-$count", "local", "token", "bot"))
     }
-    override fun startHeartbeat(sessionId: String, onFailure: RealtimeSessionHeartbeatFailureHandler) { failure = onFailure }
+    override fun startHeartbeat(sessionId: String, firstHeartbeatGraceSeconds: Int, onFailure: RealtimeSessionHeartbeatFailureHandler) {
+        failure = onFailure
+        heartbeatCalls += sessionId to firstHeartbeatGraceSeconds
+    }
     override suspend fun stopHeartbeat() { heartbeatJob?.cancelAndJoin(); heartbeatJob = null }
     override suspend fun closeSession(sessionId: String) { currentCoroutineContext().ensureActive(); closed += sessionId }
 }
