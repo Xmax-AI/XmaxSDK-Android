@@ -110,7 +110,6 @@ internal class RealtimeSessionService(
      * Sends an immediate first heartbeat, then repeats periodically, replacing the previous task.
      *
      * @param sessionId The server session identifier.
-     * @param firstHeartbeatGraceSeconds The connection-to-generating time sent only with the first request.
      * @param onFailure Receives the session identifier and error when renewal fails.
      */
     override fun startHeartbeat(
@@ -203,7 +202,6 @@ internal class RealtimeSessionService(
      * Renews a server session and returns its updated metadata.
      *
      * @param sessionId The server session identifier.
-     * @param firstHeartbeatGraceSeconds The first request's startup duration in seconds; null omits its body.
      * @return The server session identifier, state, and available RTC connection details.
      */
     private suspend fun heartbeatSession(
@@ -360,9 +358,6 @@ internal class RealtimeSessionService(
          */
         val sessionId: String,
 
-        /**
-         * The connection-to-generating duration, rounded up to whole seconds.
-         */
         val firstHeartbeatGraceSeconds: Int,
 
         /**

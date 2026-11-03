@@ -33,7 +33,7 @@ import org.junit.Test
 
 class XmaxRealtimeConnectionManagerTest {
     @Test
-    fun `committed generating starts one heartbeat with rounded connection startup duration`() = runTest {
+    fun `committed generating starts one heartbeat for the current session`() = runTest {
         var now = 0L
         val service = SessionServiceStub { now += 1_200_000_000L }
         val manager = XmaxRealtimeConnectionManager(
@@ -94,7 +94,7 @@ class XmaxRealtimeConnectionManagerTest {
     }
 
     @Test
-    fun `heartbeat grace rounds nanoseconds up to whole seconds`() = runTest {
+    fun `heartbeat starts across clock boundary cases`() = runTest {
         for ((elapsed, expected) in listOf(0L to 0, 1L to 1, 1_000_000_000L to 1, 1_000_000_001L to 2)) {
             var now = 0L
             val service = SessionServiceStub()

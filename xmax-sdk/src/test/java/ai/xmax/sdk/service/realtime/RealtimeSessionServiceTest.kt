@@ -35,7 +35,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 public class RealtimeSessionServiceTest {
     @Test
-    public fun `first heartbeat is immediate and alone carries startup grace seconds`() = runTest {
+    public fun `heartbeat starts immediately and repeats periodically`() = runTest {
         for (graceSeconds in listOf(0, 9)) {
             val payload = JSONObject().put("sessionUid", "session").put("status", "ACTIVE")
             val api = RealtimeApiServiceStub(
@@ -84,7 +84,7 @@ public class RealtimeSessionServiceTest {
     }
 
     @Test
-    public fun `replacing a heartbeat cycle sends grace only for the new cycle's first request`() = runTest {
+    public fun `replacing a heartbeat cycle renews the current session`() = runTest {
         val payload = JSONObject().put("sessionUid", "session").put("status", "ACTIVE")
         val api = RealtimeApiServiceStub(
             ApiBehavior.Success(payload),

@@ -31,7 +31,6 @@ internal interface RealtimeSessionServicing {
      * Sends an immediate first heartbeat, then repeats periodically, replacing the previous task.
      *
      * @param sessionId The server session identifier.
-     * @param firstHeartbeatGraceSeconds The connection-to-generating time, rounded up to seconds.
      * @param onFailure Receives the session identifier and error when renewal fails.
      */
     fun startHeartbeat(
