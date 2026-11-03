@@ -45,6 +45,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -499,15 +500,18 @@ internal class StreamController(
 
         try {
             timing?.beginSignal(normalizedTaskId)
-            roomController.startGeneration(
-                normalizedTaskId,
-                videoFormat,
-                context,
-                faceRestoration,
-                targetVideoFormat,
-                paddingContain,
-            )
-            withTimeout(generationTiming.timeoutMillis) { rtcManager.awaitPendingMessages() }
+            withTimeout(generationTiming.timeoutMillis) {
+                awaitCommand(
+                    roomController.startGeneration(
+                        normalizedTaskId,
+                        videoFormat,
+                        context,
+                        faceRestoration,
+                        targetVideoFormat,
+                        paddingContain,
+                    ),
+                )
+            }
 
             synchronized(stateLock) { waiter.signalSent = true }
 
@@ -645,12 +649,14 @@ internal class StreamController(
         faceRestoration: Boolean,
         paddingContain: Boolean,
     ) {
-        roomController.changeGenerationCondition(
-            taskId,
-            videoFormat,
-            context,
-            faceRestoration,
-            paddingContain,
+        awaitCommand(
+            roomController.changeGenerationCondition(
+                taskId,
+                videoFormat,
+                context,
+                faceRestoration,
+                paddingContain,
+            ),
         )
     }
 
@@ -680,7 +686,7 @@ internal class StreamController(
         targetVideoFormat: RealtimeVideoFormat,
         ensureActive: () -> Unit,
     ) {
-        eventGate.withLock {
+        val sending = eventGate.withLock {
             synchronized(stateLock) {
                 ensureActive()
                 val task = state.generationTask
@@ -694,6 +700,25 @@ internal class StreamController(
                     ensureActive,
                 )
             }
+        }
+
+        awaitCommand(sending)
+        ensureActive()
+    }
+
+    /**
+     * Waits for one command send and forwards caller cancellation to its queued attempts.
+     *
+     * @param sending The logical command's first-send result.
+     */
+    private suspend fun awaitCommand(
+        sending: Deferred<Unit>,
+    ) {
+        try {
+            sending.await()
+        } catch (error: CancellationException) {
+            sending.cancel()
+            throw error
         }
     }
 
@@ -950,6 +975,7 @@ internal class StreamController(
     private suspend fun stopStreamGeneration(
         taskId: String,
     ): StopResult? {
+        roomController.cancelGenerationCommands(taskId)
         // Invalidate queued completion notifications before dispatching display cleanup to the main thread.
         synchronized(stateLock) {
             state.generationTask?.takeIf { taskId.isEmpty() || it.id == taskId }?.let {

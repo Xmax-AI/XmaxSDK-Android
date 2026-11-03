@@ -17,6 +17,7 @@ import ai.xmax.sdk.VideoFrame
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
 import ai.xmax.sdk.stream.room.RoomMessageCodec
+import kotlinx.coroutines.Deferred
 import android.content.Context
 import android.view.View
 import io.agora.rtc2.ChannelMediaOptions
@@ -1425,19 +1426,21 @@ private class AgoraRtcPlatform(
          * @param message The message to send or log.
          * @param replacingPendingMessage The coalescing key; retains only the latest unsent message for the
          * same key.
-         * @return The RTC message identifier or error code.
+         * @param reportFailure Whether asynchronous send failure is reported as a room failure.
+         * @return The complete send result; cancelling it discards remaining unsent packets.
          */
         override fun sendRoomMessage(
             message: String,
             replacingPendingMessage: String?,
-        ): Long = synchronized(sendLock) {
-            if (!isCurrent() || !joined) return -3
+            reportFailure: Boolean,
+        ): Deferred<Unit> = synchronized(sendLock) {
+            if (!isCurrent() || !joined) throw CancellationException("RTC room was closed")
 
             sender.enqueue(
                 message,
                 replacingPendingMessage,
+                reportFailure,
             )
-            0L
         }
 
         /**

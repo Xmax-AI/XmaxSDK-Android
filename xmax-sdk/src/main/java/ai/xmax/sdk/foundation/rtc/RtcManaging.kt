@@ -16,6 +16,7 @@ import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
 import ai.xmax.sdk.VideoFrame
 import ai.xmax.sdk.VideoContentMode
 import android.view.View
+import kotlinx.coroutines.Deferred
 
 /**
  * An interface for RTC engines, rooms, media, and remote frames.
@@ -237,11 +238,14 @@ internal interface RtcManaging {
      * @param message The message to send or log.
      * @param replacingPendingMessage The coalescing key; retains only the latest unsent message for the same
      * key.
+     * @param reportFailure Whether asynchronous send failure is reported as a room failure.
+     * @return The complete send result; cancelling it discards remaining unsent packets.
      */
     fun sendRoomMessage(
         message: String,
         replacingPendingMessage: String? = null,
-    )
+        reportFailure: Boolean = true,
+    ): Deferred<Unit>
 
     /**
      * Discards coalescible signals that have not started sending.
@@ -250,6 +254,15 @@ internal interface RtcManaging {
      */
     fun discardPendingMessages(
         key: String? = null,
+    )
+
+    /**
+     * Sets the listener for room command receipts.
+     *
+     * @param listener The room message receiver, or null to unregister it.
+     */
+    fun setRoomMessageListener(
+        listener: ((RemoteStream, String) -> Unit)?,
     )
 
     /**

@@ -45,6 +45,27 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 public class RtcManagerTest {
     @Test
+    public fun `room sends preserve cancellable completion and failure reporting policy`() = runTest {
+        val room = FakeRtcRoom()
+        val manager = RtcManager(FakeRtcEngineManager(FakeRtcPlatform(room)))
+        manager.initialize()
+        val joining = async { manager.joinRoom(validConfiguration()) }
+        runCurrent()
+        room.emit(roomId = "room-1", joined = true)
+        joining.await()
+
+        val completion = kotlinx.coroutines.CompletableDeferred<Unit>()
+        room.sendCompletion = completion
+        val sending = manager.sendRoomMessage("command", reportFailure = false)
+        org.junit.Assert.assertSame(completion, sending)
+        assertFalse(sending.isCompleted)
+        assertEquals(listOf(false), room.failureReporting)
+        sending.cancel()
+        assertTrue(completion.isCancelled)
+        manager.destroy()
+    }
+
+    @Test
     fun `remote PCM registration rejects replaced listeners and rooms and propagates native failure`() = runTest {
         val room = FakeRtcRoom()
         room.remoteStreamIds["bot"] = "bot-native"
@@ -622,14 +643,18 @@ public class RtcManagerTest {
         assertEquals(listOf("bot-user" to true), listener.remoteVideoEvents)
         assertEquals(listOf("room-1:bot-user" to "task-id"), listener.seiEvents)
         engine.eventListener?.onUserMessageReceived(RemoteStream("old-room", "bot-user"), "ignored")
+        val receipts = mutableListOf<String>()
+        manager.setRoomMessageListener { _, message -> receipts += message }
         engine.eventListener?.onUserMessageReceived(RemoteStream("room-1", "bot-user"), "video_stopped")
         runCurrent()
         assertEquals(listOf("room-1:bot-user" to "video_stopped"), listener.userMessages)
+        assertEquals(listOf("video_stopped"), receipts)
         engine.eventListener?.onUserMessageReceived(RemoteStream("room-1", "bot-user"), "queued-before-leave")
         manager.leaveRoom()
         engine.eventListener?.onUserMessageReceived(RemoteStream("room-1", "bot-user"), "late")
         runCurrent()
         assertEquals(1, listener.userMessages.size)
+        assertEquals(listOf("video_stopped"), receipts)
         engine.eventListener?.onRemoteVideoPublished(RemoteStream("room-1", "bot-user"), false)
         engine.eventListener?.onSeiMessageReceived(
             RemoteStream(roomId = "room-1", userId = "bot-user"),
@@ -1184,6 +1209,8 @@ private class FakeRtcRoom(
     val sentMessages = mutableListOf<String>()
     val replacementKeys = mutableListOf<String?>()
     val discardedKeys = mutableListOf<String?>()
+    val failureReporting = mutableListOf<Boolean>()
+    var sendCompletion: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     val publishedVideoStates = mutableListOf<Boolean>()
     val publishedAudioStates = mutableListOf<Boolean>()
     val remoteVideoSubscriptions = mutableListOf<Pair<String, Boolean>>()
@@ -1234,10 +1261,12 @@ private class FakeRtcRoom(
         discardedKeys.add(key)
     }
 
-    override fun sendRoomMessage(message: String, replacingPendingMessage: String?): Long {
+    override fun sendRoomMessage(message: String, replacingPendingMessage: String?, reportFailure: Boolean): kotlinx.coroutines.Deferred<Unit> {
         sentMessages += message
         replacementKeys.add(replacingPendingMessage)
-        return sendMessageResult
+        failureReporting += reportFailure
+        if (sendMessageResult < 0) throw XmaxError(XmaxErrorCode.RTC_ERROR, "RTC sendRoomMessage failed: $sendMessageResult")
+        return sendCompletion ?: kotlinx.coroutines.CompletableDeferred(Unit)
     }
 
     override fun destroy() {

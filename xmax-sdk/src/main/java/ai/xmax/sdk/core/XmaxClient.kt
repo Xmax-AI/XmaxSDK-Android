@@ -13,26 +13,28 @@ package ai.xmax.sdk
 import android.content.Context
 import ai.xmax.sdk.foundation.storage.StorageManager
 import ai.xmax.sdk.service.network.ApiService
+import ai.xmax.sdk.service.network.ApiServicing
 import ai.xmax.sdk.service.media.MediaService
 import ai.xmax.sdk.service.storage.StorageService
 
 /**
- * A client that provides access to Xmax realtime generation, storage, and media services.
- *
- * Client construction configures logging and retains the application context without starting network or
- * media operations.
- * Realtime media, transport, and rendering components are created on first use.
+ * A client that provides access to realtime generation, storage, media services, and account credit queries.
  *
  * @param context An Android context; only its application context is retained. Required for managers that use
  * Android resources.
  */
-public class XmaxClient(
+public class XmaxClient internal constructor(
     /**
      * SDK credentials, service environment, and logging options.
      */
     public val configuration: XmaxConfiguration,
 
-    context: Context? = null,
+    context: Context?,
+
+    /**
+     * The service used for storage credentials, media safety checks, and account credit queries.
+     */
+    private val apiService: ApiServicing,
 ) {
 
     init {
@@ -52,15 +54,26 @@ public class XmaxClient(
     private val applicationContext: Context? = context?.applicationContext
 
     /**
-     * The shared API service.
+     * Creates an SDK client.
+     *
+     * @param configuration SDK credentials, service environment, and logging options.
+     * @param context An Android context; only its application context is retained. Required for managers
+     * that use Android resources.
      */
-    private val apiService = ApiService(
-        apiKey = configuration.apiKey,
-        baseUrl = configuration.environment.apiBaseUrl,
+    public constructor(
+        configuration: XmaxConfiguration,
+        context: Context? = null,
+    ) : this(
+        configuration,
+        context,
+        ApiService(
+            apiKey = configuration.apiKey,
+            baseUrl = configuration.environment.apiBaseUrl,
+        ),
     )
 
     /**
-     * Creates a client with the Android context first.
+     * Creates an SDK client.
      *
      * @param context An Android context; only its application context is retained. Required for managers that
      * use Android resources.
@@ -97,6 +110,31 @@ public class XmaxClient(
     }
 
     /**
+     * Fetches the remaining credits for the account owning this client's API key.
+     *
+     * Each call fetches the current server balance using the client's configured service environment.
+     *
+     * @return The remaining credits, including fractional credits.
+     * @throws XmaxError If credentials are invalid, the request fails, or the response is invalid.
+     * @throws kotlinx.coroutines.CancellationException If the request is cancelled.
+     */
+    public suspend fun getCreditBalance(): XmaxCreditBalance {
+        configuration.validate()
+
+        return apiService.get("/balance") { payload ->
+            val value = (payload.opt("currentBalance") as? Number)?.toDouble()
+            if (value == null || !value.isFinite() || value < 0) {
+                throw XmaxError(
+                    code = XmaxErrorCode.API_ERROR,
+                    message = "Credit balance must be a finite, nonnegative number",
+                )
+            }
+
+            XmaxCreditBalance(value)
+        }
+    }
+
+    /**
      * Creates a manager for local media inputs and realtime generation.
      *
      * Requires an Android context supplied when creating the client. Each manager owns its media
@@ -126,8 +164,6 @@ public class XmaxClient(
 
     /**
      * Creates a service for media sizing queries.
-     *
-     * An Android context and network access are not required.
      *
      * @param model The model whose input constraints apply; defaults to `RealtimeModel.X2_1`.
      * @return A media sizing service for the specified model.

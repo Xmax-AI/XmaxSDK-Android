@@ -137,12 +137,19 @@ class StreamControllerTest {
         val rtc = RtcManagingStub()
         val sent = kotlinx.coroutines.CompletableDeferred<Unit>()
         val transport = object : ai.xmax.sdk.foundation.rtc.RtcManaging by rtc {
-            override suspend fun awaitPendingMessages() { sent.await() }
+            override fun sendRoomMessage(message: String, replacingPendingMessage: String?, reportFailure: Boolean): kotlinx.coroutines.Deferred<Unit> {
+                rtc.sendRoomMessage(message)
+                return sent
+            }
         }
         val events = mutableListOf<RemoteStream?>()
         val controller = StreamController(
             rtcManager = transport,
-            roomController = RoomController(transport, RoomHeartbeat(transport, sleeper = { awaitCancellation() }, scope = backgroundScope)),
+            roomController = RoomController(
+                transport,
+                RoomHeartbeat(transport, sleeper = { awaitCancellation() }, scope = backgroundScope),
+                commandScope = backgroundScope,
+            ),
             encodingController = EncodingStub,
             qualityController = QualityStub,
             generationScope = backgroundScope,
@@ -155,6 +162,15 @@ class StreamControllerTest {
         runCurrent()
         rtc.emitRemoteVideoPublished("bot", true, roomId = "room")
         assertFalse(starting.isCompleted)
+        assertTrue(events.isEmpty())
+        val xid = org.json.JSONObject(rtc.roomMessages.last()).getString("xid")
+        rtc.roomMessageListener!!(
+            RemoteStream("room", "bot"),
+            """{"event":"xid_ack","xid":"$xid","count":1}""",
+        )
+        runCurrent()
+        assertFalse(starting.isCompleted)
+        assertFalse(sent.isCancelled)
         assertTrue(events.isEmpty())
         sent.complete(Unit)
         starting.await().await()

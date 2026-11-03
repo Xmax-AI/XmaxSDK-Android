@@ -27,6 +27,80 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 public class RtcMessageQueueTest {
+
+    @Test
+    public fun `cancelled commands are removed from the packet budget wait`() = runTest {
+        val packets = mutableListOf<String>()
+        val queue = queue(packets)
+        repeat(58) { queue.enqueue("budget") }
+        runCurrent()
+        val cancelled = queue.enqueue("obsolete", reportFailure = false)
+        runCurrent()
+        cancelled.cancel()
+        queue.enqueue("current", reportFailure = false)
+        advanceTimeBy(1_001)
+        runCurrent()
+
+        assertFalse(packets.contains("obsolete"))
+        assertEquals("current", packets.last())
+        queue.flush()
+        queue.close()
+    }
+
+    @Test
+    public fun `cancelling a fragmented command stops its remaining packets`() = runTest {
+        val packets = mutableListOf<String>()
+        val queue = queue(packets)
+        val cancelled = queue.enqueue("x".repeat(60_000), reportFailure = false)
+        runCurrent()
+        assertTrue(packets.size > 1)
+        assertFalse(cancelled.isCompleted)
+        val count = packets.size
+        cancelled.cancel()
+        queue.enqueue("current", reportFailure = false)
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(count + 1, packets.size)
+        assertEquals("current", packets.last())
+        queue.close()
+    }
+
+    @Test
+    public fun `command send failures do not terminate the queue or report room failure`() = runTest {
+        var fail = true
+        val packets = mutableListOf<String>()
+        val failures = mutableListOf<Throwable>()
+        val queue = RtcMessageQueue(
+            scope = backgroundScope,
+            send = {
+                if (fail) throw IllegalStateException("send failed")
+                packets += it.toString(Charsets.UTF_8)
+            },
+            onFailure = failures::add,
+            nowMillis = { testScheduler.currentTime },
+        )
+        val failed = queue.enqueue("old", reportFailure = false)
+        runCurrent()
+        assertTrue(runCatching { failed.await() }.exceptionOrNull() is IllegalStateException)
+        assertTrue(failures.isEmpty())
+
+        fail = false
+        val sent = queue.enqueue("new", reportFailure = false)
+        runCurrent()
+        sent.await()
+        assertEquals(listOf("new"), packets)
+        queue.close()
+    }
+
+    @Test
+    public fun `closing queue cancels all pending attempts`() = runTest {
+        val queue = queue(mutableListOf())
+        val attempts = List(4) { queue.enqueue("pending", reportFailure = false) }
+        queue.close()
+        assertTrue(attempts.all { it.isCancelled })
+    }
+
     @Test
     public fun `thirty 800 byte packets fit in the first window`() = runTest {
         val packets = mutableListOf<String>()

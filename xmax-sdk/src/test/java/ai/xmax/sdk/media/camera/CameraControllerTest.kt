@@ -430,10 +430,11 @@ private class CameraRtcStub : RtcManaging {
     override fun subscribeRemoteVideo(userId: String, subscribe: Boolean) = Unit
     override fun subscribeRemoteAudio(userId: String, subscribe: Boolean) = Unit
     override fun setRemoteAudioVolume(volume: Int, userId: String) = Unit
-    override fun sendRoomMessage(message: String, replacingPendingMessage: String?) = Unit
+    override fun sendRoomMessage(message: String, replacingPendingMessage: String?, reportFailure: Boolean) = kotlinx.coroutines.CompletableDeferred(Unit)
 
     override fun discardPendingMessages(key: String?) = Unit
     override fun setEventListener(listener: RtcEventListener?) = Unit
+    override fun setRoomMessageListener(listener: ((ai.xmax.sdk.foundation.rtc.RemoteStream, String) -> Unit)?) = Unit
     override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) { previewListener = listener }
     override fun setRemoteAudioFrameListener(
         stream: ai.xmax.sdk.foundation.rtc.RemoteStream,

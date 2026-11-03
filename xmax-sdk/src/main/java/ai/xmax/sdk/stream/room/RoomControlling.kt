@@ -14,6 +14,7 @@ import ai.xmax.sdk.RealtimeContext
 import ai.xmax.sdk.RealtimePoint
 import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.service.realtime.RealtimeSessionConnection
+import kotlinx.coroutines.Deferred
 
 /**
  * An interface for room lifecycle and signaling.
@@ -45,6 +46,7 @@ internal interface RoomControlling {
      * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
      * @param targetVideoFormat The downlink output format.
      * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @return The first complete send result, independent of service receipts.
      */
     fun startGeneration(
         taskId: String,
@@ -53,7 +55,7 @@ internal interface RoomControlling {
         faceRestoration: Boolean = false,
         targetVideoFormat: RealtimeVideoFormat? = null,
         paddingContain: Boolean = false,
-    )
+    ): Deferred<Unit>
 
     /**
      * Updates output dimensions and bitrate after checking operation validity.
@@ -61,12 +63,13 @@ internal interface RoomControlling {
      * @param taskId The identifier associating the generation request with its result stream.
      * @param targetVideoFormat The downlink output format.
      * @param ensureActive Checks operation validity and throws on cancellation.
+     * @return The first complete send result, independent of service receipts.
      */
     fun changeTargetSize(
         taskId: String,
         targetVideoFormat: RealtimeVideoFormat,
         ensureActive: () -> Unit,
-    )
+    ): Deferred<Unit>
 
     /**
      * Sends updated conditions for the current task.
@@ -76,6 +79,7 @@ internal interface RoomControlling {
      * @param context The generation prompt and reference media.
      * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
      * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @return The first complete send result, independent of service receipts.
      */
     fun changeGenerationCondition(
         taskId: String,
@@ -83,6 +87,15 @@ internal interface RoomControlling {
         context: RealtimeContext,
         faceRestoration: Boolean = false,
         paddingContain: Boolean = false,
+    ): Deferred<Unit>
+
+    /**
+     * Cancels command attempts belonging to an ended generation task.
+     *
+     * @param taskId The ended task, or an empty string to cancel every room command.
+     */
+    fun cancelGenerationCommands(
+        taskId: String,
     )
 
     /**

@@ -17,6 +17,8 @@ import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
 import ai.xmax.sdk.foundation.rtc.RoomJoinConfiguration
+import ai.xmax.sdk.foundation.rtc.RemoteStream
+import kotlinx.coroutines.test.advanceTimeBy
 import ai.xmax.sdk.service.realtime.RealtimeSessionConnection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -213,6 +215,78 @@ public class RoomControllerTest {
         token = "room-token",
         botName = "bot-user",
     )
+
+    @Test
+    public fun `receipts reject invalid senders recipients counts and stale room callbacks`() = runTest {
+        val rtc = RtcManagingStub()
+        val controller = RoomController(
+            rtc,
+            RoomHeartbeat(rtc, sleeper = { awaitCancellation() }, scope = backgroundScope),
+            commandScope = backgroundScope,
+        )
+        controller.join(connection()) {}
+        controller.startGeneration("task", RealtimeVideoFormat(720, 1280, 24), RealtimeContext("test")).await()
+        runCurrent()
+        val oldListener = rtc.roomMessageListener!!
+        val xid = JSONObject(rtc.roomMessages.single()).getString("xid")
+
+        for ((room, sender, recipient, count) in listOf(
+            listOf("room-id", "intruder", "user-id", "1"),
+            listOf("room-id", "user-id", "user-id", "1"),
+            listOf("other-room", "bot-user", "user-id", "1"),
+            listOf("room-id", "bot-user", "other-user", "1"),
+            listOf("room-id", "bot-user", "user-id", "0"),
+            listOf("room-id", "bot-user", "user-id", "1.5"),
+            listOf("room-id", "bot-user", "user-id", "\"1\""),
+            listOf("room-id", "bot-user", "user-id", "9007199254740992"),
+        )) {
+            oldListener(
+                RemoteStream(room, sender),
+                """{"event":"xid_ack","xid":"$xid","user_id":"$recipient","count":$count}""",
+            )
+        }
+        advanceTimeBy(301)
+        runCurrent()
+        assertEquals(2, rtc.roomMessages.size)
+
+        val receipt = JSONObject()
+            .put("event", "xid_ack")
+            .put("xid", xid)
+            .put("count", 1)
+            .put("unused", "x".repeat(2_000))
+            .toString()
+        val fragments = RoomMessageCodec().encode(receipt)
+        assertTrue(fragments.size > 1)
+        fragments.reversed().forEach {
+            oldListener(RemoteStream("room-id", "bot-user"), it)
+        }
+        advanceTimeBy(10_000)
+        runCurrent()
+        assertEquals(2, rtc.roomMessages.size)
+
+        controller.leave()
+        assertEquals(null, rtc.roomMessageListener)
+        controller.join(connection()) {}
+        controller.startGeneration("new-task", RealtimeVideoFormat(720, 1280, 24), RealtimeContext("test")).await()
+        runCurrent()
+        val newXid = JSONObject(rtc.roomMessages.last()).getString("xid")
+        oldListener(
+            RemoteStream("room-id", "bot-user"),
+            """{"event":"xid_ack","xid":"$newXid","count":1}""",
+        )
+        rtc.roomMessageListener!!(
+            RemoteStream("room-id", "bot-user"),
+            """{"event":"xid_ack","xid":"$xid","count":1}""",
+        )
+        advanceTimeBy(301)
+        runCurrent()
+        assertEquals(4, rtc.roomMessages.size)
+
+        controller.leave()
+        advanceTimeBy(10_000)
+        runCurrent()
+        assertEquals(4, rtc.roomMessages.size)
+    }
 
     private suspend fun expectXmaxError(block: suspend () -> Unit): XmaxError = try {
         block()

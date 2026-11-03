@@ -63,6 +63,11 @@ internal class RtcMessageQueue(
         val key: String?,
 
         /**
+         * Whether a send failure terminates the queue and notifies its owner.
+         */
+        val reportFailure: Boolean,
+
+        /**
          * The result completed after the entire signal is submitted to RTC.
          */
         val completion: CompletableDeferred<Unit> = CompletableDeferred(),
@@ -113,11 +118,13 @@ internal class RtcMessageQueue(
      *
      * @param message The complete room signal.
      * @param replacingPendingMessage The coalescing key, or null to retain every signal.
+     * @param reportFailure Whether a send failure terminates the queue and notifies its owner.
      * @return The complete signal's send result, shared by coalesced callers.
      */
     fun enqueue(
         message: String,
         replacingPendingMessage: String? = null,
+        reportFailure: Boolean = true,
     ): CompletableDeferred<Unit> {
         val packets = codec.encode(message).map { it.toByteArray(Charsets.UTF_8) }
         return synchronized(lock) {
@@ -139,9 +146,17 @@ internal class RtcMessageQueue(
             val entry = Message(
                 packets,
                 replacingPendingMessage,
+                reportFailure,
             )
             pending.addLast(entry)
             completions.add(entry.completion)
+            entry.completion.invokeOnCompletion { error ->
+                if (error is CancellationException) synchronized(lock) {
+                    pending.remove(entry)
+                    completions.remove(entry.completion)
+                    wake.trySend(Unit)
+                }
+            }
             wake.trySend(Unit)
             entry.completion
         }
@@ -156,15 +171,16 @@ internal class RtcMessageQueue(
     fun discardPendingMessages(
         key: String? = null,
     ) {
-        synchronized(lock) {
+        val discarded = synchronized(lock) {
             val discarded = pending.filter { it.key != null && (key == null || it.key == key) }
             pending.removeAll(discarded.toSet())
             discarded.forEach {
-                it.completion.complete(Unit)
                 completions.remove(it.completion)
             }
             wake.trySend(Unit)
+            discarded
         }
+        discarded.forEach { it.completion.complete(Unit) }
     }
 
     /**
@@ -183,14 +199,16 @@ internal class RtcMessageQueue(
      * Closes the queue and cancels all incomplete send results.
      */
     fun close() {
-        synchronized(lock) {
+        val cancelled = synchronized(lock) {
             if (closed) return
 
             closed = true
-            completions.forEach { it.cancel(CancellationException("RTC room was closed")) }
+            val cancelled = completions.toList()
             completions.clear()
             pending.clear()
+            cancelled
         }
+        cancelled.forEach { it.cancel(CancellationException("RTC room was closed")) }
         worker.cancel()
         wake.close()
     }
@@ -230,39 +248,49 @@ internal class RtcMessageQueue(
                     continue
                 }
 
-                for (packet in entry.packets) {
-                    while (true) {
+                try {
+                    for (packet in entry.packets) {
+                        while (entry.completion.isActive) {
+                            coroutineContext.ensureActive()
+                            val remaining = remainingWait(
+                                sent,
+                                packet.size,
+                            )
+                            if (remaining == 0L) break
+
+                            withTimeoutOrNull(remaining) { wake.receive() }
+                        }
+
                         coroutineContext.ensureActive()
-                        val remaining = remainingWait(
-                            sent,
-                            packet.size,
-                        )
-                        if (remaining == 0L) break
+                        if (!entry.completion.isActive) break
 
-                        withTimeoutOrNull(remaining) { wake.receive() }
+                        send(packet)
+                        sent.addLast(nowMillis() to packet.size)
                     }
-
+                } catch (error: Throwable) {
                     coroutineContext.ensureActive()
-                    send(packet)
-                    sent.addLast(nowMillis() to packet.size)
+                    if (entry.reportFailure) throw error
+
+                    entry.completion.completeExceptionally(error)
                 }
 
                 synchronized(lock) {
-                    entry.completion.complete(Unit)
                     completions.remove(entry.completion)
                 }
+                entry.completion.complete(Unit)
             }
         } catch (
             error: Throwable,
         ) {
-            val report = synchronized(lock) {
+            val (report, failed) = synchronized(lock) {
                 val shouldReport = !closed && error !is CancellationException
                 failure = error
-                completions.forEach { it.completeExceptionally(error) }
+                val failed = completions.toList()
                 completions.clear()
                 pending.clear()
-                shouldReport
+                shouldReport to failed
             }
+            failed.forEach { it.completeExceptionally(error) }
             if (report) onFailure(error)
         }
     }

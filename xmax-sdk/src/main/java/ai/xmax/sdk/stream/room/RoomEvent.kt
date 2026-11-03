@@ -36,6 +36,7 @@ internal object RoomEvent {
      * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
      * @param targetVideoFormat The downlink output format.
      * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @param xid The logical command identifier retained across retransmissions.
      * @return The generation start JSON signal.
      */
     fun start(
@@ -48,10 +49,12 @@ internal object RoomEvent {
         faceRestoration: Boolean = false,
         targetVideoFormat: RealtimeVideoFormat? = null,
         paddingContain: Boolean = false,
+        xid: String? = null,
     ): String = encode(
         event = "start",
         userId = userId,
         taskId = taskId,
+        xid = xid,
         params = generationParameters(
             videoFormat,
             context,
@@ -109,6 +112,7 @@ internal object RoomEvent {
      * @param targetVideoFormat The downlink output format.
      * @param minimumBitrate The minimum encoder bitrate, in kbps.
      * @param maximumBitrate The maximum encoder bitrate, in kbps.
+     * @param xid The logical command identifier retained across retransmissions.
      * @return The downlink dimension and bitrate JSON signal.
      */
     fun changeTargetSize(
@@ -117,10 +121,12 @@ internal object RoomEvent {
         targetVideoFormat: RealtimeVideoFormat,
         minimumBitrate: Int,
         maximumBitrate: Int,
+        xid: String? = null,
     ): String = encode(
         event = "change_target_size",
         userId = userId,
         taskId = taskId,
+        xid = xid,
         params = JSONObject()
             .put(
                 "target_size",
@@ -145,6 +151,7 @@ internal object RoomEvent {
      * @param context The generation prompt and reference media.
      * @param faceRestoration Whether to enable face restoration through `face_replace`; defaults to false.
      * @param paddingContain Whether the server fits input and removes padding from output; defaults to false.
+     * @param xid The logical command identifier retained across retransmissions.
      * @return The generation condition JSON signal.
      */
     fun changeCondition(
@@ -154,10 +161,12 @@ internal object RoomEvent {
         context: RealtimeContext,
         faceRestoration: Boolean = false,
         paddingContain: Boolean = false,
+        xid: String? = null,
     ): String = encode(
         event = "change_condition",
         userId = userId,
         taskId = taskId,
+        xid = xid,
         params = generationParameters(
             videoFormat,
             context,
@@ -266,6 +275,7 @@ internal object RoomEvent {
      * @param taskId The identifier associating the generation request with its result stream.
      * @param params The business parameters, or null to omit the parameter object.
      * @param tracks The trajectory coordinate array, or null to omit trajectories.
+     * @param xid The logical command identifier retained across retransmissions.
      * @return The encoded JSON signal.
      */
     private fun encode(
@@ -274,6 +284,7 @@ internal object RoomEvent {
         taskId: String? = null,
         params: JSONObject? = null,
         tracks: JSONArray? = null,
+        xid: String? = null,
     ): String = try {
         JSONObject()
             .put(
@@ -289,6 +300,7 @@ internal object RoomEvent {
                 RuntimeInfo.current.toJson(),
             )
             .apply {
+                xid?.let { put("xid", it) }
                 taskId?.let { put(
                     "uid",
                     it,

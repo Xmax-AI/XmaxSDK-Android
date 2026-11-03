@@ -33,6 +33,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -102,6 +103,11 @@ internal class RtcManager(
      * The RTC event listener.
      */
     private var eventListener: WeakReference<RtcEventListener>? = null
+
+    /**
+     * The receiver for current-room command receipts.
+     */
+    private var roomMessageListener: ((RemoteStream, String) -> Unit)? = null
 
     /**
      * The RTC network quality and statistics listener.
@@ -743,41 +749,40 @@ internal class RtcManager(
      * @param message The message to send or log.
      * @param replacingPendingMessage The coalescing key; retains only the latest unsent message for the same
      * key.
+     * @param reportFailure Whether asynchronous send failure is reported as a room failure.
+     * @return The complete send result; cancelling it discards remaining unsent packets.
      */
     override fun sendRoomMessage(
         message: String,
         replacingPendingMessage: String?,
-    ) {
-        nativeGate.read {
-            if (message.isEmpty()) {
-                throw XmaxError(
-                    code = XmaxErrorCode.INVALID_CONFIGURATION,
-                    message = "RTC room message cannot be empty",
-                )
-            }
+        reportFailure: Boolean,
+    ): Deferred<Unit> = nativeGate.read {
+        if (message.isEmpty()) {
+            throw XmaxError(
+                code = XmaxErrorCode.INVALID_CONFIGURATION,
+                message = "RTC room message cannot be empty",
+            )
+        }
 
-            val room = synchronized(stateLock) {
-                activeRoom?.room
-            } ?: throw rtcError("RTC room is not joined")
-            val result = try {
-                room.sendRoomMessage(
-                    message,
-                    replacingPendingMessage,
-                )
-            } catch (
-                error: Throwable,
-            ) {
-                throw rtcOperationError(
-                    "sendRoomMessage",
-                    error,
-                )
-            }
-            if (result < 0L) {
-                throw rtcResultError(
-                    "sendRoomMessage",
-                    result,
-                )
-            }
+        val room = synchronized(stateLock) {
+            activeRoom?.room
+        } ?: throw rtcError("RTC room is not joined")
+
+        try {
+            room.sendRoomMessage(
+                message,
+                replacingPendingMessage,
+                reportFailure,
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: XmaxError) {
+            throw error
+        } catch (error: Throwable) {
+            throw rtcOperationError(
+                "sendRoomMessage",
+                error,
+            )
         }
     }
 
@@ -794,6 +799,17 @@ internal class RtcManager(
 
             room?.discardPendingMessages(key)
         }
+    }
+
+    /**
+     * Sets the receiver for current-room command receipts.
+     *
+     * @param listener The room message receiver, or null to unregister it.
+     */
+    override fun setRoomMessageListener(
+        listener: ((RemoteStream, String) -> Unit)?,
+    ) {
+        synchronized(stateLock) { roomMessageListener = listener }
     }
 
     /**
@@ -1326,10 +1342,13 @@ internal class RtcManager(
         val room = synchronized(stateLock) { activeRoom?.takeIf { it.roomId == stream.roomId } } ?: return
 
         eventCallbackScope.launch {
-            val listener = synchronized(stateLock) {
-                eventListener?.get().takeIf { activeRoom === room }
+            val (listener, roomListener) = synchronized(stateLock) {
+                if (activeRoom !== room) return@launch
+
+                eventListener?.get() to roomMessageListener
             }
 
+            roomListener?.invoke(stream, message)
             listener?.onUserMessageReceived(
                 stream,
                 message,
@@ -1749,6 +1768,7 @@ internal class RtcManager(
                 ).also {
                     activeRoom = null
                     pendingJoin = null
+                    roomMessageListener = null
                 }
             }
 

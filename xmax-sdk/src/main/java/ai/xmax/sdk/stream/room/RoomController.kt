@@ -14,6 +14,11 @@ import ai.xmax.sdk.RealtimeTiming
 import kotlinx.coroutines.currentCoroutineContext
 import ai.xmax.sdk.cleanupAfterFailure
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import ai.xmax.sdk.foundation.rtc.RemoteStream
 import ai.xmax.sdk.RealtimeContext
 import ai.xmax.sdk.RealtimePoint
 import ai.xmax.sdk.RealtimeVideoFormat
@@ -42,6 +47,11 @@ internal class RoomController(
      * The component maintaining RTC room heartbeats.
      */
     private val heartbeat: RoomHeartbeat = RoomHeartbeat(rtcManager),
+
+    /**
+     * The scope scheduling room command retries and receipt deadlines.
+     */
+    private val commandScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : RoomControlling {
 
     /**
@@ -58,6 +68,16 @@ internal class RoomController(
      * The current room lifecycle state.
      */
     private var state: State = State.Idle
+
+    /**
+     * The command scheduler for the current room lifetime.
+     */
+    private var commands = makeCommands()
+
+    /**
+     * The decoder for fragmented room receipts.
+     */
+    private val decoder = RoomMessageCodec()
 
     /**
      * Joins RTC and starts room heartbeats; room signaling is available when this call completes.
@@ -86,6 +106,8 @@ internal class RoomController(
             }
 
             UUID.randomUUID().also {
+                commands = makeCommands()
+                decoder.clear()
                 state = State.Joining(it)
             }
         }
@@ -109,7 +131,19 @@ internal class RoomController(
                 if (state != State.Joining(operationId)) {
                     false
                 } else {
-                    state = State.Joined(connection.userId)
+                    state = State.Joined(
+                        connection.userId,
+                        connection.roomId,
+                        connection.botName,
+                        operationId,
+                    )
+                    rtcManager.setRoomMessageListener { stream, message ->
+                        handleIncomingMessage(
+                            stream,
+                            message,
+                            operationId,
+                        )
+                    }
                     heartbeat.start(connection.userId)
                     true
                 }
@@ -146,8 +180,11 @@ internal class RoomController(
                     is State.Joined,
                     is State.Joining,
                     -> {
+                        commands.close()
+                        rtcManager.setRoomMessageListener(null)
+                        decoder.clear()
                         state = State.Leaving
-                                true
+                        true
                     }
                 }
             }
@@ -173,6 +210,7 @@ internal class RoomController(
      * @param faceRestoration Whether to enable face restoration through `face_replace`.
      * @param targetVideoFormat The downlink output format.
      * @param paddingContain Whether the server fits input and removes padding from output.
+     * @return The first complete send result, independent of service receipts.
      */
     override fun startGeneration(
         taskId: String,
@@ -181,21 +219,26 @@ internal class RoomController(
         faceRestoration: Boolean,
         targetVideoFormat: RealtimeVideoFormat?,
         paddingContain: Boolean,
-    ) {
+    ): Deferred<Unit> = synchronized(stateLock) {
+        val userId = requireUserId()
         val (minimum, maximum) = downlinkBitrates(targetVideoFormat ?: videoFormat)
-        send(
-            RoomEvent.start(
-                userId = requireUserId(),
-                taskId = taskId,
-                videoFormat = videoFormat,
-                context = context,
-                minimumBitrate = minimum,
-                maximumBitrate = maximum,
-                faceRestoration = faceRestoration,
-                targetVideoFormat = targetVideoFormat,
-                paddingContain = paddingContain,
-            ),
-            discardPending = true,
+        commands.send(
+            kind = RoomCommandController.Kind.START,
+            taskId = taskId,
+            createMessage = { xid ->
+                RoomEvent.start(
+                    userId = userId,
+                    taskId = taskId,
+                    videoFormat = videoFormat,
+                    context = context,
+                    minimumBitrate = minimum,
+                    maximumBitrate = maximum,
+                    faceRestoration = faceRestoration,
+                    targetVideoFormat = targetVideoFormat,
+                    paddingContain = paddingContain,
+                    xid = xid,
+                )
+            },
         )
     }
 
@@ -205,12 +248,13 @@ internal class RoomController(
      * @param taskId The identifier associating the generation request with its result stream.
      * @param targetVideoFormat The downlink output format.
      * @param ensureActive Checks operation validity and throws on cancellation.
+     * @return The first complete send result, independent of service receipts.
      */
     override fun changeTargetSize(
         taskId: String,
         targetVideoFormat: RealtimeVideoFormat,
         ensureActive: () -> Unit,
-    ) {
+    ): Deferred<Unit> = synchronized(stateLock) {
         ensureActive()
         if (taskId.isBlank()) {
             throw XmaxError(
@@ -220,15 +264,22 @@ internal class RoomController(
         }
 
         val (minimum, maximum) = downlinkBitrates(targetVideoFormat)
-        val message = RoomEvent.changeTargetSize(
-            requireUserId(),
-            taskId,
-            targetVideoFormat,
-            minimum,
-            maximum,
+        val userId = requireUserId()
+        commands.send(
+            kind = RoomCommandController.Kind.CHANGE_TARGET_SIZE,
+            taskId = taskId,
+            createMessage = { xid ->
+                RoomEvent.changeTargetSize(
+                    userId,
+                    taskId,
+                    targetVideoFormat,
+                    minimum,
+                    maximum,
+                    xid,
+                )
+            },
+            ensureCurrent = ensureActive,
         )
-        ensureActive()
-        send(message)
     }
 
     /**
@@ -262,6 +313,7 @@ internal class RoomController(
      * @param context The generation prompt and reference media.
      * @param faceRestoration Whether to enable face restoration through `face_replace`.
      * @param paddingContain Whether the server fits input and removes padding from output.
+     * @return The first complete send result, independent of service receipts.
      */
     override fun changeGenerationCondition(
         taskId: String,
@@ -269,17 +321,22 @@ internal class RoomController(
         context: RealtimeContext,
         faceRestoration: Boolean,
         paddingContain: Boolean,
-    ) {
-        send(
-            RoomEvent.changeCondition(
-                userId = requireUserId(),
-                taskId = taskId,
-                videoFormat = videoFormat,
-                context = context,
-                faceRestoration = faceRestoration,
-                paddingContain = paddingContain,
-            ),
-            discardPending = true,
+    ): Deferred<Unit> = synchronized(stateLock) {
+        val userId = requireUserId()
+        commands.send(
+            kind = RoomCommandController.Kind.CHANGE_CONDITION,
+            taskId = taskId,
+            createMessage = { xid ->
+                RoomEvent.changeCondition(
+                    userId = userId,
+                    taskId = taskId,
+                    videoFormat = videoFormat,
+                    context = context,
+                    faceRestoration = faceRestoration,
+                    paddingContain = paddingContain,
+                    xid = xid,
+                )
+            },
         )
     }
 
@@ -291,6 +348,7 @@ internal class RoomController(
     override fun stopGeneration(
         taskId: String,
     ) {
+        cancelGenerationCommands(taskId)
         val userId = synchronized(stateLock) {
             if (taskId.isEmpty()) return
 
@@ -304,6 +362,70 @@ internal class RoomController(
             ),
             discardPending = true,
         )
+    }
+
+    /**
+     * Cancels command attempts belonging to an ended generation task.
+     *
+     * @param taskId The ended task, or an empty string to cancel every room command.
+     */
+    override fun cancelGenerationCommands(
+        taskId: String,
+    ) {
+        synchronized(stateLock) { commands.cancel(taskId.takeIf(String::isNotEmpty)) }
+    }
+
+    /**
+     * Creates the command scheduler for one room lifetime.
+     *
+     * @return A scheduler using cancellable RTC sends.
+     */
+    private fun makeCommands(): RoomCommandController = RoomCommandController(
+        sendMessage = { message ->
+            rtcManager.discardPendingMessages()
+            XmaxLogger.room.debug(message = { formatSignalLog(message) })
+            rtcManager.sendRoomMessage(
+                message,
+                reportFailure = false,
+            )
+        },
+        scope = commandScope,
+    )
+
+    /**
+     * Accepts matching command receipts from the current room's result publisher.
+     *
+     * @param stream The remote sender's room and user identifiers.
+     * @param message The incoming JSON signal or fragment.
+     * @param operationId The room lifetime that registered the receiver.
+     */
+    private fun handleIncomingMessage(
+        stream: RemoteStream,
+        message: String,
+        operationId: UUID,
+    ) {
+        synchronized(stateLock) {
+            val joined = state as? State.Joined ?: return
+            if (joined.operationId != operationId || stream.roomId != joined.roomId ||
+                stream.userId.isBlank() || stream.userId == joined.userId ||
+                (!joined.botId.isNullOrBlank() && stream.userId != joined.botId)
+            ) return
+
+            val decoded = decoder.decode(stream.userId, message) ?: return
+            val event = runCatching { JSONObject(decoded) }.getOrNull() ?: return
+            if (event.optString("event") != "xid_ack") return
+            val recipient = event.opt("user_id")
+            if (recipient != null && recipient !== JSONObject.NULL && recipient != joined.userId) return
+
+            val xid = event.opt("xid") as? String ?: return
+            val count = (event.opt("count") as? Number)?.toDouble() ?: return
+            if (!count.isFinite() || count < 1 || count > 9_007_199_254_740_991.0 || count % 1.0 != 0.0) return
+
+            commands.acknowledge(
+                xid,
+                count.toLong(),
+            )
+        }
     }
 
     /**
@@ -429,6 +551,21 @@ internal class RoomController(
              * The room's business user identifier.
              */
             val userId: String,
+
+            /**
+             * The joined room identifier.
+             */
+            val roomId: String,
+
+            /**
+             * The expected service sender, or null when the session does not provide one.
+             */
+            val botId: String?,
+
+            /**
+             * The room lifetime rejecting stale receipts.
+             */
+            val operationId: UUID,
         ) : State
 
         /**

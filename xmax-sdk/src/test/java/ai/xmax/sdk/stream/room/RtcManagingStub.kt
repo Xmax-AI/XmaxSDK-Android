@@ -71,6 +71,8 @@ internal class RtcManagingStub(
     private val lock = Any()
     private val storedCalls = mutableListOf<RtcManagingCall>()
     private var eventListener: RtcEventListener? = null
+    var roomMessageListener: ((RemoteStream, String) -> Unit)? = null
+        private set
     private var qualityListener: RtcQualityListener? = null
     private val remoteVideoFrameListeners = mutableMapOf<RemoteStream, ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink>()
     var remoteFrameRegistrationError: Throwable? = null
@@ -202,16 +204,21 @@ internal class RtcManagingStub(
         discardedKeys.add(key)
     }
 
-    override fun sendRoomMessage(message: String, replacingPendingMessage: String?) {
+    override fun sendRoomMessage(message: String, replacingPendingMessage: String?, reportFailure: Boolean): kotlinx.coroutines.Deferred<Unit> {
         replacementKeys.add(replacingPendingMessage)
         record(RtcManagingCall.SendRoomMessage(message))
         sendRoomMessageError?.let { throw it }
+        return kotlinx.coroutines.CompletableDeferred(Unit)
     }
 
     override fun setEventListener(listener: RtcEventListener?) {
         synchronized(lock) {
             eventListener = listener
         }
+    }
+
+    override fun setRoomMessageListener(listener: ((RemoteStream, String) -> Unit)?) {
+        roomMessageListener = listener
     }
 
     override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) = Unit
