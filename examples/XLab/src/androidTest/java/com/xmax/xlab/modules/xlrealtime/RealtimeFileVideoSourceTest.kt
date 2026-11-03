@@ -16,7 +16,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.xmax.xlab.R
+import androidx.test.platform.app.InstrumentationRegistry
+import com.xmax.xlab.test.R as TestR
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -39,7 +40,8 @@ class RealtimeFileVideoSourceTest {
     @Test
     fun selectedVideoSuppliesOriginalRgbaAndPcmWhileOnlyPreviewing() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val uri = Uri.parse("android.resource://${context.packageName}/${R.raw.realtime_debug_video}")
+        val testContext = InstrumentationRegistry.getInstrumentation().context
+        val uri = Uri.parse("android.resource://${testContext.packageName}/${TestR.raw.external_video_sample}")
         val source = RealtimeFileVideoSource.make(context, uri)
         val sink = Sink(source.videoFormat)
         try {
