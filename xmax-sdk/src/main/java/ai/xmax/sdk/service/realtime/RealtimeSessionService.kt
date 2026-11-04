@@ -270,6 +270,7 @@ internal class RealtimeSessionService(
             status = payload.nonEmptyString("status"),
             connection = connection,
             closeReason = payload.nonEmptyString("closeReason"),
+            modelId = payload.nonEmptyString("modelUid"),
         )
     }
 

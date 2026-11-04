@@ -11,6 +11,7 @@
 package ai.xmax.sdk.stream.room
 
 import ai.xmax.sdk.XmaxLogger
+import ai.xmax.sdk.XmaxError
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -21,10 +22,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /**
- * Retries logical commands independently of transport completion and generation readiness.
+ * Coordinates RTC retries and one HTTP copy independently of generation readiness.
  */
 internal class RoomCommandController(
     /**
@@ -36,6 +39,11 @@ internal class RoomCommandController(
      * The scope scheduling command sends and receipt deadlines.
      */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+
+    /**
+     * Submits the complete command once through a separately cancellable HTTP request.
+     */
+    private val relayMessage: (suspend (String) -> Unit)? = null,
 ) {
 
     /**
@@ -110,6 +118,11 @@ internal class RoomCommandController(
         val transports = mutableMapOf<UUID, Pair<Boolean, Deferred<Unit>>>()
 
         /**
+         * The HTTP submission retained until completion or explicit command cancellation.
+         */
+        var relayJob: Job? = null
+
+        /**
          * The number of attempts submitted to the transport.
          */
         var attempts = 0
@@ -131,12 +144,12 @@ internal class RoomCommandController(
     }
 
     /**
-     * The lock protecting command submission, receipts, and transport completions.
+     * The lock protecting command submission, receipts, and RTC and HTTP completions.
      */
     private val lock = Any()
 
     /**
-     * Commands indexed by the identifier retained across retries.
+     * Commands with pending RTC or HTTP work, indexed by their shared identifier.
      */
     private val pending = mutableMapOf<String, Command>()
 
@@ -289,7 +302,52 @@ internal class RoomCommandController(
             }
             command.scheduled += timer
         }
+        val relay = makeRelay(command)
         attempt(command, initial = true)
+        relay?.start()
+    }
+
+    /**
+     * Prepares an HTTP submission whose lifetime remains independent of RTC receipts and retries.
+     *
+     * @param command The immutable command submitted through both transports.
+     * @return The deferred submission job, or null when HTTP relay is unavailable.
+     */
+    private fun makeRelay(
+        command: Command,
+    ): Job? {
+        val relay = relayMessage ?: return null
+        if (command.cancelled) return null
+
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            val startedAt = System.nanoTime()
+            try {
+                currentCoroutineContext().ensureActive()
+                synchronized(lock) {
+                    if (!command.sent) command.ensureCurrent()
+                }
+                relay(command.message)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                currentCoroutineContext().ensureActive()
+                val mapped = XmaxError.from(error)
+                XmaxLogger.room.warn(message = {
+                    "HTTP 信令转发失败 (HTTP Signaling Relay Failed)\n" +
+                        "├─ event: ${command.kind.value}, xid: ${command.xid}\n" +
+                        "├─ elapsed: ${(System.nanoTime() - startedAt) / 1_000_000} ms\n" +
+                        "└─ code: ${mapped.code}, apiCode: ${mapped.apiCode}, httpStatus: ${mapped.httpStatus}, reason: ${mapped.message}"
+                })
+            }
+        }
+        command.relayJob = job
+        job.invokeOnCompletion {
+            synchronized(lock) {
+                command.relayJob = null
+                releaseCompleted(command)
+            }
+        }
+        return job
     }
 
     /**
@@ -367,7 +425,7 @@ internal class RoomCommandController(
         if (error == null) {
             command.sent = true
             command.result.complete(Unit)
-            if (!command.retrying) pending.remove(command.xid)
+            releaseCompleted(command)
         } else if (initial && !command.sent) {
             if (command.kind == Kind.START) cancelMatching { it !== command && it.taskId == command.taskId }
             cancelCommand(command, error)
@@ -391,7 +449,18 @@ internal class RoomCommandController(
         command.transports.values.toList().forEach { (initial, transport) ->
             if (!initial || command.sent) transport.cancel()
         }
-        if (command.sent) pending.remove(command.xid)
+        releaseCompleted(command)
+    }
+
+    /**
+     * Releases completed commands while retaining HTTP requests for later lifecycle cancellation.
+     *
+     * @param command The command whose transport or retry state changed.
+     */
+    private fun releaseCompleted(
+        command: Command,
+    ) {
+        if (command.sent && !command.retrying && command.relayJob == null) pending.remove(command.xid)
     }
 
     /**
@@ -407,6 +476,7 @@ internal class RoomCommandController(
         command.cancelled = true
         stopRetries(command)
         command.transports.values.toList().forEach { it.second.cancel() }
+        command.relayJob?.cancel()
         command.result.completeExceptionally(error)
         pending.remove(command.xid)
     }

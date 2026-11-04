@@ -140,6 +140,8 @@ public class RealtimeSessionServiceTest {
             ApiBehavior.Success(
                 JSONObject()
                     .put("sessionUid", " session-1 ")
+                    .put("modelUid", " model-instance-1 ")
+                    .put("modelTypeUid", "model-type-1")
                     .put("userUid", " user-1 ")
                     .put("status", " ACTIVE ")
                     .put(
@@ -160,6 +162,7 @@ public class RealtimeSessionServiceTest {
         assertEquals(
             RealtimeSession(
                 id = "session-1",
+                modelId = "model-instance-1",
                 userId = "user-1",
                 status = "ACTIVE",
                 connection = RealtimeSessionConnection(

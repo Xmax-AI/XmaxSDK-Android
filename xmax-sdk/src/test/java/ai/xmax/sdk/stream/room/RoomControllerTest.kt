@@ -209,6 +209,36 @@ public class RoomControllerTest {
         assertTrue(message.contains("\"user_id\""))
     }
 
+    @Test
+    public fun `HTTP relay includes only complete generation controls`() = runTest {
+        val rtc = RtcManagingStub()
+        val relays = mutableListOf<String>()
+        val controller = RoomController(
+            rtcManager = rtc,
+            heartbeat = RoomHeartbeat(rtc, sleeper = { awaitCancellation() }, scope = backgroundScope),
+            commandScope = backgroundScope,
+            relayMessage = { relays += it },
+        )
+        controller.join(connection()) {}
+        val format = RealtimeVideoFormat(720, 1280, 24)
+        controller.startGeneration("task", format, RealtimeContext("long prompt".repeat(1_000))).await()
+        runCurrent()
+        controller.changeGenerationCondition("task", format, RealtimeContext("updated")).await()
+        runCurrent()
+        controller.changeTargetSize("task", format) {}.await()
+        runCurrent()
+        assertEquals(listOf("start", "change_condition", "change_target_size"), relays.map { JSONObject(it).getString("event") })
+        assertEquals("long prompt".repeat(1_000), JSONObject(relays.first()).getJSONObject("params").getString("prompt"))
+        assertTrue(relays.all { it in rtc.roomMessages })
+
+        controller.sendTracks("task", listOf(RealtimePoint(0.1, 0.2)))
+        advanceTimeBy(4_001)
+        runCurrent()
+        controller.stopGeneration("task")
+        controller.leave()
+        assertEquals(3, relays.size)
+    }
+
     private fun connection(): RealtimeSessionConnection = RealtimeSessionConnection(
         roomId = "room-id",
         userId = "user-id",

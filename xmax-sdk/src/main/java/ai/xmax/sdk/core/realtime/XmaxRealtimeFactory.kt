@@ -29,13 +29,16 @@ import ai.xmax.sdk.render.RenderControlling
 import ai.xmax.sdk.service.network.ApiServicing
 import ai.xmax.sdk.service.media.MediaService
 import ai.xmax.sdk.service.realtime.RealtimeSessionService
+import ai.xmax.sdk.service.realtime.RealtimeEventRelayService
 import ai.xmax.sdk.stream.StreamController
 import ai.xmax.sdk.stream.StreamControlling
+import ai.xmax.sdk.stream.room.RoomController
 import ai.xmax.sdk.stream.quality.QualityController
 import ai.xmax.sdk.stream.quality.QualityHistory
 import android.content.Context
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import org.json.JSONObject
 
 /**
  * Creates realtime components and wires their frame, failure, and cleanup callbacks.
@@ -185,6 +188,8 @@ internal object XmaxRealtimeFactory {
         }
         val rtcManager = RtcManager(context)
         val mediaService = MediaService(options.model)
+        val eventRelayService = RealtimeEventRelayService(apiService)
+        lateinit var connectionManager: XmaxRealtimeConnectionManager
         val renderController = RenderController(
             rtcManager,
             frameDispatcher = callbacks.remoteMediaFrames,
@@ -192,6 +197,26 @@ internal object XmaxRealtimeFactory {
         )
         val streamController = StreamController(
             rtcManager = rtcManager,
+            roomController = RoomController(
+                rtcManager = rtcManager,
+                relayMessage = { message ->
+                    val session = connectionManager.currentSession
+                    val data = JSONObject(message)
+                    if (session?.modelId == null) {
+                        XmaxLogger.room.warn(message = {
+                            "HTTP 信令转发已跳过 (HTTP Signaling Relay Skipped)\n" +
+                                "├─ event: ${data.optString("event")}, xid: ${data.optString("xid")}\n" +
+                                "└─ Session does not contain a model instance ID"
+                        })
+                    } else {
+                        eventRelayService.relay(
+                            sessionId = session.id,
+                            modelId = session.modelId,
+                            data = data,
+                        )
+                    }
+                },
+            ),
             qualityController = QualityController(
                 rtcManager,
                 history = QualityHistory.create(
@@ -253,7 +278,7 @@ internal object XmaxRealtimeFactory {
                 },
             ),
         )
-        val connectionManager = XmaxRealtimeConnectionManager(
+        connectionManager = XmaxRealtimeConnectionManager(
             sessionService = RealtimeSessionService(apiService),
             interactionController = mediaController,
             renderController = renderController,

@@ -52,6 +52,11 @@ internal class RoomController(
      * The scope scheduling room command retries and receipt deadlines.
      */
     private val commandScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+
+    /**
+     * Submits each complete generation control once through an independent HTTP request.
+     */
+    private val relayMessage: (suspend (String) -> Unit)? = null,
 ) : RoomControlling {
 
     /**
@@ -390,6 +395,7 @@ internal class RoomController(
             )
         },
         scope = commandScope,
+        relayMessage = relayMessage,
     )
 
     /**

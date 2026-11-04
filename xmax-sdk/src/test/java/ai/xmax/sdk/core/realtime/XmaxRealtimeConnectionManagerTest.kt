@@ -53,6 +53,7 @@ class XmaxRealtimeConnectionManagerTest {
             )
         }
         connect()
+        assertEquals("model-instance-1", manager.currentSession?.modelId)
         assertTrue(service.heartbeatCalls.isEmpty())
         manager.startHeartbeat("wrong-session")
         assertTrue(service.heartbeatCalls.isEmpty())
@@ -82,11 +83,14 @@ class XmaxRealtimeConnectionManagerTest {
         manager.startHeartbeat("session-id")
         assertEquals(1, service.heartbeatCalls.size)
         manager.disconnect()
+        assertNull(manager.currentSession)
         manager.startHeartbeat("session-id")
         assertEquals(1, service.heartbeatCalls.size)
 
         now = 20_000_000_000L
+        service.modelId = "model-instance-2"
         connect()
+        assertEquals("model-instance-2", manager.currentSession?.modelId)
         now += 800_000_000L
         manager.startHeartbeat("session-id")
         assertEquals(listOf("session-id" to 2, "session-id" to 2), service.heartbeatCalls)
@@ -198,9 +202,11 @@ private class SessionServiceStub(
     var heartbeatStarted = false
     val heartbeatCalls = mutableListOf<Pair<String, Int>>()
     val closedSessionIds = mutableListOf<String>()
+    var modelId = "model-instance-1"
 
     override suspend fun createSession(model: RealtimeModel): RealtimeSession = RealtimeSession(
         id = "session-id",
+        modelId = modelId,
         userId = "user-id",
         status = "ACTIVE",
         connection = RealtimeSessionConnection(

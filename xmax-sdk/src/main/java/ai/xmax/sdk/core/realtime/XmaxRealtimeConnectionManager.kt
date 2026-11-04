@@ -308,6 +308,12 @@ internal class XmaxRealtimeConnectionManager(
         get() = synchronized(stateLock) { activeSession?.id.orEmpty() }
 
     /**
+     * The connected session and its assigned model instance, or null while disconnected.
+     */
+    val currentSession: RealtimeSession?
+        get() = synchronized(stateLock) { activeSession }
+
+    /**
      * The remote track container; its existence does not indicate generation or first-frame readiness.
      */
     val currentRemoteStream: RealtimeMediaStream?

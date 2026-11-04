@@ -40,6 +40,11 @@ internal data class RealtimeSession(
      * The server closure reason, or null if absent.
      */
     val closeReason: String?,
+
+    /**
+     * The assigned model instance identifier used for HTTP event relay.
+     */
+    val modelId: String? = null,
 )
 
 /**
