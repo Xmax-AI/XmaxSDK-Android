@@ -79,6 +79,7 @@ internal class NetworkVideoController(
 
     /**
      * Creates a server-read network video source with a muted local preview.
+     * Input dimensions follow video area and alignment limits; generation selects its model canvas separately.
      *
      * @param uri A media URI your app can read.
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
@@ -99,7 +100,7 @@ internal class NetworkVideoController(
                 videoFormat.width,
                 videoFormat.height,
             ),
-            RealtimeMediaSource.CAMERA,
+            RealtimeMediaSource.VIDEO,
         )
         val format = videoFormat.copy(
             width = size.width,

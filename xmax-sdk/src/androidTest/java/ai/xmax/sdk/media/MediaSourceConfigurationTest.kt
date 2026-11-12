@@ -33,6 +33,31 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MediaSourceConfigurationTest {
 
+    /** Network inputs use the same media bounds as files without constructing a camera or fetching the URL. */
+    @Test
+    fun networkVideoAcceptsNonBucketDimensionsAndPreservesReference() = runBlocking {
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        val cases = listOf(
+            RealtimeVideoFormat(704, 1280, 30) to RealtimeVideoFormat(704, 1280, 30),
+            RealtimeVideoFormat(1200, 1500, 24) to RealtimeVideoFormat(1200, 1500, 24),
+            RealtimeVideoFormat(3840, 2160, 30) to RealtimeVideoFormat(1920, 1080, 30),
+            RealtimeVideoFormat(2160, 3840, 30) to RealtimeVideoFormat(1080, 1920, 30),
+            RealtimeVideoFormat(1002, 600, 30) to RealtimeVideoFormat(668, 400, 30),
+        )
+        val uri = Uri.parse("https://example.test/driver.mp4")
+        val controller = ai.xmax.sdk.media.video.NetworkVideoController(context, MediaService())
+        for ((input, expected) in cases) {
+            try {
+                val stream = controller.create(uri, input, ai.xmax.sdk.RealtimeVideoSampleMethod.TIME, null)
+                assertEquals(expected, stream.videoTrack?.videoFormat)
+                assertEquals(uri.toString(), controller.reference?.path)
+                assertEquals(ai.xmax.sdk.RealtimeVideoSampleMethod.TIME, controller.reference?.sampleMethod)
+            } finally {
+                controller.stop()
+            }
+        }
+    }
+
     @Test
     fun playerReceivesOriginalMetadataAndResolvedOutputFormat() = runBlocking {
         for (rotation in VideoRotation.entries) {

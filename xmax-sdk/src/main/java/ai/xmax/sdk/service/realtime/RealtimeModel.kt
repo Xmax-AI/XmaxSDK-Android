@@ -38,7 +38,7 @@ public enum class RealtimeModel(
     /**
      * Supported video formats; camera dimensions must match exactly, while frame rates are recommended
      * defaults.
-     * Local images and videos retain their input aspect ratio; the server fits them into the closest model
+     * Images, local videos, and server-read videos retain their input aspect ratio; the server fits them into the closest model
      * canvas.
      * An empty list selects canvases using pixel-area bounds and model alignment instead of fixed sizes.
      */

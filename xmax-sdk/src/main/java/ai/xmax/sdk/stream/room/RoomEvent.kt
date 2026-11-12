@@ -61,10 +61,10 @@ internal object RoomEvent {
             faceRestoration,
         ).apply {
             if (paddingContain) {
-                if (targetVideoFormat == null || context.referenceVideo != null) {
+                if (targetVideoFormat == null) {
                     throw XmaxError(
                         XmaxErrorCode.INVALID_CONFIGURATION,
-                        "Contain padding requires a target size and a realtime frame input",
+                        "Contain padding requires an explicit target size",
                     )
                 }
 

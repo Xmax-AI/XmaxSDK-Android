@@ -988,8 +988,9 @@ internal class XmaxRealtimeManager(
             width = generationSize.width,
             height = generationSize.height,
         )
-        val paddingContain = resolvedContext?.referenceVideo == null &&
-            format.width.toLong() * generationFormat.height != format.height.toLong() * generationFormat.width
+        // Frame inputs and server-read videos use the same aspect-preserving canvas mapping.
+        val paddingContain = format.width.toLong() * generationFormat.height !=
+            format.height.toLong() * generationFormat.width
         token.commit(current)
         if (current.connectionState == RealtimeConnectionState.GENERATING && current.taskId != null) {
             generationManager.update(

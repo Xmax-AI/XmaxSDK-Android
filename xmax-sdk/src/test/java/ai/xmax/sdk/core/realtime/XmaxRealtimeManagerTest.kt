@@ -333,7 +333,7 @@ class XmaxRealtimeManagerTest {
     }
 
     @Test
-    fun `live input uses aspect based padding while server video omits padding`() = runTest {
+    fun `live and server video inputs use the same aspect based padding`() = runTest {
         for (network in listOf(false, true)) {
             val f = Fixture(StandardTestDispatcher(testScheduler))
             val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
@@ -341,12 +341,49 @@ class XmaxRealtimeManagerTest {
             f.stream.confirmation.complete(Unit)
             f.manager.startGeneration(local, RealtimeContext("first"))
             f.manager.startGeneration(RealtimeContext("second"))
-            assertEquals(listOf(!network), f.stream.startedPadding)
-            assertEquals(listOf(!network), f.stream.updatedPadding)
+            assertEquals(listOf(true), f.stream.startedPadding)
+            assertEquals(listOf(true), f.stream.updatedPadding)
             val canvas = format.copy(width = 1080, height = 1920)
             assertEquals(listOf(canvas), f.stream.startedFormats)
             assertEquals(listOf(canvas), f.stream.updatedFormats)
             f.manager.close()
+        }
+    }
+
+    /** Legacy gameplay dimensions use video sizing without coupling output dimensions to model buckets. */
+    @Test
+    fun `server video maps arbitrary input ratios with and without adaptive quality`() = runTest {
+        val cases = listOf(
+            Triple(RealtimeVideoFormat(704, 1280, 30), 1080 to 1920, true),
+            Triple(RealtimeVideoFormat(1280, 720, 30), 1920 to 1080, false),
+            Triple(RealtimeVideoFormat(1200, 1500, 30), 1152 to 1536, true),
+            Triple(RealtimeVideoFormat(1408, 1408, 30), 1408 to 1408, false),
+        )
+        for (adaptive in listOf(false, true)) {
+            for ((input, dimensions, contain) in cases) {
+                val f = Fixture(StandardTestDispatcher(testScheduler),
+                    options = RealtimeConfiguration(isAdaptiveQualityEnabled = adaptive))
+                f.media.imageFormat = input
+                val local = f.manager.createLocalImageStream(byteArrayOf(1))
+                f.media.networkVideoReference = RealtimeReferenceVideo("https://example.test/driver.mp4")
+                f.stream.confirmation.complete(Unit)
+                f.manager.startGeneration(local, RealtimeContext("first"))
+                val target = f.stream.startedTargets.single()!!
+                val taskId = f.manager.currentState.taskId
+                val canvas = input.copy(width = dimensions.first, height = dimensions.second)
+
+                assertEquals(input, local.videoTrack?.videoFormat)
+                assertEquals(listOf(canvas), f.stream.startedFormats)
+                assertEquals(listOf(contain), f.stream.startedPadding)
+                assertEquals(input.width.toLong() * target.height, input.height.toLong() * target.width)
+                if (!adaptive) assertEquals(input.copy(fps = 24), target)
+
+                f.manager.startGeneration(RealtimeContext("second"))
+                assertEquals(taskId, f.manager.currentState.taskId)
+                assertEquals(listOf(canvas), f.stream.updatedFormats)
+                assertEquals(listOf(contain), f.stream.updatedPadding)
+                f.manager.close()
+            }
         }
     }
 
@@ -876,6 +913,7 @@ class XmaxRealtimeManagerTest {
         val signal = rtc.roomMessages.map { org.json.JSONObject(it) }.single { it.optString("event") == "start" }
         assertEquals(media.networkVideoReference!!.path, signal.getJSONObject("params").getString("ref_video_path"))
         assertTrue(signal.getJSONObject("params").getBoolean("face_replace"))
+        assertEquals("contain", signal.getJSONObject("params").getString("padding"))
         assertEquals("[1080,1920]", signal.getJSONObject("params").getJSONArray("size").toString())
         assertEquals("[616,1120]", signal.getJSONObject("params").getJSONArray("target_size").toString())
         assertEquals(500, signal.getJSONObject("params").getInt("min_bitrate"))

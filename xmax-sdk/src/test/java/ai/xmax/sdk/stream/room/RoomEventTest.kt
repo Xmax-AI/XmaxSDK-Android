@@ -43,15 +43,39 @@ public class RoomEventTest {
     }
 
     @Test
-    public fun `contain start requires explicit target and excludes server video input`() {
+    public fun `contain start requires explicit target for every input source`() {
         val canvas = RealtimeVideoFormat(1920, 1024, 30)
         assertThrows(XmaxError::class.java) {
             RoomEvent.start("user", "task", canvas, RealtimeContext("prompt"), 100, 2000, paddingContain = true)
         }
         val context = RealtimeContext("prompt", referenceVideo = RealtimeReferenceVideo("https://example.test/video.mp4"))
         assertThrows(XmaxError::class.java) {
-            RoomEvent.start("user", "task", canvas, context, 100, 2000, targetVideoFormat = canvas, paddingContain = true)
+            RoomEvent.start("user", "task", canvas, context, 100, 2000, paddingContain = true)
         }
+    }
+
+    /** Network video keeps its URL and sampling policy while canvas and output sizes remain independent. */
+    @Test
+    public fun `network contain start and updates preserve the video contract`() {
+        val canvas = RealtimeVideoFormat(1080, 1920, 30)
+        val target = RealtimeVideoFormat(704, 1280, 24)
+        val reference = RealtimeReferenceVideo("https://example.test/driver.mp4", ai.xmax.sdk.RealtimeVideoSampleMethod.TIME)
+        val context = RealtimeContext("prompt", "reference.png", reference)
+        val params = JSONObject(RoomEvent.start("user", "task", canvas, context, 100, 2000,
+            targetVideoFormat = target, paddingContain = true)).getJSONObject("params")
+
+        assertEquals("contain", params.getString("padding"))
+        assertEquals("[1080,1920]", params.getJSONArray("size").toString())
+        assertEquals("[704,1280]", params.getJSONArray("target_size").toString())
+        assertEquals(reference.path, params.getString("ref_video_path"))
+        assertEquals("time", params.getString("sample_method"))
+        assertEquals("reference.png", params.getString("ref_image_path"))
+
+        val change = JSONObject(RoomEvent.changeCondition("user", "task", canvas, context,
+            paddingContain = true)).getJSONObject("params")
+        assertEquals("contain", change.getString("padding"))
+        assertFalse(change.has("ref_video_path"))
+        assertFalse(change.has("target_size"))
     }
 
     @Test
