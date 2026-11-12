@@ -15,8 +15,9 @@ import ai.xmax.sdk.media.interaction.InteractionControlling
 import ai.xmax.sdk.render.RenderControlling
 import kotlinx.coroutines.currentCoroutineContext
 import java.nio.ByteBuffer
-import java.util.Base64
 import java.util.UUID
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
  * Coordinates generation signaling, remote stream confirmation, condition updates, and
@@ -257,13 +258,14 @@ internal class XmaxRealtimeGenerationManager(
          *
          * @return A unique identifier for generation signaling.
          */
+        @OptIn(ExperimentalEncodingApi::class)
         fun createTaskId(): String {
             val uuid = UUID.randomUUID()
             val bytes = ByteBuffer.allocate(16)
                 .putLong(uuid.mostSignificantBits)
                 .putLong(uuid.leastSignificantBits)
                 .array()
-            val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+            val encoded = Base64.UrlSafe.encode(bytes).trimEnd('=')
             return "task-$encoded?os=android"
         }
     }

@@ -31,6 +31,7 @@ import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
 import android.view.Surface
 import android.view.TextureView
 import androidx.compose.ui.unit.IntSize
@@ -390,10 +391,13 @@ private class NetworkVideoPreview(
 
         if (completed) {
             // Restore the final frame when rebinding a view without replaying the entire video.
-            player.seekTo(
-                (player.duration - 1).coerceAtLeast(0).toLong(),
-                MediaPlayer.SEEK_CLOSEST,
-            )
+            val positionMs = (player.duration - 1).coerceAtLeast(0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                player.seekTo(positionMs.toLong(), MediaPlayer.SEEK_CLOSEST)
+            } else {
+                @Suppress("DEPRECATION")
+                player.seekTo(positionMs)
+            }
         } else {
             player.start()
         }

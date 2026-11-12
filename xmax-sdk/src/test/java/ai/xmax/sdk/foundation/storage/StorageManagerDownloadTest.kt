@@ -105,6 +105,30 @@ class StorageManagerDownloadTest {
         }
     }
 
+    @Test
+    fun `failed replacement preserves destination and removes staging file`() = runTest {
+        withTemporaryDirectory { directory ->
+            val destination = File(directory, "media.bin").apply { mkdir() }
+            val original = File(destination, "original.bin").apply { writeText("original") }
+            val downloaded = "complete download".toByteArray()
+
+            val error = expectDownloadError {
+                downloadFile(
+                    remoteUrl = TEST_URL,
+                    destination = destination,
+                    progress = null,
+                    connectionFactory = {
+                        DownloadConnection(downloaded, downloaded.size.toLong())
+                    },
+                )
+            }
+
+            assertEquals(XmaxErrorCode.DOWNLOAD_ERROR, error.code)
+            assertEquals("original", original.readText())
+            assertNoStagingFiles(directory)
+        }
+    }
+
     private suspend fun expectDownloadError(block: suspend () -> Unit): XmaxError = try {
         block()
         throw AssertionError("Expected XmaxError")
@@ -132,7 +156,8 @@ class StorageManagerDownloadTest {
     ) : HttpURLConnection(URL(TEST_URL)) {
         override fun getResponseCode(): Int = HTTP_OK
 
-        override fun getContentLengthLong(): Long = declaredLength
+        override fun getHeaderField(name: String?): String? =
+            declaredLength.toString().takeIf { name.equals("Content-Length", ignoreCase = true) }
 
         override fun getInputStream(): InputStream = if (failsAfterBody) {
             FailingInputStream(body)

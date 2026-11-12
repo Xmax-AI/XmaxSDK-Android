@@ -11,6 +11,7 @@
 
 plugins {
     id("com.android.library")
+    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.vanniktech.maven.publish")
 }
@@ -23,11 +24,14 @@ version = sdkVersion
 
 android {
     namespace = "ai.xmax.sdk"
-    compileSdk = 37
+    compileSdk = 36
     ndkVersion = "27.2.12479018"
 
     defaultConfig {
-        minSdk = 26
+        minSdk = 23
+        aarMetadata {
+            minCompileSdk = 36
+        }
         consumerProguardFiles("consumer-rules.pro")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -56,8 +60,12 @@ android {
     }
 }
 
+kotlin {
+    jvmToolchain(17)
+}
+
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2026.08.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.06.01")
 
     api(composeBom)
     api("androidx.compose.ui:ui")
@@ -66,10 +74,10 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.4.2")
     implementation("io.agora.rtc:full-rtc-basic:4.6.4")
     implementation("com.qcloud.cos:cos-android-lite-nobeacon:5.9.52")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("org.json:json:20260814")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")

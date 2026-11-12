@@ -109,12 +109,9 @@ internal class RealtimeTiming(
         fun mark(
             stage: Stage,
         ) = synchronized(lock) {
-            if (!completed) times.putIfAbsent(
-                stage,
-                clock(),
-            )
-
-            Unit
+            if (!completed && stage !in times) {
+                times[stage] = clock()
+            }
         }
 
         /**
@@ -153,12 +150,9 @@ internal class RealtimeTiming(
             taskId: String,
             stage: Stage,
         ) = synchronized(lock) {
-            if (!completed && this.taskId == taskId) times.putIfAbsent(
-                stage,
-                clock(),
-            )
-
-            Unit
+            if (!completed && this.taskId == taskId && stage !in times) {
+                times[stage] = clock()
+            }
         }
 
         /**

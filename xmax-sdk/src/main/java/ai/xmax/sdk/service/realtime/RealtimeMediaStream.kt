@@ -73,7 +73,7 @@ public class RealtimeVideoTrack internal constructor(
     internal fun updateVideoFormat(
         videoFormat: RealtimeVideoFormat,
     ) {
-        metadata.updateAndGet { it.copy(videoFormat = videoFormat) }
+        updateMetadata { it.copy(videoFormat = videoFormat) }
     }
 
     /**
@@ -84,7 +84,19 @@ public class RealtimeVideoTrack internal constructor(
     internal fun updatePosition(
         position: CameraPosition,
     ) {
-        metadata.updateAndGet { it.copy(position = position) }
+        updateMetadata { it.copy(position = position) }
+    }
+
+    /**
+     * Applies a metadata update without losing a concurrent change to another field.
+     *
+     * @param transform The update to apply to the latest snapshot.
+     */
+    private inline fun updateMetadata(transform: (Metadata) -> Metadata) {
+        do {
+            val current = metadata.get()
+            val updated = transform(current)
+        } while (!metadata.compareAndSet(current, updated))
     }
 
     /**

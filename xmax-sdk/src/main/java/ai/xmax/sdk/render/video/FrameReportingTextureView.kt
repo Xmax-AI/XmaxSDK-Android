@@ -12,6 +12,7 @@ package ai.xmax.sdk.render.video
 
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.os.Build
 import android.view.TextureView
 
 /**
@@ -49,13 +50,12 @@ internal class FrameReportingTextureView(
     private val frameCheck = Runnable {
         frameCheckPending = false
         val surface = surfaceTexture
-        // Checks for a valid texture frame after drawing before notifying first-frame presentation.
-        if (!hasDisplayedFrame && isAttachedToWindow && surface != null &&
-            !surface.isReleased && surface.timestamp != 0L
-        ) {
-            hasDisplayedFrame = true
-            onFrameDisplayed?.invoke(this)
-        }
+        if (hasDisplayedFrame || !isAttachedToWindow || surface == null) return@Runnable
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && surface.isReleased) return@Runnable
+        if (surface.timestamp == 0L) return@Runnable
+
+        hasDisplayedFrame = true
+        onFrameDisplayed?.invoke(this)
     }
 
     init {

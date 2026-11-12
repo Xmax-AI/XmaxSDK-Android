@@ -117,7 +117,9 @@ internal class UrlConnectionApiTransport(
                 connectTimeout = request.connectTimeoutMs
                 readTimeout = request.readTimeoutMs
                 useCaches = false
-                request.headers.forEach(::setRequestProperty)
+                for ((name, value) in request.headers) {
+                    setRequestProperty(name, value)
+                }
                 request.body?.let { payload ->
                     doOutput = true
                     setFixedLengthStreamingMode(payload.size)

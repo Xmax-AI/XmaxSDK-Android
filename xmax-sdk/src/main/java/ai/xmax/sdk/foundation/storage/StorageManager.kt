@@ -35,9 +35,6 @@ import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
 import java.net.URLEncoder
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -378,7 +375,10 @@ internal suspend fun downloadFile(
                     )
                 }
 
-                val total = connection.contentLengthLong
+                val total = connection.getHeaderField("Content-Length")
+                    ?.trim()
+                    ?.toLongOrNull()
+                    ?.coerceAtLeast(-1L) ?: -1L
                 var completed = 0L
                 val stagingFile = File.createTempFile(
                     ".xmax-download-",
@@ -416,10 +416,14 @@ internal suspend fun downloadFile(
                 }
 
                 ensureActive()
-                replaceAtomically(
-                    stagingFile,
-                    resolvedDestination,
-                )
+                // A same-directory rename on Android replaces the destination atomically.
+                if (!stagingFile.renameTo(resolvedDestination)) {
+                    throw XmaxError(
+                        XmaxErrorCode.DOWNLOAD_ERROR,
+                        "Could not replace the download destination",
+                    )
+                }
+
                 temporaryFile = null
                 runCatching { progress?.onProgress(
                     completed,
@@ -457,31 +461,3 @@ internal suspend fun downloadFile(
  * The destinations currently being written, preventing concurrent replacement of the same file.
  */
 private val activeDownloads = ConcurrentHashMap<String, Unit>()
-
-/**
- * Replaces the destination with a completed download, preserving replacement failures.
- *
- * @param source The complete download that will replace the destination.
- * @param destination The destination file replaced after a successful download.
- */
-private fun replaceAtomically(
-    source: File,
-    destination: File,
-) {
-    try {
-        Files.move(
-            source.toPath(),
-            destination.toPath(),
-            StandardCopyOption.ATOMIC_MOVE,
-            StandardCopyOption.REPLACE_EXISTING,
-        )
-    } catch (
-        error: AtomicMoveNotSupportedException,
-    ) {
-        throw XmaxError(
-            XmaxErrorCode.DOWNLOAD_ERROR,
-            "Download destination does not support atomic replacement",
-            cause = error,
-        )
-    }
-}

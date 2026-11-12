@@ -13,7 +13,6 @@ package com.xmax.xlab
 
 import android.content.Context
 import android.content.res.Configuration
-import android.icu.util.ULocale
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
@@ -21,6 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.edit
+import androidx.core.os.ConfigurationCompat
+import androidx.core.text.ICUCompat
 import ai.xmax.sdk.XmaxEnvironment
 import java.util.Locale
 
@@ -98,7 +99,8 @@ internal fun xLabLocalizedContext(language: XLabLanguage): Context {
  */
 internal fun xLabErrorText(message: String?, fallback: String, localizedContext: Context): String {
     val detail = message?.takeIf { it.isNotBlank() } ?: return fallback
-    val isChineseUi = localizedContext.resources.configuration.locales[0].language == Locale.CHINESE.language
+    val locale = ConfigurationCompat.getLocales(localizedContext.resources.configuration)[0]
+    val isChineseUi = locale?.language == Locale.CHINESE.language
     return if (!isChineseUi && detail.any { it in '\u3400'..'\u9FFF' }) fallback else detail
 }
 
@@ -107,9 +109,9 @@ internal fun xLabErrorText(message: String?, fallback: String, localizedContext:
  */
 @Composable
 internal fun xLabUsesSimplifiedChinese(language: XLabLanguage): Boolean {
-    val systemLocale = LocalConfiguration.current.locales[0]
+    val systemLocale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0]
     return when (language) {
-        XLabLanguage.SYSTEM -> systemLocale.usesSimplifiedChinese()
+        XLabLanguage.SYSTEM -> systemLocale?.usesSimplifiedChinese() == true
         XLabLanguage.SIMPLIFIED_CHINESE -> true
         XLabLanguage.ENGLISH -> false
     }
@@ -131,6 +133,5 @@ private fun Context.localized(currentConfiguration: Configuration, locale: Local
 
 private fun Locale.usesSimplifiedChinese(): Boolean {
     if (language != Locale.CHINESE.language) return false
-    val likelyLocale = ULocale.addLikelySubtags(ULocale.forLocale(this))
-    return likelyLocale.script == "Hans"
+    return ICUCompat.maximizeAndGetScript(this) == "Hans"
 }

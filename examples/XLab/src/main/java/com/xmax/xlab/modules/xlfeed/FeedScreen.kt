@@ -80,6 +80,7 @@ import ai.xmax.sdk.XmaxConfiguration
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.xmax.xlab.BuildConfig
 import com.xmax.xlab.R
 import com.xmax.xlab.XLabLanguage
 import com.xmax.xlab.xLabStringResource
@@ -582,7 +583,7 @@ private fun RuntimeMetrics(
         )
         RuntimeMetric(
             xLabStringResource(R.string.feed_os, language),
-            "26+",
+            "${BuildConfig.MIN_SDK}+",
             Modifier.weight(1f),
         )
         RuntimeMetric(

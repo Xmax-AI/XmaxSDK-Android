@@ -32,6 +32,7 @@ import android.media.MediaCodecInfo
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
 import java.lang.ref.WeakReference
 import java.nio.ByteBuffer
@@ -559,10 +560,13 @@ internal class VideoPlayerController(
             val sourceFormat = extractor.getTrackFormat(trackIndex)
             val mime = sourceFormat.getString(MediaFormat.KEY_MIME)
                 ?: throw mediaError("The media audio track has no MIME type")
-            sourceFormat.setInteger(
-                MediaFormat.KEY_PCM_ENCODING,
-                AudioFormat.ENCODING_PCM_16BIT,
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                sourceFormat.setInteger(
+                    MediaFormat.KEY_PCM_ENCODING,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                )
+            }
+
             codec = MediaCodec.createDecoderByType(mime)
             codec.configure(
                 sourceFormat,
@@ -621,7 +625,9 @@ internal class VideoPlayerController(
                         val outputFormat = codec.outputFormat
                         outputSampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                         outputChannelCount = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                        outputEncoding = if (outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
+                        outputEncoding = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+                            outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)
+                        ) {
                             outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
                         } else {
                             AudioFormat.ENCODING_PCM_16BIT
