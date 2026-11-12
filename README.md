@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <a href="https://developer.android.com/about/versions/oreo"><img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84" alt="Android 8.0+"></a>
-  <a href="https://kotlinlang.org/"><img src="https://img.shields.io/badge/Kotlin-2.3-7F52FF" alt="Kotlin 2.3"></a>
+  <a href="https://developer.android.com/about/versions/marshmallow"><img src="https://img.shields.io/badge/Android-6.0%2B-3DDC84" alt="Android 6.0+"></a>
+  <a href="https://kotlinlang.org/"><img src="https://img.shields.io/badge/Kotlin-2.1-7F52FF" alt="Kotlin 2.1"></a>
   <a href="https://platform.xmaxai.com/"><img src="https://img.shields.io/badge/Realtime-AI-FF9500" alt="Realtime AI"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-4C9A2A" alt="MIT License"></a>
 </p>
@@ -169,9 +169,9 @@ We introduce XmaxSDK, a native Android SDK designed for real-time interactive vi
 
 ## Prerequisites
 
-- Android 8.0 (API level 26) or later
-- Kotlin 2.3 and JDK 17
-- Android SDK 37 for building from source
+- Android 6.0 (API level 23) or later
+- Kotlin 2.1.21 and JDK 17
+- Android SDK 36, with `compileSdk` 36 or later in the integrating app
 - An Xmax API key
 
 > [!WARNING]
@@ -208,7 +208,7 @@ Add XmaxSDK to your application module:
 
 ```kotlin
 dependencies {
-    implementation("ai.xmax:xmax-sdk:1.1.2")
+    implementation("ai.xmax:xmax-sdk:1.1.3")
 }
 ```
 
