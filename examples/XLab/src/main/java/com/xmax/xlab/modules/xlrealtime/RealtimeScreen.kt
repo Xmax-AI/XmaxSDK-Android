@@ -1342,7 +1342,7 @@ private fun MediaCanvas(
     }
     val contentMode = when (source) {
         RealtimeSource.Camera -> when (cameraVideoFormat?.let { it.width to it.height }) {
-            1920 to 1080, 1080 to 1920 -> VideoContentMode.FILL
+            1920 to 1080, 1080 to 1920, 1280 to 704, 704 to 1280 -> VideoContentMode.FILL
             else -> VideoContentMode.FIT
         }
         is RealtimeSource.Image,

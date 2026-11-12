@@ -57,6 +57,11 @@ internal class RoomController(
      * Submits each complete generation control once through an independent HTTP request.
      */
     private val relayMessage: (suspend (String) -> Unit)? = null,
+
+    /**
+     * Whether generation controls use RTC retries and HTTP relay.
+     */
+    private val redundantSignalingEnabled: Boolean = true,
 ) : RoomControlling {
 
     /**
@@ -396,6 +401,7 @@ internal class RoomController(
         },
         scope = commandScope,
         relayMessage = relayMessage,
+        redundantSignalingEnabled = redundantSignalingEnabled,
     )
 
     /**

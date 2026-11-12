@@ -199,6 +199,7 @@ internal object XmaxRealtimeFactory {
             rtcManager = rtcManager,
             roomController = RoomController(
                 rtcManager = rtcManager,
+                redundantSignalingEnabled = options.model == RealtimeModel.X2_1,
                 relayMessage = { message ->
                     val session = connectionManager.currentSession
                     val data = JSONObject(message)

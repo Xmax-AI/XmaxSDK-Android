@@ -71,4 +71,29 @@ public enum class RealtimeCameraPreset(
             1_152,
         ),
     ),
+
+    /**
+     * An 11:20 portrait image for X2.1 Flash.
+     */
+    RESOLUTION_704X1280(IntSize(704, 1_280)),
+
+    /**
+     * A 20:11 landscape image for X2.1 Flash.
+     */
+    RESOLUTION_1280X704(IntSize(1_280, 704)),
+
+    /**
+     * A square image for X2.1 Flash.
+     */
+    RESOLUTION_960X960(IntSize(960, 960)),
+
+    /**
+     * A 4:3 landscape image for X2.1 Flash.
+     */
+    RESOLUTION_1024X768(IntSize(1_024, 768)),
+
+    /**
+     * A 3:4 portrait image for X2.1 Flash.
+     */
+    RESOLUTION_768X1024(IntSize(768, 1_024)),
 }

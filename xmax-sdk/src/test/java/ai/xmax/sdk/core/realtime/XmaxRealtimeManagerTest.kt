@@ -119,7 +119,11 @@ class XmaxRealtimeManagerTest {
         val expected = RealtimeVideoFormat(1080, 1920, 30)
         assertEquals(expected, f.manager.currentCameraVideoFormat)
         assertEquals(RealtimeCameraPreset.RESOLUTION_1080X1920, f.manager.currentCameraPreset)
-        for (preset in RealtimeCameraPreset.entries) {
+        val supportedFormats = f.manager.options.model.supportedVideoFormats
+        val presets = RealtimeCameraPreset.entries.filter { preset ->
+            supportedFormats.any { it.width == preset.size.width && it.height == preset.size.height }
+        }
+        for (preset in presets) {
             f.manager.updateCameraFormat(preset)
             val format = expected.copy(width = preset.size.width, height = preset.size.height)
             assertEquals(format, f.manager.currentCameraVideoFormat)
@@ -143,16 +147,24 @@ class XmaxRealtimeManagerTest {
     }
 
     @Test
-    fun `every x21 camera preset creates a stream at the default frame rate`() = runTest {
-        for (preset in RealtimeCameraPreset.entries) {
-            val f = Fixture(StandardTestDispatcher(testScheduler))
-            val stream = f.manager.createLocalCameraStream(preset)
-            val expected = RealtimeVideoFormat(preset.size.width, preset.size.height, 30)
+    fun `every model camera preset creates a stream at the default frame rate`() = runTest {
+        for (model in RealtimeModel.entries) {
+            for (format in model.supportedVideoFormats) {
+                val preset = RealtimeCameraPreset.entries.single {
+                    it.size.width == format.width && it.size.height == format.height
+                }
+                val f = Fixture(
+                    StandardTestDispatcher(testScheduler),
+                    mediaService = MediaService(model),
+                    options = RealtimeConfiguration(model = model),
+                )
+                val stream = f.manager.createLocalCameraStream(preset)
 
-            assertEquals(expected, stream.videoTrack?.videoFormat)
-            assertEquals(preset, f.manager.currentCameraPreset)
-            assertEquals(RealtimeConnectionState.READY, f.manager.currentState.connectionState)
-            f.manager.close()
+                assertEquals(format, stream.videoTrack?.videoFormat)
+                assertEquals(preset, f.manager.currentCameraPreset)
+                assertEquals(RealtimeConnectionState.READY, f.manager.currentState.connectionState)
+                f.manager.close()
+            }
         }
     }
 

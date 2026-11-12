@@ -21,35 +21,56 @@ import org.junit.Test
 
 public class RealtimeModelTest {
     @Test
-    public fun `x21 uses environment routing and five resolution buckets`() {
+    public fun `realtime models use environment routing and x21 stays the default`() {
         assertEquals(
-            listOf("x2.1"),
+            listOf("x2.1", "x2.1-flash"),
             RealtimeModel.entries.map { it.id },
         )
         assertEquals(
-            listOf("X2.1"),
+            listOf("X2.1", "X2.1 Flash"),
             RealtimeModel.entries.map { it.displayName },
         )
         assertEquals(RealtimeModel.X2_1, RealtimeConfiguration().model)
         assertEquals("https://cloud.xmax.22duck.cn/open/api/v1", XmaxEnvironment.CHINA.realtimeApiBaseUrl)
         assertEquals("https://api.xmax.ai/open/api/v1", XmaxEnvironment.GLOBAL.realtimeApiBaseUrl)
         assertEquals("https://api.xmax.cloud/open/api/v1", XmaxEnvironment.GLOBAL.apiBaseUrl)
-        RealtimeModel.entries.forEach { model ->
-            assertEquals(
-                listOf(
-                    IntSize(1920, 1080),
-                    IntSize(1080, 1920),
-                    IntSize(1408, 1408),
-                    IntSize(1152, 1536),
-                    IntSize(1536, 1152),
-                ),
-                model.supportedVideoFormats.map { IntSize(it.width, it.height) },
-            )
+    }
+
+    @Test
+    public fun `models use distinct camera buckets and pixel limits`() {
+        val x21 = RealtimeModel.X2_1
+        assertEquals(
+            listOf(
+                IntSize(1920, 1080),
+                IntSize(1080, 1920),
+                IntSize(1408, 1408),
+                IntSize(1152, 1536),
+                IntSize(1536, 1152),
+            ),
+            x21.supportedVideoFormats.map { IntSize(it.width, it.height) },
+        )
+        assertEquals(RealtimeVideoFormat(1080, 1920, 30), x21.defaultCameraVideoFormat)
+        assertEquals(2_100_000, x21.maximumInputPixels)
+
+        val flash = RealtimeModel.X2_1_FLASH
+        assertEquals(
+            listOf(
+                IntSize(704, 1280),
+                IntSize(1280, 704),
+                IntSize(960, 960),
+                IntSize(1024, 768),
+                IntSize(768, 1024),
+            ),
+            flash.supportedVideoFormats.map { IntSize(it.width, it.height) },
+        )
+        assertEquals(RealtimeVideoFormat(704, 1280, 30), flash.defaultCameraVideoFormat)
+        assertEquals(921_600, flash.maximumInputPixels)
+
+        for (model in RealtimeModel.entries) {
+            assertEquals(30, model.defaultFrameRate)
             assertTrue(model.supportedVideoFormats.all { it.fps == model.defaultFrameRate })
-            assertEquals(RealtimeVideoFormat(1080, 1920, 30), model.defaultCameraVideoFormat)
             assertTrue(model.defaultCameraVideoFormat in model.supportedVideoFormats)
             assertEquals(200_000, model.minimumInputPixels)
-            assertEquals(2_100_000, model.maximumInputPixels)
             assertEquals(32, model.inputSizeAlignment)
             assertTrue(model.supportedVideoFormats.all {
                 it.width.toLong() * it.height in model.minimumInputPixels.toLong()..model.maximumInputPixels.toLong()
@@ -58,9 +79,10 @@ public class RealtimeModelTest {
     }
 
     @Test
-    public fun `only x21 is selectable and regional preview models are removed`() {
-        assertEquals(listOf(RealtimeModel.X2_1), RealtimeModel.entries.toList())
+    public fun `built-in models are selectable and regional preview models are removed`() {
+        assertEquals(listOf(RealtimeModel.X2_1, RealtimeModel.X2_1_FLASH), RealtimeModel.entries.toList())
         assertSame(RealtimeModel.X2_1, RealtimeModel.valueOf("X2_1"))
+        assertSame(RealtimeModel.X2_1_FLASH, RealtimeModel.valueOf("X2_1_FLASH"))
         for (name in listOf("X2_1_1_PREVIEW_CN", "X2_1_1_PREVIEW_US")) {
             assertThrows(IllegalArgumentException::class.java) {
                 RealtimeModel.valueOf(name)

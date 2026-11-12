@@ -239,6 +239,35 @@ public class RoomControllerTest {
         assertEquals(3, relays.size)
     }
 
+    @Test
+    public fun `single delivery sends every generation control once over RTC`() = runTest {
+        val rtc = RtcManagingStub()
+        val relays = mutableListOf<String>()
+        val controller = RoomController(
+            rtcManager = rtc,
+            heartbeat = RoomHeartbeat(rtc, sleeper = { awaitCancellation() }, scope = backgroundScope),
+            commandScope = backgroundScope,
+            relayMessage = { relays += it },
+            redundantSignalingEnabled = false,
+        )
+        controller.join(connection()) {}
+        val format = RealtimeVideoFormat(704, 1280, 30)
+        controller.startGeneration("task", format, RealtimeContext("start")).await()
+        controller.changeGenerationCondition("task", format, RealtimeContext("updated")).await()
+        controller.changeTargetSize("task", format) {}.await()
+        advanceTimeBy(6_001)
+        runCurrent()
+
+        val messages = rtc.roomMessages.map(::JSONObject)
+        assertEquals(
+            listOf("start", "change_condition", "change_target_size"),
+            messages.map { it.getString("event") },
+        )
+        assertTrue(messages.all { it.getString("xid").isNotBlank() })
+        assertTrue(relays.isEmpty())
+        controller.leave()
+    }
+
     private fun connection(): RealtimeSessionConnection = RealtimeSessionConnection(
         roomId = "room-id",
         userId = "user-id",

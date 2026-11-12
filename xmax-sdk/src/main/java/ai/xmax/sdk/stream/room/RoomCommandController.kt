@@ -27,7 +27,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 /**
- * Coordinates RTC retries and one HTTP copy independently of generation readiness.
+ * Sends generation commands and manages redundant delivery independently of generation readiness.
  */
 internal class RoomCommandController(
     /**
@@ -44,6 +44,11 @@ internal class RoomCommandController(
      * Submits the complete command once through a separately cancellable HTTP request.
      */
     private val relayMessage: (suspend (String) -> Unit)? = null,
+
+    /**
+     * Whether to schedule retries and submit an HTTP copy after the initial RTC attempt.
+     */
+    private val redundantSignalingEnabled: Boolean = true,
 ) {
 
     /**
@@ -277,13 +282,19 @@ internal class RoomCommandController(
     }
 
     /**
-     * Schedules two send rounds and the six-second receipt deadline.
+     * Sends the original command and schedules any redundant attempts.
      *
      * @param command The current logical command.
      */
     private fun begin(
         command: Command,
     ) {
+        if (!redundantSignalingEnabled) {
+            command.retrying = false
+            attempt(command, initial = true)
+            return
+        }
+
         for (offset in listOf(300L, 1_000L, 3_000L, 3_300L, 4_000L, 6_000L)) {
             val timer = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 delay(offset)
@@ -360,7 +371,7 @@ internal class RoomCommandController(
         command: Command,
         initial: Boolean,
     ) {
-        if (command.cancelled || !command.retrying) return
+        if (command.cancelled || (!initial && !command.retrying)) return
         try {
             if (!command.sent) command.ensureCurrent()
         } catch (error: Throwable) {

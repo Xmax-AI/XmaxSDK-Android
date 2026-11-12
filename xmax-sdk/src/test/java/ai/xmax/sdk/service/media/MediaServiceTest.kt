@@ -23,23 +23,44 @@ import org.junit.Test
 class MediaServiceTest {
     @Test
     fun `generation canvas selects nearest aspect without changing media input`() {
-        RealtimeModel.entries.forEach { model ->
-            val service = MediaService(model)
-            for (size in listOf(IntSize(1920, 1080), IntSize(1280, 720), IntSize(3840, 2160))) {
-                assertEquals(IntSize(1920, 1080), service.resolveGenerationSize(size))
-                assertEquals(IntSize(1080, 1920), service.resolveGenerationSize(IntSize(size.height, size.width)))
-            }
-            assertEquals(IntSize(1536, 1152), service.resolveGenerationSize(IntSize(640, 480)))
-            assertEquals(IntSize(1152, 1536), service.resolveGenerationSize(IntSize(480, 640)))
-            assertEquals(IntSize(1408, 1408), service.resolveGenerationSize(IntSize(640, 640)))
-            assertEquals(IntSize(1152, 1536), service.resolveGenerationSize(IntSize(1200, 1500)))
-            assertEquals(IntSize(1152, 1536), service.resolveGenerationSize(IntSize(1156, 1536)))
-            assertEquals(IntSize(1080, 1920), service.resolveGenerationSize(IntSize(1024, 1920)))
-            assertEquals(IntSize(1920, 1080), service.resolveGenerationSize(IntSize(1920, 1024)))
-            model.supportedVideoFormats.map { IntSize(it.width, it.height) }.forEach { assertEquals(it, service.resolveGenerationSize(it)) }
-            assertTrue(service.resolveGenerationSize(IntSize(640, 640)) in model.supportedVideoFormats.map { IntSize(it.width, it.height) })
-            assertThrows(XmaxError::class.java) { service.resolveGenerationSize(IntSize(0, 1080)) }
+        val service = MediaService(RealtimeModel.X2_1)
+        for (size in listOf(IntSize(1920, 1080), IntSize(1280, 720), IntSize(3840, 2160))) {
+            assertEquals(IntSize(1920, 1080), service.resolveGenerationSize(size))
+            assertEquals(IntSize(1080, 1920), service.resolveGenerationSize(IntSize(size.height, size.width)))
         }
+        assertEquals(IntSize(1536, 1152), service.resolveGenerationSize(IntSize(640, 480)))
+        assertEquals(IntSize(1152, 1536), service.resolveGenerationSize(IntSize(480, 640)))
+        assertEquals(IntSize(1408, 1408), service.resolveGenerationSize(IntSize(640, 640)))
+        assertEquals(IntSize(1152, 1536), service.resolveGenerationSize(IntSize(1200, 1500)))
+        assertEquals(IntSize(1152, 1536), service.resolveGenerationSize(IntSize(1156, 1536)))
+        assertEquals(IntSize(1080, 1920), service.resolveGenerationSize(IntSize(1024, 1920)))
+        assertEquals(IntSize(1920, 1080), service.resolveGenerationSize(IntSize(1920, 1024)))
+        service.model.supportedVideoFormats.map { IntSize(it.width, it.height) }.forEach {
+            assertEquals(it, service.resolveGenerationSize(it))
+        }
+        assertThrows(XmaxError::class.java) { service.resolveGenerationSize(IntSize(0, 1080)) }
+    }
+
+    @Test
+    fun `Flash limits media area and selects its own generation canvases`() {
+        val model = RealtimeModel.X2_1_FLASH
+        val service = MediaService(model)
+
+        for (format in model.supportedVideoFormats) {
+            val canvas = IntSize(format.width, format.height)
+            val input = IntSize(format.width * 2, format.height * 2)
+            for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
+                val resolved = service.resolveMediaSize(input, source)
+                assertTrue(resolved.width.toLong() * resolved.height <= model.maximumInputPixels)
+                assertEquals(input.width.toLong() * resolved.height, input.height.toLong() * resolved.width)
+                assertEquals(canvas, service.resolveGenerationSize(resolved))
+            }
+        }
+
+        val error = assertThrows(XmaxError::class.java) {
+            service.resolveMediaSize(IntSize(1920, 1080), RealtimeMediaSource.CAMERA)
+        }
+        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, error.code)
     }
 
     @Test fun `camera preserves only the declared buckets`() {
@@ -70,19 +91,18 @@ class MediaServiceTest {
             IntSize(1001, 1000) to IntSize(1000, 1000),
             IntSize(1001, 600) to IntSize(1000, 600),
         )
-        for (model in RealtimeModel.entries) {
-            val service = MediaService(model)
-            for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
-                for ((input, expected) in cases) {
-                    val actual = service.resolveMediaSize(input, source)
-                    assertEquals(expected, actual)
-                    assertTrue(actual.width.toLong() * actual.height <= model.maximumInputPixels)
-                    assertTrue(actual.width.toLong() * actual.height >= model.minimumInputPixels)
-                    assertEquals(0, actual.width % 4)
-                    assertEquals(0, actual.height % 4)
-                    assertTrue(actual.width <= input.width && actual.height <= input.height)
-                    assertEquals(actual, service.resolveTargetSize(actual, Size(actual.width.toFloat(), actual.height.toFloat())))
-                }
+        val model = RealtimeModel.X2_1
+        val service = MediaService(model)
+        for (source in listOf(RealtimeMediaSource.IMAGE, RealtimeMediaSource.VIDEO, RealtimeMediaSource.EXTERNAL)) {
+            for ((input, expected) in cases) {
+                val actual = service.resolveMediaSize(input, source)
+                assertEquals(expected, actual)
+                assertTrue(actual.width.toLong() * actual.height <= model.maximumInputPixels)
+                assertTrue(actual.width.toLong() * actual.height >= model.minimumInputPixels)
+                assertEquals(0, actual.width % 4)
+                assertEquals(0, actual.height % 4)
+                assertTrue(actual.width <= input.width && actual.height <= input.height)
+                assertEquals(actual, service.resolveTargetSize(actual, Size(actual.width.toFloat(), actual.height.toFloat())))
             }
         }
     }
