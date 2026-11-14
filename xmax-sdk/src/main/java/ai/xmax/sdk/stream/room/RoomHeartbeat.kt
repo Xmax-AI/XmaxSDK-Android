@@ -27,21 +27,14 @@ import kotlinx.coroutines.cancelAndJoin
 
 /**
  * Sends RTC room heartbeats while rejecting stopped cycles.
+ *
+ * @property rtcManager The manager for RTC capture, publication, subscription, and rendering.
+ * @property sleeper The suspending function waiting for the next heartbeat.
+ * @property scope The scope for background tasks.
  */
 internal class RoomHeartbeat(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
     private val rtcManager: RtcManaging,
-
-    /**
-     * The suspending function waiting for the next heartbeat.
-     */
     private val sleeper: suspend () -> Unit = { delay(10_000L) },
-
-    /**
-     * The scope for background tasks.
-     */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
 

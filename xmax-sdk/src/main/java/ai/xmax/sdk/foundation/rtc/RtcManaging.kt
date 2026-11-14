@@ -11,8 +11,6 @@
 package ai.xmax.sdk.foundation.rtc
 
 import ai.xmax.sdk.AudioFrame
-import ai.xmax.sdk.CameraPosition
-import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
 import ai.xmax.sdk.VideoFrame
 import ai.xmax.sdk.VideoContentMode
 import android.view.View
@@ -76,72 +74,6 @@ internal interface RtcManaging {
      * Stops RTC external audio input.
      */
     fun stopExternalAudioSource()
-
-    /**
-     * Selects internal RTC audio input and starts microphone capture.
-     */
-    fun startAudioCapture()
-
-    /**
-     * Stops internal RTC microphone capture.
-     */
-    fun stopAudioCapture()
-
-    /**
-     * Starts internal RTC camera capture with the requested format.
-     *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @param frameRate The video frame rate, in fps.
-     */
-    fun startVideoCapture(
-        width: Int,
-        height: Int,
-        frameRate: Int,
-    )
-
-    /**
-     * Updates camera capture while retaining the lens and local preview binding.
-     *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @param frameRate The capture frame rate, in fps.
-     */
-    fun updateVideoCaptureFormat(
-        width: Int,
-        height: Int,
-        frameRate: Int,
-    )
-
-    /**
-     * Stops internal RTC camera capture.
-     */
-    fun stopVideoCapture()
-
-    /**
-     * Switches the camera used by internal RTC capture.
-     *
-     * @param position The front or rear camera to use.
-     */
-    fun switchCamera(
-        position: CameraPosition,
-    )
-
-    /**
-     * Binds local video to a rendering view.
-     *
-     * @param view The view to bind or unbind.
-     * @param contentMode Aspect-preserving fit or fill scaling.
-     */
-    fun bindLocalVideo(
-        view: View,
-        contentMode: VideoContentMode,
-    )
-
-    /**
-     * Unbinds the local rendering view.
-     */
-    fun unbindLocalVideo()
 
     /**
      * Binds a remote stream to its rendering view.
@@ -277,15 +209,6 @@ internal interface RtcManaging {
      */
     fun setEventListener(
         listener: RtcEventListener?,
-    )
-
-    /**
-     * Sets the camera preview readiness listener; null unregisters it.
-     *
-     * @param listener The event listener, or null to unregister it.
-     */
-    fun setCameraPreviewReadyListener(
-        listener: RealtimeCameraPreviewReadyListener?,
     )
 
     /**

@@ -14,15 +14,11 @@ import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
  * The output configuration of a prepared local video file.
+ *
+ * @property videoFormat The video dimensions, frame rate, and uplink encoding settings.
+ * @property hasAudio Whether the input provides audio.
  */
 internal data class MediaSourceConfiguration(
-    /**
-     * The video dimensions, frame rate, and uplink encoding settings.
-     */
     val videoFormat: RealtimeVideoFormat,
-
-    /**
-     * Whether the input provides audio.
-     */
     val hasAudio: Boolean,
 )

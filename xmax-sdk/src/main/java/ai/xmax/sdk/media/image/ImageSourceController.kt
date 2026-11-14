@@ -38,43 +38,24 @@ import kotlinx.coroutines.withContext
 
 /**
  * Processes a local image to the target format and repeatedly outputs frames at a fixed rate.
+ *
+ * @property imageManager The image decoder and orientation normalizer.
+ * @property mediaService The service resolving media dimensions and model constraints.
+ * @property frameListener The local video frame listener.
+ * @property errorListener The media failure callback.
+ * @property uriDataLoader The function loading bytes from a readable URI.
+ * @property timestampUsProvider The monotonic clock returning microseconds.
+ * @property outputScope The scope continuously supplying media frames.
  */
 internal class ImageSourceController(
-    /**
-     * The image decoder and orientation normalizer.
-     */
     private val imageManager: ImageManaging,
-
-    /**
-     * The service resolving media dimensions and model constraints.
-     */
     private val mediaService: MediaServicing,
-
-    /**
-     * The local video frame listener.
-     */
     private val frameListener: MediaVideoFrameListener,
-
-    /**
-     * The media failure callback.
-     */
     private val errorListener: (XmaxError) -> Unit,
-
-    /**
-     * The function loading bytes from a readable URI.
-     */
     private val uriDataLoader: suspend (Uri) -> ByteArray,
-
-    /**
-     * The monotonic clock returning microseconds.
-     */
     private val timestampUsProvider: () -> Long = {
         (SystemClock.elapsedRealtimeNanos() / 1_000L).coerceAtLeast(0L)
     },
-
-    /**
-     * The scope continuously supplying media frames.
-     */
     private val outputScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) : ImageSourceControlling {
 

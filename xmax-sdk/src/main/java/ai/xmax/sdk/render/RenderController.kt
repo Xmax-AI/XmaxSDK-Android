@@ -47,31 +47,18 @@ import kotlinx.coroutines.withContext
  *
  * Each generation shares one remote frame path for first-frame readiness, display, and app frame
  * callbacks.
+ *
+ * @property rtcManager The manager for RTC capture, publication, subscription, and rendering.
+ * @property remoteFrameReadyTimeoutMillis The remote frame readiness timeout in milliseconds; defaults to `REMOTE_FRAME_READY_TIMEOUT_MILLIS`.
+ * @property renderDispatcher The dispatcher for view binding and display updates; defaults to `Dispatchers.Main.immediate`.
+ * @property frameDispatcher The bounded, serialized remote audio/video output queue.
+ * @property errorListener The media failure callback.
  */
 internal class RenderController(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
     private val rtcManager: RtcManaging,
-
-    /**
-     * The remote frame readiness timeout in milliseconds; defaults to `REMOTE_FRAME_READY_TIMEOUT_MILLIS`.
-     */
     private val remoteFrameReadyTimeoutMillis: Long = REMOTE_FRAME_READY_TIMEOUT_MILLIS,
-
-    /**
-     * The dispatcher for view binding and display updates; defaults to `Dispatchers.Main.immediate`.
-     */
     private val renderDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
-
-    /**
-     * The bounded, serialized remote audio/video output queue.
-     */
     private val frameDispatcher: RealtimeMediaFrameDispatcher = RealtimeMediaFrameDispatcher(),
-
-    /**
-     * The media failure callback.
-     */
     private val errorListener: (XmaxError) -> Unit = {},
 ) : RenderControlling {
 
@@ -442,11 +429,10 @@ internal class RenderController(
 
     /**
      * The first-frame waiter and view binding for the current remote generation.
+     *
+     * @property stream The remote stream identified by room and user.
      */
     private class RemoteGeneration(
-        /**
-         * The remote stream identified by room and user.
-         */
         val stream: RemoteStream,
     ) {
 

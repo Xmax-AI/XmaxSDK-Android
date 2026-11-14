@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * A realtime connection lifecycle state.
+ *
+ * @property value The string representation used for configuration or display.
  */
 public enum class RealtimeConnectionState(
-    /**
-     * The string representation used for configuration or display.
-     */
     public val value: String,
 ) {
 
@@ -73,37 +72,26 @@ public sealed interface RealtimeReason {
 
     /**
      * A call or runtime failure ended the current operation.
+     *
+     * @property error The operation failure or SDK error.
      */
     public data class Failure(
-        /**
-         * The operation failure or SDK error.
-         */
         public val error: XmaxError,
     ) : RealtimeReason
 }
 
 /**
  * A snapshot of realtime lifecycle state.
+ *
+ * @property connectionState The current media and generation connection state.
+ * @property sessionId The server session identifier.
+ * @property taskId The task identifier associating generation requests with result streams.
+ * @property reason The reason for this state, cleared when a new operation begins.
  */
 public data class RealtimeState(
-    /**
-     * The current media and generation connection state.
-     */
     public val connectionState: RealtimeConnectionState,
-
-    /**
-     * The server session identifier.
-     */
     public val sessionId: String? = null,
-
-    /**
-     * The task identifier associating generation requests with result streams.
-     */
     public val taskId: String? = null,
-
-    /**
-     * The reason for this state, cleared when a new operation begins.
-     */
     public val reason: RealtimeReason? = null,
 )
 

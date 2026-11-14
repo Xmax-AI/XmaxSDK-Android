@@ -12,15 +12,11 @@ package ai.xmax.sdk
 
 /**
  * A normalized media point, from top-left `(0, 0)` to bottom-right `(1, 1)`.
+ *
+ * @property x The relative horizontal media position, from 0 to 1.
+ * @property y The relative vertical media position, from 0 to 1.
  */
 public data class RealtimePoint(
-    /**
-     * The relative horizontal media position, from 0 to 1.
-     */
     public val x: Double,
-
-    /**
-     * The relative vertical media position, from 0 to 1.
-     */
     public val y: Double,
 )

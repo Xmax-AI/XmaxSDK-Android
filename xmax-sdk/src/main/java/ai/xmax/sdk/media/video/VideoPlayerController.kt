@@ -62,28 +62,16 @@ import kotlin.coroutines.coroutineContext
  * Decodes looped local audio and video on a shared timeline using Android media APIs.
  *
  * @param context The Android context used for system services and media resources.
+ * @property videoFrameListener The decoded video frame listener.
+ * @property audioFrameListener The decoded audio frame listener.
+ * @property errorListener The media failure callback.
+ * @property playbackScope The scope running continuous playback decoding.
  */
 internal class VideoPlayerController(
     context: Context,
-
-    /**
-     * The decoded video frame listener.
-     */
     private val videoFrameListener: MediaVideoFrameListener,
-
-    /**
-     * The decoded audio frame listener.
-     */
     private val audioFrameListener: MediaAudioFrameListener,
-
-    /**
-     * The media failure callback.
-     */
     private val errorListener: (XmaxError) -> Unit,
-
-    /**
-     * The scope running continuous playback decoding.
-     */
     private val playbackScope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default,
     ),
@@ -874,56 +862,38 @@ internal class VideoPlayerController(
 
     /**
      * The file decoding and playback configuration.
+     *
+     * @property uri A media URI accessible to your app.
+     * @property metadata The source dimensions, orientation, duration, and audio information.
+     * @property videoFormat The resolved dimensions and frame rate for decoded video output.
      */
     private data class PlaybackConfiguration(
-        /**
-         * A media URI accessible to your app.
-         */
         val uri: Uri,
-
-        /**
-         * The source dimensions, orientation, duration, and audio information.
-         */
         val metadata: MediaFileMetadata,
-
-        /**
-         * The resolved dimensions and frame rate for decoded video output.
-         */
         val videoFormat: RealtimeVideoFormat,
     )
 
     /**
      * A video frame and its playback submission deadline.
+     *
+     * @property frame The video frame to process, display, or submit.
+     * @property targetNanoseconds The monotonic deadline, in nanoseconds.
      */
     private data class ScheduledVideoFrame(
-        /**
-         * The video frame to process, display, or submit.
-         */
         val frame: VideoFrame,
-
-        /**
-         * The monotonic deadline, in nanoseconds.
-         */
         val targetNanoseconds: Long,
     )
 
     /**
      * A preview view, scaling mode, and binding revision.
+     *
+     * @property view The view to bind or unbind.
+     * @property contentMode Aspect-preserving fit or fill scaling.
+     * @property generation The identifier associating a request or event with its generation task.
      */
     private data class PreviewTarget(
-        /**
-         * The view to bind or unbind.
-         */
         val view: XmaxRealtimeVideoView?,
-
-        /**
-         * Aspect-preserving fit or fill scaling.
-         */
         val contentMode: VideoContentMode,
-
-        /**
-         * The identifier associating a request or event with its generation task.
-         */
         val generation: Long,
     )
 

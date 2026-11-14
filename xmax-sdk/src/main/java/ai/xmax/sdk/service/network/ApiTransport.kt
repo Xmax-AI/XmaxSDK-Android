@@ -17,51 +17,31 @@ import kotlinx.coroutines.Dispatchers
 
 /**
  * A network request passed to the HTTP transport.
+ *
+ * @property method The HTTP request method.
+ * @property url The resource or request URL.
+ * @property headers The HTTP request or response headers.
+ * @property body The raw HTTP body bytes.
+ * @property connectTimeoutMs The connection timeout, in milliseconds.
+ * @property readTimeoutMs The response read timeout, in milliseconds.
  */
 internal data class ApiHttpRequest(
-    /**
-     * The HTTP request method.
-     */
     val method: ApiMethod,
-
-    /**
-     * The resource or request URL.
-     */
     val url: URL,
-
-    /**
-     * The HTTP request or response headers.
-     */
     val headers: Map<String, String>,
-
-    /**
-     * The raw HTTP body bytes.
-     */
     val body: ByteArray?,
-
-    /**
-     * The connection timeout, in milliseconds.
-     */
     val connectTimeoutMs: Int,
-
-    /**
-     * The response read timeout, in milliseconds.
-     */
     val readTimeoutMs: Int,
 )
 
 /**
  * A raw response from the HTTP transport.
+ *
+ * @property statusCode The HTTP response status code.
+ * @property body The raw HTTP body bytes.
  */
 internal data class ApiHttpResponse(
-    /**
-     * The HTTP response status code.
-     */
     val statusCode: Int,
-
-    /**
-     * The raw HTTP body bytes.
-     */
     val body: ByteArray,
 )
 
@@ -83,16 +63,12 @@ internal fun interface ApiTransport {
 
 /**
  * The default Android/Java URLConnection transport.
+ *
+ * @property ioDispatcher The dispatcher for blocking network or file I/O; defaults to `Dispatchers.IO`.
+ * @property connectionFactory The HTTP connection factory.
  */
 internal class UrlConnectionApiTransport(
-    /**
-     * The dispatcher for blocking network or file I/O; defaults to `Dispatchers.IO`.
-     */
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-
-    /**
-     * The HTTP connection factory.
-     */
     private val connectionFactory: (URL) -> HttpURLConnection = {
         it.openConnection() as HttpURLConnection
     },

@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * A local media source for realtime generation.
+ *
+ * @property id The protocol identifier for the media source.
  */
 public enum class RealtimeMediaSource(
-    /**
-     * The protocol identifier for the media source.
-     */
     public val id: String,
 ) {
 

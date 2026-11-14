@@ -35,21 +35,15 @@ import kotlinx.coroutines.withContext
 /**
  * Implements the public realtime API and sequences media, connection, and generation workflows.
  *
+ * @property options The realtime configuration supplied at creation.
  * @param components The assembled managers, controllers, services, and timing recorder.
  * @param dispatcher The dispatcher for automatic quality adjustments; defaults to `Dispatchers.Default`.
+ * @property qualityNow The monotonic clock returning milliseconds for quality adjustment intervals.
  */
 internal class XmaxRealtimeManager(
-    /**
-     * The realtime configuration supplied at creation.
-     */
     override val options: RealtimeConfiguration,
-
     components: XmaxRealtimeComponents,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
-
-    /**
-     * The monotonic clock returning milliseconds for quality adjustment intervals.
-     */
     private val qualityNow: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : XmaxRealtimeManaging {
 
@@ -392,6 +386,27 @@ internal class XmaxRealtimeManager(
         videoFormat: RealtimeVideoFormat,
         position: CameraPosition,
         useMicrophone: Boolean,
+    ): RealtimeMediaStream = createLocalCameraStream(
+        videoFormat = videoFormat,
+        position = position,
+        useMicrophone = useMicrophone,
+        rotation = RealtimeCameraRotation.ROTATION_0,
+    )
+
+    /**
+     * Creates a camera stream using the requested orientation correction.
+     *
+     * @param videoFormat The model-supported output format.
+     * @param position The initial camera position.
+     * @param useMicrophone Whether to capture microphone audio while connected.
+     * @param rotation The clockwise correction relative to automatic orientation.
+     * @return The local camera stream.
+     */
+    override suspend fun createLocalCameraStream(
+        videoFormat: RealtimeVideoFormat,
+        position: CameraPosition,
+        useMicrophone: Boolean,
+        rotation: RealtimeCameraRotation,
     ): RealtimeMediaStream = mediaOperation(
         sourceRemoteAudioVolume = 0f,
         waitForCameraPreview = true,
@@ -400,7 +415,22 @@ internal class XmaxRealtimeManager(
             videoFormat,
             position,
             useMicrophone,
+            rotation,
         )
+    }
+
+    /**
+     * Updates orientation without changing the active camera stream or generation task.
+     *
+     * @param rotation The clockwise correction relative to automatic orientation.
+     */
+    override suspend fun setCameraRotation(
+        rotation: RealtimeCameraRotation,
+    ) {
+        execute(OperationKind.CONFIGURATION) { token ->
+            mediaController.setCameraRotation(rotation)
+            token.ensureCurrent()
+        }
     }
 
     /**
@@ -806,6 +836,8 @@ internal class XmaxRealtimeManager(
 
         try {
             if (resetGeneration) generationManager.reset()
+            mediaController.prepareCameraConnection()
+            token.ensureCurrent()
             connectionManager.prepareQuality(
                 videoFormat,
                 options,

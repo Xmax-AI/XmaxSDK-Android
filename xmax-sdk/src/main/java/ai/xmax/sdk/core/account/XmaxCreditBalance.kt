@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * The server-reported credit balance for the account owning the client's API key.
+ *
+ * @property currentBalance The remaining credits as a finite, nonnegative value, including fractional credits.
  */
 @ConsistentCopyVisibility
 public data class XmaxCreditBalance internal constructor(
-    /**
-     * The remaining credits as a finite, nonnegative value, including fractional credits.
-     */
     public val currentBalance: Double,
 )

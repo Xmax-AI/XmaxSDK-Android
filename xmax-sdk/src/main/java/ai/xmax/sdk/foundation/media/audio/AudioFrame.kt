@@ -16,13 +16,10 @@ package ai.xmax.sdk
  * Construction copies PCM bytes so later changes to the input array cannot change this frame.
  *
  * @param data 48 kHz mono, 16-bit PCM audio bytes.
+ * @property timestampUs The monotonic frame timestamp, in microseconds.
  */
 internal class AudioFrame(
     data: ByteArray,
-
-    /**
-     * The monotonic frame timestamp, in microseconds.
-     */
     val timestampUs: Long,
 ) {
 

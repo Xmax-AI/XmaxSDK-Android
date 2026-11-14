@@ -60,53 +60,28 @@ import kotlin.math.roundToInt
 
 /**
  * Coordinates RTC rooms, media streams, encoding, and quality.
+ *
+ * @property rtcManager The manager for RTC capture, publication, subscription, and rendering.
+ * @property roomController The controller for room membership and business signaling.
+ * @property encodingController The controller resolving and applying uplink encoding settings.
+ * @property qualityController The controller providing network statistics and automatic quality samples.
+ * @property errorListener The media failure callback.
+ * @property remoteStreamListener The remote stream change callback; null indicates no active result stream.
+ * @property generationTiming The generation startup timeout configuration; defaults to `StreamGenerationTiming.live`.
+ * @property generationScope The scope handling generation confirmation and completion.
+ * @property renderDispatcher The dispatcher for view binding and display updates; defaults to `Dispatchers.Main.immediate`.
  */
 internal class StreamController(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
     private val rtcManager: RtcManaging,
-
-    /**
-     * The controller for room membership and business signaling.
-     */
     private val roomController: RoomControlling = RoomController(rtcManager),
-
-    /**
-     * The controller resolving and applying uplink encoding settings.
-     */
     private val encodingController: EncodingControlling = EncodingController(rtcManager),
-
-    /**
-     * The controller providing network statistics and automatic quality samples.
-     */
     private val qualityController: QualityControlling = QualityController(rtcManager),
-
-    /**
-     * The media failure callback.
-     */
     private val errorListener: (XmaxError) -> Unit = {},
-
-    /**
-     * The remote stream change callback; null indicates no active result stream.
-     */
     private val remoteStreamListener: (RemoteStream?) -> Unit = {},
-
-    /**
-     * The generation startup timeout configuration; defaults to `StreamGenerationTiming.live`.
-     */
     private val generationTiming: StreamGenerationTiming = StreamGenerationTiming.live,
-
-    /**
-     * The scope handling generation confirmation and completion.
-     */
     private val generationScope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Default,
     ),
-
-    /**
-     * The dispatcher for view binding and display updates; defaults to `Dispatchers.Main.immediate`.
-     */
     private val renderDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
 ) : StreamControlling, RtcEventListener {
 
@@ -383,8 +358,28 @@ internal class StreamController(
     override fun pushLocalVideoFrame(
         frame: VideoFrame,
     ) {
-        if (!isRequestingExternalFrames) return
+        if (isRequestingExternalFrames) pushPublishedVideoFrame(frame)
+    }
 
+    /**
+     * Sends camera frames whenever the local video track is published, including a connection without a task.
+     *
+     * @param frame The orientation-corrected camera frame.
+     */
+    fun pushCameraVideoFrame(
+        frame: VideoFrame,
+    ) {
+        if (synchronized(stateLock) { state.localVideoPublished }) pushPublishedVideoFrame(frame)
+    }
+
+    /**
+     * Delivers an eligible frame to the active RTC provider.
+     *
+     * @param frame The independently owned media frame.
+     */
+    private fun pushPublishedVideoFrame(
+        frame: VideoFrame,
+    ) {
         try {
             rtcManager.pushExternalVideoFrame(
                 frame,
@@ -1189,66 +1184,37 @@ internal class StreamController(
 
     /**
      * The controller's lifecycle and publication state.
+     *
+     * @property roomId The RTC room identifier.
+     * @property botName The user publishing generated results.
+     * @property localVideoPublished Whether local video is published; defaults to false.
+     * @property localAudioPublished Whether local audio is published; defaults to false.
+     * @property subscribedRemoteUserIds Remote users whose video is subscribed.
+     * @property subscribedRemoteAudioUserIds Remote users whose audio is subscribed.
+     * @property generationTask The current task, or null without active generation.
+     * @property generationWaiter The startup waiter, or null when no start is pending.
+     * @property activeRemoteStream The current result stream, or null if absent.
      */
     private data class State(
-        /**
-         * The RTC room identifier.
-         */
         var roomId: String = "",
-
-        /**
-         * The user publishing generated results.
-         */
         var botName: String = "",
-
-        /**
-         * Whether local video is published; defaults to false.
-         */
         var localVideoPublished: Boolean = false,
-
-        /**
-         * Whether local audio is published; defaults to false.
-         */
         var localAudioPublished: Boolean = false,
-
-        /**
-         * Remote users whose video is subscribed.
-         */
         val subscribedRemoteUserIds: MutableSet<String> = mutableSetOf(),
-
-        /**
-         * Remote users whose audio is subscribed.
-         */
         val subscribedRemoteAudioUserIds: MutableSet<String> = mutableSetOf(),
-
-        /**
-         * The current task, or null without active generation.
-         */
         var generationTask: GenerationTask? = null,
-
-        /**
-         * The startup waiter, or null when no start is pending.
-         */
         var generationWaiter: GenerationWaiter? = null,
-
-        /**
-         * The current result stream, or null if absent.
-         */
         var activeRemoteStream: RemoteStream? = null,
     )
 
     /**
      * The generation kind and completion state of the current task.
+     *
+     * @property id The identifier associating generation requests, signals, and result frames.
+     * @property isNetworkVideo Whether this task reads network video directly on the server.
      */
     private class GenerationTask(
-        /**
-         * The identifier associating generation requests, signals, and result frames.
-         */
         val id: String,
-
-        /**
-         * Whether this task reads network video directly on the server.
-         */
         val isNetworkVideo: Boolean,
     ) {
 
@@ -1280,16 +1246,12 @@ internal class StreamController(
 
     /**
      * A generation task and its startup waiter.
+     *
+     * @property taskId The task identifier associating generation requests with result streams.
+     * @property timing The recorder for generation startup timing.
      */
     private class GenerationWaiter(
-        /**
-         * The task identifier associating generation requests with result streams.
-         */
         val taskId: String,
-
-        /**
-         * The recorder for generation startup timing.
-         */
         val timing: RealtimeTiming.Attempt?,
     ) {
 
@@ -1311,32 +1273,24 @@ internal class StreamController(
 
     /**
      * A stopped task's waiter and audio subscriptions awaiting cleanup.
+     *
+     * @property taskId The task identifier associating generation requests with result streams.
+     * @property waiter The generation waiter to complete or cancel.
+     * @property remoteAudioUserIds Remote users whose audio must be unsubscribed.
      */
     private data class StopResult(
-        /**
-         * The task identifier associating generation requests with result streams.
-         */
         val taskId: String,
-
-        /**
-         * The generation waiter to complete or cancel.
-         */
         val waiter: GenerationWaiter?,
-
-        /**
-         * Remote users whose audio must be unsubscribed.
-         */
         val remoteAudioUserIds: Set<String>,
     )
 }
 
 /**
  * The generation confirmation timeout configuration.
+ *
+ * @property timeoutMillis The maximum operation wait, in milliseconds.
  */
 internal data class StreamGenerationTiming(
-    /**
-     * The maximum operation wait, in milliseconds.
-     */
     val timeoutMillis: Long,
 ) {
 

@@ -20,20 +20,14 @@ import ai.xmax.sdk.service.storage.StorageService
 /**
  * A client that provides access to realtime generation, storage, media services, and account credit queries.
  *
+ * @property configuration SDK credentials, service environment, and logging options.
  * @param context An Android context; only its application context is retained. Required for managers that use
  * Android resources.
+ * @property apiService The service used for storage credentials, media safety checks, and account credit queries.
  */
 public class XmaxClient internal constructor(
-    /**
-     * SDK credentials, service environment, and logging options.
-     */
     public val configuration: XmaxConfiguration,
-
     context: Context?,
-
-    /**
-     * The service used for storage credentials, media safety checks, and account credit queries.
-     */
     private val apiService: ApiServicing,
 ) {
 

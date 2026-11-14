@@ -12,21 +12,14 @@ package ai.xmax.sdk
 
 /**
  * The fixed dimensions and pixel format of a video frame.
+ *
+ * @property width The frame width, in pixels.
+ * @property height The frame height, in pixels.
+ * @property pixelFormat The arrangement of video pixels.
  */
 internal data class VideoFormat(
-    /**
-     * The frame width, in pixels.
-     */
     val width: Int,
-
-    /**
-     * The frame height, in pixels.
-     */
     val height: Int,
-
-    /**
-     * The arrangement of video pixels.
-     */
     val pixelFormat: VideoPixelFormat,
 ) {
 

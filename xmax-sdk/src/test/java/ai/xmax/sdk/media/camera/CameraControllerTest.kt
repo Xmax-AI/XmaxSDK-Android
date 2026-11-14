@@ -13,437 +13,295 @@ package ai.xmax.sdk.media.camera
 
 import ai.xmax.sdk.AudioFrame
 import ai.xmax.sdk.CameraPosition
-import ai.xmax.sdk.MediaServicing
-import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
+import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeModel
-import ai.xmax.sdk.RealtimeVideoEncoderPreference
 import ai.xmax.sdk.RealtimeVideoFormat
-import ai.xmax.sdk.VideoContentMode
+import ai.xmax.sdk.VideoFormat
 import ai.xmax.sdk.VideoFrame
+import ai.xmax.sdk.VideoFramePlane
+import ai.xmax.sdk.VideoPixelFormat
+import ai.xmax.sdk.VideoRotation
+import ai.xmax.sdk.resolveFrameRotation
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
 import ai.xmax.sdk.foundation.permissions.PermissionManaging
-import ai.xmax.sdk.foundation.rtc.RemoteStream
-import ai.xmax.sdk.foundation.rtc.RoomJoinConfiguration
-import ai.xmax.sdk.foundation.rtc.RtcEventListener
-import ai.xmax.sdk.foundation.rtc.RtcManaging
-import ai.xmax.sdk.foundation.rtc.RtcQualityListener
-import ai.xmax.sdk.foundation.rtc.VideoEncodingConfiguration
 import ai.xmax.sdk.media.MediaController
+import ai.xmax.sdk.media.audio.MicrophoneCapture
 import ai.xmax.sdk.render.video.VideoRenderRegistry
 import ai.xmax.sdk.service.media.MediaService
-import ai.xmax.sdk.RealtimeMediaSource
-import android.view.View
-import androidx.compose.ui.unit.IntSize
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
+import ai.xmax.sdk.stream.room.RtcManagingCall
+import ai.xmax.sdk.stream.room.RtcManagingStub
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CameraControllerTest {
-    @Test
-    fun `shared media components retain volume and rebind preview readiness after engine release`() = runTest {
-        val rtc = CameraRtcStub()
-        var permissionChecks = 0
-        val permissions = object : PermissionManaging {
-            override suspend fun ensureCameraPermission() { permissionChecks++ }
-            override suspend fun ensureMicrophonePermission() = Unit
-        }
-        val camera = CameraController(rtc, permissions, IdentityMediaService)
-        val media = MediaController(rtc, camera)
-        var readyCount = 0
-        val listener = RealtimeCameraPreviewReadyListener { readyCount++ }
-        media.setCameraPreviewReadyListener(listener)
-        media.setLocalAudioVolume(0.2f)
 
-        assertEquals(0, rtc.initializeCount)
-        assertEquals(0, permissionChecks)
-        assertTrue(rtc.captureFormats.isEmpty())
+    @Test
+    fun `camera preview opens without an RTC engine and prepares custom tracks on connection`() = runTest {
+        val rtc = RtcManagingStub()
+        val microphone = FakeMicrophoneCapture()
+        val submittedAudio = mutableListOf<AudioFrame>()
+        val controller = cameraController(microphone = microphone, audioListener = submittedAudio::add)
+        val media = MediaController(rtc, controller)
+
+        media.createLocalCameraStream(RealtimeModel.X2_1.defaultCameraVideoFormat, CameraPosition.FRONT, true)
+
+        assertTrue(rtc.calls.isEmpty())
+        assertEquals(0, microphone.starts)
 
         repeat(2) {
-            media.createLocalCameraStream(RealtimeVideoFormat(704, 1280, 24), CameraPosition.FRONT)
-            assertSame(listener, rtc.previewListener)
-            rtc.previewListener!!.onCameraPreviewReady()
-            assertEquals(0.2f, media.localAudioVolume)
-            media.stopLocalStream()
-            assertNull(rtc.previewListener)
-            assertNull(media.currentTrack)
-            assertEquals(0.2f, media.localAudioVolume)
+            media.prepareCameraConnection()
+            media.startMicrophoneCapture()
+            val packet = AudioFrame(ByteArray(960), 10_000L)
+            microphone.receiver?.invoke(packet)
+            media.stopMicrophoneCapture()
+            assertSame(packet, submittedAudio.last())
         }
 
-        assertEquals(2, rtc.initializeCount)
-        assertEquals(2, rtc.destroyCount)
-        assertEquals(2, permissionChecks)
-        assertEquals(2, readyCount)
+        assertEquals(2, microphone.starts)
+        assertEquals(2, microphone.stops)
+        assertEquals(2, rtc.calls.count { it == RtcManagingCall.UseExternalVideoSource })
+        assertEquals(2, rtc.calls.count { it == RtcManagingCall.StartExternalAudioSource })
+        assertNotNull(media.currentTrack)
+        media.stopLocalStream()
+        assertNull(media.currentTrack)
     }
 
     @Test
-    fun `format update preserves track preview binding and camera position`() = runTest {
-        val rtc = CameraRtcStub()
-        val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1))
-        val initial = RealtimeVideoFormat(1080, 1920, 24, 1500, 3000)
-        val stream = controller.createLocalCameraStream(initial, CameraPosition.BACK)
-        val track = stream.videoTrack!!
+    fun `updates format and switches lens while keeping the track and preview binding`() = runTest {
+        val camera = FakeCameraCapture()
+        val submittedFrames = mutableListOf<VideoFrame>()
+        val controller = cameraController(camera = camera, videoListener = submittedFrames::add)
+        val initial = RealtimeModel.X2_1.defaultCameraVideoFormat
+        val stream = controller.createLocalCameraStream(initial, CameraPosition.FRONT)
+        val track = requireNotNull(stream.videoTrack)
         val binding = VideoRenderRegistry.binding(track)
-        val updated = initial.copy(width = 1920, height = 1080, fps = 30)
+        val oldReceiver = checkNotNull(camera.receiver)
+        val updated = initial.copy(width = 1920, height = 1080, fps = 24)
 
         controller.updateVideoFormat(updated)
+        controller.updateVideoFormat(updated)
+        val switched = controller.switchCamera()
+        oldReceiver(frame)
+        camera.receiver?.invoke(frame)
 
-        assertSame(track, controller.currentTrack)
+        assertSame(track, switched.videoTrack)
         assertSame(binding, VideoRenderRegistry.binding(track))
         assertEquals(updated, track.videoFormat)
         assertEquals(CameraPosition.BACK, track.position)
-        assertEquals(Triple(1920, 1080, 30), rtc.captureFormats.last())
-        assertEquals(0, rtc.stopCount)
-        assertEquals(0, rtc.unbindCount)
-        controller.updateVideoFormat(updated)
-        assertEquals(2, rtc.captureFormats.size)
+        assertEquals(listOf(initial to CameraPosition.FRONT, updated to CameraPosition.FRONT, updated to CameraPosition.BACK), camera.starts)
+        assertEquals(listOf(frame), submittedFrames)
         controller.stopLocalCameraStream()
+        assertNull(VideoRenderRegistry.binding(track))
+        assertNull(controller.currentTrack)
     }
 
     @Test
-    fun `invalid or failed format update leaves camera preview intact`() = runTest {
-        val rtc = CameraRtcStub()
-        val controller = CameraController(rtc, GrantedPermissionManager, MediaService(RealtimeModel.X2_1))
-        val initial = RealtimeModel.X2_1.defaultCameraVideoFormat
-        val track = controller.createLocalCameraStream(initial, CameraPosition.FRONT).videoTrack!!
-        val binding = VideoRenderRegistry.binding(track)
-
-        val invalid = runCatching { controller.updateVideoFormat(initial.copy(width = 720, height = 1280)) }.exceptionOrNull()
-        assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (invalid as XmaxError).code)
-        assertEquals(1, rtc.captureFormats.size)
-
-        val failure = XmaxError(XmaxErrorCode.RTC_ERROR, "capture configuration failed")
-        rtc.startFailure = failure
-        assertSame(failure, runCatching { controller.updateVideoFormat(initial.copy(width = 1920, height = 1080)) }.exceptionOrNull())
-        assertEquals(initial, track.videoFormat)
-        assertSame(binding, VideoRenderRegistry.binding(track))
-        assertEquals(0, rtc.stopCount)
-        assertEquals(0, rtc.unbindCount)
-        controller.stopLocalCameraStream()
-    }
-
-    @Test
-    fun `bucket camera preserves resolution and encoding options`() = runTest {
-        RealtimeModel.X2_1.supportedVideoFormats.map { IntSize(it.width, it.height) }.forEach { (width, height) ->
-            val rtc = CameraRtcStub()
-            val controller = CameraController(
-                rtcManager = rtc,
-                permissionManager = GrantedPermissionManager,
-                mediaService = MediaService(RealtimeModel.X2_1),
-            )
-            val requested = RealtimeVideoFormat(
-                width = width,
-                height = height,
-                fps = 30,
-                minimumBitrate = 1_500,
-                maximumBitrate = 3_000,
-                encoderPreference = RealtimeVideoEncoderPreference.MAINTAIN_FRAMERATE,
-            )
-
-            val stream = controller.createLocalCameraStream(requested, CameraPosition.FRONT)
-
-            assertEquals(requested, stream.videoTrack?.videoFormat)
-            assertEquals(listOf(Triple(width, height, 30)), rtc.captureFormats)
-            controller.stopLocalCameraStream()
-        }
-    }
-
-    @Test
-    fun `unsupported bucket camera fails before permission and capture`() = runTest {
-        var cameraPermissionChecks = 0
-        val permissions = object : PermissionManaging {
-            override suspend fun ensureCameraPermission() {
-                cameraPermissionChecks += 1
-            }
-
-            override suspend fun ensureMicrophonePermission() = Unit
-        }
-        val rtc = CameraRtcStub()
-        val controller = CameraController(
-            rtcManager = rtc,
-            permissionManager = permissions,
-            mediaService = MediaService(RealtimeModel.X2_1),
+    fun `orientation correction is set in place and retained across capture restarts`() = runTest {
+        val camera = FakeCameraCapture()
+        val controller = cameraController(camera = camera)
+        val format = RealtimeModel.X2_1.defaultCameraVideoFormat
+        val stream = controller.createLocalCameraStream(
+            format,
+            CameraPosition.FRONT,
+            rotation = RealtimeCameraRotation.ROTATION_90,
         )
+        val track = requireNotNull(stream.videoTrack)
+        val binding = VideoRenderRegistry.binding(track)
+        assertEquals(RealtimeCameraRotation.ROTATION_90, camera.rotationAtStart.last())
+
+        controller.setCameraRotation(RealtimeCameraRotation.ROTATION_270)
+        controller.setCameraRotation(RealtimeCameraRotation.ROTATION_270)
+        assertEquals(listOf(RealtimeCameraRotation.ROTATION_270), camera.rotationUpdates)
+        assertEquals(1, camera.starts.size)
+        assertSame(track, controller.currentTrack)
+        assertSame(binding, VideoRenderRegistry.binding(track))
+
+        controller.updateVideoFormat(format.copy(fps = 24))
+        controller.switchCamera()
+        assertEquals(
+            listOf(RealtimeCameraRotation.ROTATION_90, RealtimeCameraRotation.ROTATION_270, RealtimeCameraRotation.ROTATION_270),
+            camera.rotationAtStart,
+        )
+        controller.stopLocalCameraStream()
+        controller.createLocalCameraStream(format, CameraPosition.FRONT)
+        assertEquals(RealtimeCameraRotation.ROTATION_0, camera.rotationAtStart.last())
+        controller.stopLocalCameraStream()
+    }
+
+    @Test
+    fun `clockwise corrections account for front camera mirroring and wrap around`() {
+        val orientation = VideoRotation.ROTATION_270
+        assertEquals(orientation, RealtimeCameraRotation.ROTATION_0.resolveFrameRotation(orientation, true))
+        assertEquals(VideoRotation.ROTATION_0, RealtimeCameraRotation.ROTATION_90.resolveFrameRotation(orientation, false))
+        assertEquals(VideoRotation.ROTATION_180, RealtimeCameraRotation.ROTATION_90.resolveFrameRotation(orientation, true))
+        assertEquals(VideoRotation.ROTATION_0, RealtimeCameraRotation.ROTATION_270.resolveFrameRotation(orientation, true))
+    }
+
+    @Test
+    fun `failed format replacement restores the previous camera and track`() = runTest {
+        val camera = FakeCameraCapture()
+        val controller = cameraController(camera = camera)
+        val initial = RealtimeModel.X2_1.defaultCameraVideoFormat
+        val track = requireNotNull(controller.createLocalCameraStream(initial, CameraPosition.FRONT).videoTrack)
+        val updated = initial.copy(width = 1920, height = 1080)
+        val failure = XmaxError(XmaxErrorCode.MEDIA_ERROR, "Camera format failed")
+
+        camera.startFailure = failure
+        assertSame(failure, runCatching { controller.updateVideoFormat(updated) }.exceptionOrNull())
+        assertEquals(initial, track.videoFormat)
+        assertEquals(initial to CameraPosition.FRONT, camera.starts.last())
+        assertSame(track, controller.currentTrack)
+        controller.stopLocalCameraStream()
+    }
+
+    @Test
+    fun `unsupported preset is rejected before requesting camera access`() = runTest {
+        val camera = FakeCameraCapture()
+        val permissions = object : PermissionManaging by GrantedPermissions {
+            override suspend fun ensureCameraPermission() = error("Should not request camera permission")
+        }
+        val controller = cameraController(camera = camera, permissions = permissions)
 
         val error = runCatching {
-            controller.createLocalCameraStream(
-                RealtimeVideoFormat(width = 832, height = 1_472, fps = 24),
-                CameraPosition.FRONT,
-            )
+            controller.createLocalCameraStream(RealtimeVideoFormat(832, 1472, 24), CameraPosition.FRONT)
         }.exceptionOrNull()
 
         assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (error as? XmaxError)?.code)
-        assertEquals(0, cameraPermissionChecks)
-        assertTrue(rtc.cameraPositions.isEmpty())
-        assertTrue(rtc.captureFormats.isEmpty())
+        assertTrue(camera.starts.isEmpty())
         assertNull(controller.currentTrack)
     }
 
     @Test
-    fun `microphone is optional and follows camera stream lifetime`() = runTest {
-        var microphonePermissionChecks = 0
-        val permissions = object : PermissionManaging {
-            override suspend fun ensureCameraPermission() = Unit
-            override suspend fun ensureMicrophonePermission() {
-                microphonePermissionChecks += 1
-            }
+    fun `cancelled startup stops capture and rejects callbacks from that session`() = runTest {
+        val camera = FakeCameraCapture().apply { awaitStartup = true }
+        val delivered = mutableListOf<VideoFrame>()
+        val controller = cameraController(camera = camera, videoListener = delivered::add)
+        val operation = launch {
+            controller.createLocalCameraStream(RealtimeModel.X2_1.defaultCameraVideoFormat, CameraPosition.FRONT)
         }
-        val rtc = CameraRtcStub()
-        val controller = CameraController(rtc, permissions, IdentityMediaService)
+        runCurrent()
+        val receiver = checkNotNull(camera.receiver)
 
-        controller.createLocalCameraStream(
-            RealtimeVideoFormat(704, 1280, 24),
+        operation.cancelAndJoin()
+        receiver(frame)
+
+        assertTrue(operation.isCancelled)
+        assertNull(camera.receiver)
+        assertTrue(delivered.isEmpty())
+        assertNull(controller.currentTrack)
+    }
+
+    @Test
+    fun `camera cleanup still runs after a microphone stop failure`() = runTest {
+        val microphone = FakeMicrophoneCapture()
+        val camera = FakeCameraCapture()
+        val controller = cameraController(camera = camera, microphone = microphone)
+        val track = requireNotNull(controller.createLocalCameraStream(
+            RealtimeModel.X2_1.defaultCameraVideoFormat,
             CameraPosition.FRONT,
             useMicrophone = true,
-        )
-
-        assertEquals(1, microphonePermissionChecks)
-        assertTrue(controller.useMicrophone)
-        assertEquals(0, rtc.audioStartCount)
+        ).videoTrack)
         controller.startMicrophoneCapture()
-        controller.startMicrophoneCapture()
-        assertEquals(1, rtc.audioStartCount)
+        val failure = IllegalStateException("Microphone cleanup failed")
+        microphone.stopFailure = failure
 
-        controller.stopMicrophoneCapture()
-        assertEquals(1, rtc.audioStopCount)
-        controller.startMicrophoneCapture()
-        controller.stopLocalCameraStream()
-        assertEquals(2, rtc.audioStartCount)
-        assertEquals(2, rtc.audioStopCount)
-        assertFalse(controller.useMicrophone)
-    }
-
-    @Test
-    fun `creates switches and stops one local camera stream`() = runTest {
-        val rtc = CameraRtcStub()
-        val controller = CameraController(
-            rtcManager = rtc,
-            permissionManager = GrantedPermissionManager,
-            mediaService = IdentityMediaService,
-        )
-
-        val stream = controller.createLocalCameraStream(
-            videoFormat = RealtimeVideoFormat(704, 1280, 24),
-            position = CameraPosition.FRONT,
-        )
-
-        assertEquals("stream-local", stream.id)
-        assertEquals("video0", stream.videoTrack?.id)
-        assertEquals(listOf(CameraPosition.FRONT), rtc.cameraPositions)
-        assertEquals(listOf(Triple(704, 1280, 24)), rtc.captureFormats)
-        assertSame(stream.videoTrack, controller.currentTrack)
-
-        val switched = controller.switchCamera()
-
-        assertSame(stream.videoTrack, switched.videoTrack)
-        assertEquals(CameraPosition.BACK, switched.videoTrack?.position)
-        assertEquals(listOf(CameraPosition.FRONT, CameraPosition.BACK), rtc.cameraPositions)
-
-        controller.stopLocalCameraStream()
-
+        assertSame(failure, runCatching { controller.stopLocalCameraStream() }.exceptionOrNull())
+        assertNull(camera.receiver)
         assertNull(controller.currentTrack)
-        assertEquals(1, rtc.unbindCount)
-        assertEquals(1, rtc.stopCount)
-    }
-
-    @Test
-    fun `camera cleanup failures are preserved while remaining resources are released`() = runTest {
-        val unbindError = IllegalStateException("unbind failed")
-        val stopError = IllegalStateException("capture stop failed")
-        val rtc = CameraRtcStub().apply {
-            unbindFailure = unbindError
-            stopFailure = stopError
-        }
-        val camera = CameraController(rtc, GrantedPermissionManager, IdentityMediaService)
-        val media = MediaController(rtc, camera)
-        val stream = media.createLocalCameraStream(
-            RealtimeVideoFormat(704, 1280, 24),
-            CameraPosition.FRONT,
-        )
-        val track = requireNotNull(stream.videoTrack)
-        assertNotNull(VideoRenderRegistry.binding(track))
-
-        val error = runCatching { media.stopLocalCameraStream() }.exceptionOrNull()
-
-        assertSame(unbindError, error)
-        assertSame(stopError, error?.suppressed?.single())
-        assertEquals(1, rtc.unbindCount)
-        assertEquals(1, rtc.stopCount)
-        assertEquals(1, rtc.destroyCount)
-        assertNull(camera.currentTrack)
-        assertNull(media.currentTrack)
         assertNull(VideoRenderRegistry.binding(track))
-
-        media.stopLocalCameraStream()
-        assertEquals(1, rtc.destroyCount)
-        assertEquals(1, rtc.stopCount)
     }
 
-    @Test
-    fun `capture start failure retains rollback failure as suppressed`() = runTest {
-        val startError = XmaxError(XmaxErrorCode.RTC_ERROR, "capture start failed")
-        val stopError = IllegalStateException("capture rollback failed")
-        val rtc = CameraRtcStub().apply {
-            startFailure = startError
-            stopFailure = stopError
-        }
-        val controller = CameraController(rtc, GrantedPermissionManager, IdentityMediaService)
+    private val frame = VideoFrame(
+        VideoFormat(2, 2, VideoPixelFormat.RGBA),
+        0L,
+        listOf(VideoFramePlane(ByteArray(16), 8)),
+    )
 
-        val error = runCatching {
-            controller.createLocalCameraStream(
-                RealtimeVideoFormat(704, 1280, 24),
-                CameraPosition.FRONT,
-            )
-        }.exceptionOrNull()
+    private fun cameraController(
+        camera: FakeCameraCapture = FakeCameraCapture(),
+        microphone: FakeMicrophoneCapture = FakeMicrophoneCapture(),
+        permissions: PermissionManaging = GrantedPermissions,
+        videoListener: (VideoFrame) -> Unit = {},
+        audioListener: (AudioFrame) -> Unit = {},
+    ) = CameraController(
+        camera = camera,
+        microphone = microphone,
+        permissionManager = permissions,
+        mediaService = MediaService(RealtimeModel.X2_1),
+        videoListener = videoListener,
+        audioListener = audioListener,
+    )
 
-        assertSame(startError, error)
-        assertSame(stopError, error?.suppressed?.single())
-        assertEquals(1, rtc.stopCount)
-        assertNull(controller.currentTrack)
-    }
-
-    @Test
-    fun `cancelled creation retains cancellation and rollback failure`() = runTest {
-        val stopError = IllegalStateException("capture rollback failed")
-        val rtc = CameraRtcStub().apply { stopFailure = stopError }
-        var cancellation: CancellationException? = null
-        val permissionManager = object : PermissionManaging by GrantedPermissionManager {
-            override suspend fun ensureCameraPermission() {
-                try {
-                    awaitCancellation()
-                } catch (error: CancellationException) {
-                    cancellation = error
-                    throw error
-                }
-            }
-        }
-        val controller = CameraController(rtc, permissionManager, IdentityMediaService)
-        var failure: Throwable? = null
-        val worker = launch(start = CoroutineStart.UNDISPATCHED) {
-            try {
-                controller.createLocalCameraStream(
-                    RealtimeVideoFormat(704, 1280, 24),
-                    CameraPosition.FRONT,
-                )
-            } catch (error: Throwable) {
-                failure = error
-                throw error
-            }
-        }
-
-        worker.cancelAndJoin()
-
-        assertTrue(worker.isCancelled)
-        assertNotNull(cancellation)
-        assertSame(cancellation, failure)
-        assertSame(stopError, failure?.suppressed?.single())
-        assertEquals(1, rtc.stopCount)
-        assertTrue(rtc.captureFormats.isEmpty())
-        assertNull(controller.currentTrack)
+    private object GrantedPermissions : PermissionManaging {
+        override suspend fun ensureCameraPermission() = Unit
+        override suspend fun ensureMicrophonePermission() = Unit
     }
 }
 
-private data object GrantedPermissionManager : PermissionManaging {
-    override suspend fun ensureCameraPermission() = Unit
-    override suspend fun ensureMicrophonePermission() = Unit
+internal class FakeCameraCapture : CameraCapture {
+    val starts = mutableListOf<Pair<RealtimeVideoFormat, CameraPosition>>()
+    val rotationAtStart = mutableListOf<RealtimeCameraRotation>()
+    val rotationUpdates = mutableListOf<RealtimeCameraRotation>()
+    var receiver: ((VideoFrame) -> Unit)? = null
+    var startFailure: XmaxError? = null
+    var awaitStartup = false
+
+    override suspend fun start(
+        format: RealtimeVideoFormat,
+        position: CameraPosition,
+        rotation: RealtimeCameraRotation,
+        onFrame: (VideoFrame) -> Unit,
+        onError: (XmaxError) -> Unit,
+    ) {
+        starts += format to position
+        rotationAtStart += rotation
+        startFailure?.let {
+            startFailure = null
+            throw it
+        }
+        receiver = onFrame
+        if (awaitStartup) awaitCancellation()
+    }
+
+    override suspend fun setRotation(
+        rotation: RealtimeCameraRotation,
+        onApplied: () -> Unit,
+    ) {
+        rotationUpdates += rotation
+        onApplied()
+    }
+
+    override suspend fun stop() {
+        receiver = null
+    }
 }
 
-private data object IdentityMediaService : MediaServicing by MediaService() {
-    override val model: RealtimeModel = RealtimeModel.X2_1
-
-    override fun resolveMediaSize(size: IntSize, source: RealtimeMediaSource): IntSize = size
-}
-
-private class CameraRtcStub : RtcManaging {
-    val cameraPositions = mutableListOf<CameraPosition>()
-    val captureFormats = mutableListOf<Triple<Int, Int, Int>>()
-    var stopCount = 0
-    var audioStartCount = 0
-    var audioStopCount = 0
-    var unbindCount = 0
-    var destroyCount = 0
-    var initializeCount = 0
-    var previewListener: RealtimeCameraPreviewReadyListener? = null
-    var startFailure: Throwable? = null
+internal class FakeMicrophoneCapture : MicrophoneCapture {
+    var receiver: ((AudioFrame) -> Unit)? = null
+    var starts = 0
+    var stops = 0
     var stopFailure: Throwable? = null
-    var unbindFailure: Throwable? = null
 
-    override suspend fun initialize() { initializeCount++ }
-    override suspend fun destroy() {
-        destroyCount += 1
-        previewListener = null
+    override suspend fun start(
+        onFrame: (AudioFrame) -> Unit,
+        onError: (XmaxError) -> Unit,
+    ) {
+        if (receiver != null) return
+        receiver = onFrame
+        starts++
     }
-    override fun configureVideoEncoding(configuration: VideoEncodingConfiguration) = Unit
-    override fun pushExternalVideoFrame(frame: VideoFrame, seiData: ByteArray?) = Unit
-    override fun pushExternalAudioFrame(frame: AudioFrame) = Unit
-    override fun useExternalVideoSource() = Unit
-    override fun startExternalAudioSource() = Unit
-    override fun stopExternalAudioSource() = Unit
-    override fun startAudioCapture() {
-        audioStartCount += 1
-    }
-    override fun stopAudioCapture() {
-        audioStopCount += 1
-    }
-    override fun startVideoCapture(width: Int, height: Int, frameRate: Int) {
-        captureFormats += Triple(width, height, frameRate)
-        startFailure?.let { throw it }
-    }
-    override fun updateVideoCaptureFormat(width: Int, height: Int, frameRate: Int) {
-        startFailure?.let { throw it }
-        captureFormats += Triple(width, height, frameRate)
-    }
-    override fun stopVideoCapture() {
-        stopCount += 1
+
+    override suspend fun stop() {
+        if (receiver == null) return
+        receiver = null
+        stops++
         stopFailure?.let { throw it }
     }
-    override fun switchCamera(position: CameraPosition) {
-        cameraPositions += position
-    }
-    override fun bindLocalVideo(view: View, contentMode: VideoContentMode) = Unit
-    override fun unbindLocalVideo() {
-        unbindCount += 1
-        unbindFailure?.let { throw it }
-    }
-    override fun bindRemoteVideo(
-        stream: RemoteStream,
-        view: View,
-        contentMode: VideoContentMode,
-    ) = Unit
-    override fun unbindRemoteVideo(stream: RemoteStream) = Unit
-    override suspend fun joinRoom(configuration: RoomJoinConfiguration) = Unit
-    override suspend fun leaveRoom() = Unit
-    override fun publishLocalVideo() = Unit
-    override fun unpublishLocalVideo() = Unit
-    override fun publishLocalAudio() = Unit
-    override fun unpublishLocalAudio() = Unit
-    override fun subscribeRemoteVideo(userId: String, subscribe: Boolean) = Unit
-    override fun subscribeRemoteAudio(userId: String, subscribe: Boolean) = Unit
-    override fun setRemoteAudioVolume(volume: Int, userId: String) = Unit
-    override fun sendRoomMessage(message: String, replacingPendingMessage: String?, reportFailure: Boolean) = kotlinx.coroutines.CompletableDeferred(Unit)
-
-    override fun discardPendingMessages(key: String?) = Unit
-    override fun setEventListener(listener: RtcEventListener?) = Unit
-    override fun setRoomMessageListener(listener: ((ai.xmax.sdk.foundation.rtc.RemoteStream, String) -> Unit)?) = Unit
-    override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) { previewListener = listener }
-    override fun setRemoteAudioFrameListener(
-        stream: ai.xmax.sdk.foundation.rtc.RemoteStream,
-        listener: ai.xmax.sdk.foundation.rtc.RtcRemoteAudioFrameListener?,
-    ): Unit = Unit
-
-    override fun setRemoteVideoFrameListener(
-        stream: RemoteStream,
-        listener: ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink?,
-    ) = Unit
-    override fun setQualityListener(listener: RtcQualityListener?) = Unit
 }

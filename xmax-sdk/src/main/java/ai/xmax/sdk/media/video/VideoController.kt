@@ -25,16 +25,12 @@ import android.net.Uri
 
 /**
  * Coordinates video file playback, external RTC media, and preview.
+ *
+ * @property rtcManager The manager for RTC capture, publication, subscription, and rendering.
+ * @property mediaSourceController The component resolving media input and driving frame output.
  */
 internal class VideoController(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
     private val rtcManager: RtcManaging,
-
-    /**
-     * The component resolving media input and driving frame output.
-     */
     private val mediaSourceController: MediaSourceControlling,
 ) {
 

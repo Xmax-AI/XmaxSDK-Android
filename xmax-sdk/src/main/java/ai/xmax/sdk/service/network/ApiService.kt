@@ -27,23 +27,14 @@ import org.json.JSONObject
  * Sends Xmax API requests and handles responses, logging, and errors.
  *
  * @param apiKey The API key issued by the developer platform; do not log or expose it.
+ * @property baseUrl The API base URL.
+ * @property timeoutMs The request timeout in milliseconds; defaults to `DEFAULT_TIMEOUT_MS`.
+ * @property transport The transport sending HTTP requests and returning raw responses.
  */
 internal class ApiService(
     apiKey: String,
-
-    /**
-     * The API base URL.
-     */
     private val baseUrl: String,
-
-    /**
-     * The request timeout in milliseconds; defaults to `DEFAULT_TIMEOUT_MS`.
-     */
     private val timeoutMs: Int = DEFAULT_TIMEOUT_MS,
-
-    /**
-     * The transport sending HTTP requests and returning raw responses.
-     */
     private val transport: ApiTransport = UrlConnectionApiTransport(),
 ) : ApiServicing {
 

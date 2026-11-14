@@ -12,8 +12,6 @@
 package ai.xmax.sdk.stream.room
 
 import ai.xmax.sdk.AudioFrame
-import ai.xmax.sdk.CameraPosition
-import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.VideoFrame
 import android.view.View
@@ -127,21 +125,6 @@ internal class RtcManagingStub(
         record(RtcManagingCall.StopExternalAudioSource)
     }
 
-    override fun startAudioCapture() = Unit
-
-    override fun stopAudioCapture() = Unit
-
-    override fun startVideoCapture(width: Int, height: Int, frameRate: Int) = Unit
-    override fun updateVideoCaptureFormat(width: Int, height: Int, frameRate: Int) = Unit
-
-    override fun stopVideoCapture() = Unit
-
-    override fun switchCamera(position: CameraPosition) = Unit
-
-    override fun bindLocalVideo(view: View, contentMode: VideoContentMode) = Unit
-
-    override fun unbindLocalVideo() = Unit
-
     override fun bindRemoteVideo(
         stream: RemoteStream,
         view: View,
@@ -221,7 +204,6 @@ internal class RtcManagingStub(
         roomMessageListener = listener
     }
 
-    override fun setCameraPreviewReadyListener(listener: RealtimeCameraPreviewReadyListener?) = Unit
 
     override fun setRemoteAudioFrameListener(
         stream: ai.xmax.sdk.foundation.rtc.RemoteStream,

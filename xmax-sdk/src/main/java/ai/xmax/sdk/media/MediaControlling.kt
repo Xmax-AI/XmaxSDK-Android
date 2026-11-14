@@ -12,6 +12,7 @@ package ai.xmax.sdk.media
 
 import ai.xmax.sdk.CameraPosition
 import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
+import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeMediaStream
 import ai.xmax.sdk.RealtimeReferenceVideo
 import ai.xmax.sdk.RealtimeVideoSampleMethod
@@ -113,12 +114,23 @@ internal interface MediaControlling : InteractionControlling {
      * @param position The front or rear camera to use.
      * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
      * false.
+     * @param rotation The clockwise correction relative to automatic orientation.
      */
     suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
         position: CameraPosition,
         useMicrophone: Boolean = false,
+        rotation: RealtimeCameraRotation = RealtimeCameraRotation.ROTATION_0,
     ): RealtimeMediaStream
+
+    /**
+     * Applies orientation correction to the current camera stream.
+     *
+     * @param rotation The clockwise correction relative to automatic orientation.
+     */
+    suspend fun setCameraRotation(
+        rotation: RealtimeCameraRotation,
+    )
 
     /**
      * Updates the camera format while retaining its track and preview binding.
@@ -130,14 +142,19 @@ internal interface MediaControlling : InteractionControlling {
     )
 
     /**
+     * Prepares RTC custom tracks for an SDK-owned camera before configuring and publishing its stream.
+     */
+    suspend fun prepareCameraConnection() = Unit
+
+    /**
      * Starts microphone capture for the current camera source.
      */
-    fun startMicrophoneCapture()
+    suspend fun startMicrophoneCapture()
 
     /**
      * Stops microphone capture for the current camera source.
      */
-    fun stopMicrophoneCapture()
+    suspend fun stopMicrophoneCapture()
 
     /**
      * Stops the local camera stream.

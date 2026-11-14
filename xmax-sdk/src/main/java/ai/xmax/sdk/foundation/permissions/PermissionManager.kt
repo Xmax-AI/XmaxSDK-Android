@@ -18,16 +18,12 @@ import android.content.pm.PackageManager
 
 /**
  * Checks camera and microphone permissions; your app's Activity owns runtime permission requests.
+ *
+ * @property isCameraPermissionGranted The function checking whether camera permission has been granted.
+ * @property isMicrophonePermissionGranted The function checking whether recording permission has been granted.
  */
 internal class PermissionManager(
-    /**
-     * The function checking whether camera permission has been granted.
-     */
     private val isCameraPermissionGranted: () -> Boolean,
-
-    /**
-     * The function checking whether recording permission has been granted.
-     */
     private val isMicrophonePermissionGranted: () -> Boolean,
 ) : PermissionManaging {
 

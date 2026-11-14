@@ -38,25 +38,16 @@ import kotlinx.coroutines.launch
  * main thread.
  *
  * @param rtcManager The manager for RTC capture, publication, subscription, and rendering.
+ * @property callbackScope The scope dispatching asynchronous callbacks.
+ * @property history Successful directional quality levels retained across connections.
+ * @property now The monotonic millisecond clock used for sample freshness and adjustment intervals.
  */
 internal class QualityController(
     rtcManager: RtcManaging,
-
-    /**
-     * The scope dispatching asynchronous callbacks.
-     */
     private val callbackScope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main,
     ),
-
-    /**
-     * Successful directional quality levels retained across connections.
-     */
     private val history: QualityHistory = QualityHistory(),
-
-    /**
-     * The monotonic millisecond clock used for sample freshness and adjustment intervals.
-     */
     private val now: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : QualityControlling, RtcQualityListener {
 

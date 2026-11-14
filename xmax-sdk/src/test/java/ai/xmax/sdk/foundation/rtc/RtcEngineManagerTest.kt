@@ -205,24 +205,6 @@ private object EngineStub : RtcPlatform {
 
     override fun stopExternalAudioSource(): Int = 0
 
-    override fun startAudioCapture(): Int = 0
-
-    override fun stopAudioCapture(): Int = 0
-
-    override fun startVideoCapture(width: Int, height: Int, frameRate: Int): Int = 0
-    override fun updateVideoCaptureFormat(width: Int, height: Int, frameRate: Int): Int = 0
-
-    override fun stopVideoCapture(): Int = 0
-
-    override fun switchCamera(position: ai.xmax.sdk.CameraPosition): Int = 0
-
-    override fun bindLocalVideo(
-        view: android.view.View,
-        contentMode: ai.xmax.sdk.VideoContentMode,
-    ): Int = 0
-
-    override fun unbindLocalVideo(): Int = 0
-
     override fun bindRemoteVideo(
         userId: String,
         view: android.view.View,
@@ -231,7 +213,6 @@ private object EngineStub : RtcPlatform {
 
     override fun unbindRemoteVideo(userId: String): Int = 0
 
-    override fun setCameraPreviewReadyListener(listener: (() -> Unit)?) = Unit
 
     override fun setRemoteAudioFrameListener(
         streamId: String,

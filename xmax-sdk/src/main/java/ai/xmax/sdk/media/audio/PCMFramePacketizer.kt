@@ -17,11 +17,10 @@ import java.util.ArrayDeque
 
 /**
  * Packetizes decoded PCM into fixed 10 ms RTC audio frames.
+ *
+ * @property totalSamples The total number of samples to process.
  */
 internal class PCMFramePacketizer(
-    /**
-     * The total number of samples to process.
-     */
     private val totalSamples: Int,
 ) {
 
@@ -110,16 +109,12 @@ internal class PCMFramePacketizer(
 
     /**
      * A PCM packet and its timeline position.
+     *
+     * @property data The binary data to read, transfer, or retain.
+     * @property sampleOffset The packet's starting sample position on the media timeline.
      */
     internal data class Packet(
-        /**
-         * The binary data to read, transfer, or retain.
-         */
         val data: ByteArray,
-
-        /**
-         * The packet's starting sample position on the media timeline.
-         */
         val sampleOffset: Int,
     )
 }

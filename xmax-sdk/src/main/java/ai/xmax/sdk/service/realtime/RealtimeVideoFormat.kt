@@ -36,37 +36,21 @@ public enum class RealtimeVideoEncoderPreference {
  *
  * Local images and videos use this as their media baseline; the generation canvas is separate and
  * quality adaptation does not change the baseline.
+ *
+ * @property width The width in pixels; must be positive and even.
+ * @property height The height in pixels; must be positive and even.
+ * @property fps The frame rate in fps; must be positive.
+ * @property minimumBitrate The minimum uplink bitrate, in kbps; null uses 500 capped at the maximum, and 0 disables the minimum.
+ * @property maximumBitrate The maximum uplink bitrate, in kbps; null uses the SDK default. Explicit values must be positive and at
+ * least the minimum.
+ * @property encoderPreference The uplink encoding preference; defaults to prioritizing frame rate.
  */
 public data class RealtimeVideoFormat @JvmOverloads constructor(
-    /**
-     * The width in pixels; must be positive and even.
-     */
     public val width: Int,
-
-    /**
-     * The height in pixels; must be positive and even.
-     */
     public val height: Int,
-
-    /**
-     * The frame rate in fps; must be positive.
-     */
     public val fps: Int,
-
-    /**
-     * The minimum uplink bitrate, in kbps; null uses 500 capped at the maximum, and 0 disables the minimum.
-     */
     public val minimumBitrate: Int? = null,
-
-    /**
-     * The maximum uplink bitrate, in kbps; null uses the SDK default. Explicit values must be positive and at
-     * least the minimum.
-     */
     public val maximumBitrate: Int? = null,
-
-    /**
-     * The uplink encoding preference; defaults to prioritizing frame rate.
-     */
     public val encoderPreference: RealtimeVideoEncoderPreference =
         RealtimeVideoEncoderPreference.MAINTAIN_FRAMERATE,
 ) {

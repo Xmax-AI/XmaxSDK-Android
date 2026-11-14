@@ -28,48 +28,29 @@ import kotlin.coroutines.coroutineContext
  * When the budget is exhausted, only the latest unsent trajectory for each key is retained.
  *
  * @param scope The sending scope owned by the room lifecycle.
+ * @property send Submits one packet to RTC, throwing on failure.
+ * @property onFailure The callback reporting room signal send failures.
+ * @property nowMillis The monotonic millisecond clock for send budget windows.
  */
 internal class RtcMessageQueue(
     scope: CoroutineScope,
-
-    /**
-     * Submits one packet to RTC, throwing on failure.
-     */
     private val send: (ByteArray) -> Unit,
-
-    /**
-     * The callback reporting room signal send failures.
-     */
     private val onFailure: (Throwable) -> Unit,
-
-    /**
-     * The monotonic millisecond clock for send budget windows.
-     */
     private val nowMillis: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
 
     /**
      * One complete signal with its packet fragments, coalescing key, and result.
+     *
+     * @property packets The packets sent in order.
+     * @property key The coalescing key used before sending starts.
+     * @property reportFailure Whether a send failure terminates the queue and notifies its owner.
+     * @property completion The result completed after the entire signal is submitted to RTC.
      */
     private class Message(
-        /**
-         * The packets sent in order.
-         */
         var packets: List<ByteArray>,
-
-        /**
-         * The coalescing key used before sending starts.
-         */
         val key: String?,
-
-        /**
-         * Whether a send failure terminates the queue and notifies its owner.
-         */
         val reportFailure: Boolean,
-
-        /**
-         * The result completed after the entire signal is submitted to RTC.
-         */
         val completion: CompletableDeferred<Unit> = CompletableDeferred(),
     )
 

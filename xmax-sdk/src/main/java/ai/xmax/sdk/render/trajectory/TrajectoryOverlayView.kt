@@ -452,16 +452,12 @@ internal class TrajectoryOverlayView(
 
     /**
      * The identifier and position of an active touch point.
+     *
+     * @property id The continuous-drag identifier for this pointer.
+     * @property location The touch position in view pixels.
      */
     private data class ActiveTouch(
-        /**
-         * The continuous-drag identifier for this pointer.
-         */
         val id: TrajectoryID,
-
-        /**
-         * The touch position in view pixels.
-         */
         var location: PointF,
     )
 

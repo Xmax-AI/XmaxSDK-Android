@@ -11,6 +11,10 @@
 
 package ai.xmax.sdk.media.video
 
+import ai.xmax.sdk.VideoFormat
+import ai.xmax.sdk.VideoFrame
+import ai.xmax.sdk.VideoFramePlane
+import ai.xmax.sdk.VideoPixelFormat
 import ai.xmax.sdk.VideoRotation
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.nio.ByteBuffer
@@ -35,6 +39,108 @@ public class NativeYuv420ConverterTest {
     }
 
     @Test
+    public fun nativeConverterCopiesPlanarRowsWithoutPadding() {
+        val source = Yuv420VideoFrameConverter.Source(
+            width = 4,
+            height = 4,
+            cropLeft = 0,
+            cropTop = 0,
+            cropWidth = 4,
+            cropHeight = 4,
+            planes = listOf(
+                directPlane(
+                    ByteArray(16) { (it + 1).toByte() },
+                    rowStride = 4,
+                    pixelStride = 1,
+                ),
+                directPlane(
+                    byteArrayOf(0, 21, 22, 0, 23, 24),
+                    rowStride = 3,
+                    pixelStride = 1,
+                    offset = 1,
+                ),
+                directPlane(
+                    byteArrayOf(0, 0, 31, 32, 0, 0, 33, 34),
+                    rowStride = 4,
+                    pixelStride = 1,
+                    offset = 2,
+                ),
+            ),
+        )
+        val output = ByteArray(24)
+
+        assertTrue(
+            NativeYuv420Converter.convert(
+                source = source,
+                outputWidth = 4,
+                outputHeight = 4,
+                rotation = VideoRotation.ROTATION_0,
+                output = output,
+            ),
+        )
+        assertArrayEquals(
+            byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 31, 32, 33, 34),
+            output,
+        )
+    }
+
+    @Test
+    public fun nativeConverterSplitsInterleavedChromaWithOffsetAndPadding() {
+        val interleaved = ByteBuffer.allocateDirect(10)
+        for (uvOrder in listOf(true, false)) {
+            val uOffset = if (uvOrder) 0 else 1
+            val vOffset = 1 - uOffset
+            for ((index, rowOffset) in listOf(0, 2, 6, 8).withIndex()) {
+                interleaved.put(rowOffset + uOffset, (21 + index).toByte())
+                interleaved.put(rowOffset + vOffset, (31 + index).toByte())
+            }
+            val source = Yuv420VideoFrameConverter.Source(
+                width = 4,
+                height = 4,
+                cropLeft = 0,
+                cropTop = 0,
+                cropWidth = 4,
+                cropHeight = 4,
+                planes = listOf(
+                    directPlane(
+                        byteArrayOf(0, 1, 2, 3, 4, 0, 5, 6, 7, 8, 0, 9, 10, 11, 12, 0, 13, 14, 15, 16),
+                        rowStride = 5,
+                        pixelStride = 1,
+                        offset = 1,
+                    ),
+                    Yuv420VideoFrameConverter.Plane(
+                        buffer = interleaved.duplicate().apply { limit(9 + uOffset) }.slice(),
+                        rowStride = 6,
+                        pixelStride = 2,
+                        baseOffset = uOffset,
+                    ),
+                    Yuv420VideoFrameConverter.Plane(
+                        buffer = interleaved.duplicate().apply { limit(9 + vOffset) }.slice(),
+                        rowStride = 6,
+                        pixelStride = 2,
+                        baseOffset = vOffset,
+                    ),
+                ),
+            )
+            val output = ByteArray(24)
+
+            assertTrue(
+                NativeYuv420Converter.convert(
+                    source = source,
+                    outputWidth = 4,
+                    outputHeight = 4,
+                    rotation = VideoRotation.ROTATION_0,
+                    output = output,
+                ),
+            )
+            assertArrayEquals(
+                byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 21, 22, 23, 24, 31, 32, 33, 34),
+                output,
+            )
+        }
+    }
+
+    @Test
     public fun nativeConverterRotatesFlexibleChromaIntoPortraitI420() {
         val source = Yuv420VideoFrameConverter.Source(
             width = 4,
@@ -49,9 +155,7 @@ public class NativeYuv420ConverterTest {
                 directPlane(byteArrayOf(20, 88, 21, 0), 4, 2),
             ),
         )
-        val y = ByteArray(8)
-        val u = ByteArray(2)
-        val v = ByteArray(2)
+        val output = ByteArray(12)
 
         assertTrue(
             NativeYuv420Converter.convert(
@@ -59,14 +163,22 @@ public class NativeYuv420ConverterTest {
                 outputWidth = 2,
                 outputHeight = 4,
                 rotation = VideoRotation.ROTATION_90,
-                y = y,
-                u = u,
-                v = v,
+                output = output,
             ),
         )
-        assertArrayEquals(byteArrayOf(5, 1, 6, 2, 7, 3, 8, 4), y)
-        assertArrayEquals(byteArrayOf(10, 11), u)
-        assertArrayEquals(byteArrayOf(20, 21), v)
+        assertArrayEquals(byteArrayOf(5, 1, 6, 2, 7, 3, 8, 4, 10, 11, 20, 21), output)
+
+        assertTrue(
+            NativeYuv420Converter.convert(
+                source = source,
+                outputWidth = 2,
+                outputHeight = 4,
+                rotation = VideoRotation.ROTATION_90,
+                output = output,
+                mirrored = true,
+            ),
+        )
+        assertArrayEquals(byteArrayOf(1, 5, 2, 6, 3, 7, 4, 8, 10, 11, 20, 21), output)
     }
 
     @Test
@@ -76,10 +188,13 @@ public class NativeYuv420ConverterTest {
         assertTrue(
             NativeYuv420Converter.convertI420ToArgb(
                 y = byteArrayOf(16, 235.toByte()),
+                yOffset = 0,
                 yStride = 2,
                 u = byteArrayOf(128.toByte()),
+                uOffset = 0,
                 uStride = 1,
                 v = byteArrayOf(128.toByte()),
+                vOffset = 0,
                 vStride = 1,
                 width = 2,
                 height = 1,
@@ -88,6 +203,75 @@ public class NativeYuv420ConverterTest {
         )
         assertEquals(0xFF000000.toInt(), pixels[0])
         assertEquals(0xFFFFFFFF.toInt(), pixels[1])
+    }
+
+    @Test
+    public fun previewReadsChromaFromTheSharedI420Array() {
+        val bytes = byteArrayOf(82, 82, 82, 82, 90, 240.toByte())
+        val frame = VideoFrame(
+            format = VideoFormat(2, 2, VideoPixelFormat.I420),
+            timestampUs = 0,
+            planes = listOf(
+                VideoFramePlane(bytes, stride = 2, byteLength = 4, copyData = false),
+                VideoFramePlane(bytes, stride = 1, byteOffset = 4, byteLength = 1, copyData = false),
+                VideoFramePlane(bytes, stride = 1, byteOffset = 5, byteLength = 1, copyData = false),
+            ),
+        )
+
+        val bitmap = Yuv420VideoFrameConverter.makePreviewBitmap(frame)
+        try {
+            assertEquals(0xFFFF0100.toInt(), bitmap.getPixel(1, 1))
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    @Test
+    public fun previewReusesPixelArrayWhileEarlierBitmapKeepsItsPixels() {
+        val format = VideoFormat(
+            2,
+            2,
+            VideoPixelFormat.I420,
+        )
+        val chroma = VideoFramePlane(
+            byteArrayOf(128.toByte()),
+            stride = 1,
+        )
+        val pixels = IntArray(4)
+        val frames = listOf(16, 235).map { luma ->
+            VideoFrame(
+                format = format,
+                timestampUs = 0,
+                planes = listOf(
+                    VideoFramePlane(
+                        ByteArray(4) { luma.toByte() },
+                        stride = 2,
+                    ),
+                    chroma,
+                    chroma,
+                ),
+            )
+        }
+        val black = Yuv420VideoFrameConverter.makePreviewBitmap(
+            frame = frames[0],
+            reusablePixels = pixels,
+        )
+        try {
+            assertArrayEquals(IntArray(4) { 0xFF000000.toInt() }, pixels)
+            val white = Yuv420VideoFrameConverter.makePreviewBitmap(
+                frame = frames[1],
+                reusablePixels = pixels,
+            )
+            try {
+                assertArrayEquals(IntArray(4) { 0xFFFFFFFF.toInt() }, pixels)
+                assertEquals(0xFF000000.toInt(), black.getPixel(1, 1))
+                assertEquals(0xFFFFFFFF.toInt(), white.getPixel(1, 1))
+            } finally {
+                white.recycle()
+            }
+        } finally {
+            black.recycle()
+        }
     }
 
     @Test
@@ -117,7 +301,7 @@ public class NativeYuv420ConverterTest {
             )
 
             nativeFrame.planes.zip(fallbackFrame.planes).forEach { (native, fallback) ->
-                assertArrayEquals(fallback.data, native.data)
+                assertArrayEquals(fallback.selectedBytes(), native.selectedBytes())
             }
         }
     }
@@ -126,6 +310,7 @@ public class NativeYuv420ConverterTest {
         bytes: ByteArray,
         rowStride: Int,
         pixelStride: Int,
+        offset: Int = 0,
     ): Yuv420VideoFrameConverter.Plane = Yuv420VideoFrameConverter.Plane(
         buffer = ByteBuffer.allocateDirect(bytes.size).apply {
             put(bytes)
@@ -133,6 +318,7 @@ public class NativeYuv420ConverterTest {
         },
         rowStride = rowStride,
         pixelStride = pixelStride,
+        baseOffset = offset,
     )
 
     private fun source(

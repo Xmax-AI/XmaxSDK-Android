@@ -18,16 +18,12 @@ import android.os.Looper
 
 /**
  * Connects rendering touch input to media interactions.
+ *
+ * @property interactionListener The interaction frame callback.
+ * @property resolvedMediaSize The fixed, resolved local media dimensions for interaction coordinates.
  */
 internal class TrajectoryBinding(
-    /**
-     * The interaction frame callback.
-     */
     private val interactionListener: (InteractionFrame) -> Unit,
-
-    /**
-     * The fixed, resolved local media dimensions for interaction coordinates.
-     */
     private val resolvedMediaSize: IntSize,
 ) {
 

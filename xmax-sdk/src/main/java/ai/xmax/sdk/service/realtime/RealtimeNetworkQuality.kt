@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * An RTC network quality rating.
+ *
+ * @property value The string representation used for configuration or display.
  */
 public enum class RealtimeNetworkQualityLevel(
-    /**
-     * The string representation used for configuration or display.
-     */
     public val value: String,
 ) {
 
@@ -58,16 +57,12 @@ public enum class RealtimeNetworkQualityLevel(
 
 /**
  * The uplink and downlink quality of a realtime session.
+ *
+ * @property uplink The uplink network quality rating.
+ * @property downlink The downlink network quality rating.
  */
 public data class RealtimeNetworkQuality(
-    /**
-     * The uplink network quality rating.
-     */
     public val uplink: RealtimeNetworkQualityLevel,
-
-    /**
-     * The downlink network quality rating.
-     */
     public val downlink: RealtimeNetworkQualityLevel,
 )
 

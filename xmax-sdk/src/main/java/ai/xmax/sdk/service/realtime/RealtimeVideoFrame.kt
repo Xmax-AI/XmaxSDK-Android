@@ -19,46 +19,24 @@ import java.nio.ByteBuffer
  * of the native RTC frame. Your app may retain the frame for asynchronous encoding without
  * releasing it. Each data accessor returns an independent read-only view; changing its position
  * does not affect other consumers.
+ *
+ * @property width The frame width, in pixels.
+ * @property height The frame height, in pixels.
+ * @property presentationTimeUs The presentation timestamp on the shared remote audio/video timeline, in microseconds.
+ * @property durationUs The frame duration in microseconds, or null if RTC does not provide it.
+ * @property rotationDegrees The clockwise rotation still required for display: 0, 90, 180, or 270 degrees.
+ * @property y The Y pixel plane.
+ * @property u The U pixel plane.
+ * @property v The V pixel plane.
  */
 public class RealtimeVideoFrame internal constructor(
-    /**
-     * The frame width, in pixels.
-     */
     public val width: Int,
-
-    /**
-     * The frame height, in pixels.
-     */
     public val height: Int,
-
-    /**
-     * The presentation timestamp on the shared remote audio/video timeline, in microseconds.
-     */
     public val presentationTimeUs: Long,
-
-    /**
-     * The frame duration in microseconds, or null if RTC does not provide it.
-     */
     public val durationUs: Long?,
-
-    /**
-     * The clockwise rotation still required for display: 0, 90, 180, or 270 degrees.
-     */
     public val rotationDegrees: Int,
-
-    /**
-     * The Y pixel plane.
-     */
     private val y: ByteArray,
-
-    /**
-     * The U pixel plane.
-     */
     private val u: ByteArray,
-
-    /**
-     * The V pixel plane.
-     */
     private val v: ByteArray,
 ) {
 

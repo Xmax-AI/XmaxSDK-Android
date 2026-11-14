@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * The sampling method for server-read reference video.
+ *
+ * @property value The string representation used for configuration or display.
  */
 public enum class RealtimeVideoSampleMethod(
-    /**
-     * The string representation used for configuration or display.
-     */
     internal val value: String,
 ) {
 
@@ -33,15 +32,11 @@ public enum class RealtimeVideoSampleMethod(
 
 /**
  * A reference video directly accessible to the server.
+ *
+ * @property path The video URL directly accessible to the generation server.
+ * @property sampleMethod The server video sampling method; defaults to `RealtimeVideoSampleMethod.TIME`.
  */
 public data class RealtimeReferenceVideo(
-    /**
-     * The video URL directly accessible to the generation server.
-     */
     public val path: String,
-
-    /**
-     * The server video sampling method; defaults to `RealtimeVideoSampleMethod.TIME`.
-     */
     public val sampleMethod: RealtimeVideoSampleMethod = RealtimeVideoSampleMethod.TIME,
 )

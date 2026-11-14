@@ -16,20 +16,13 @@ import android.util.SizeF
 
 /**
  * An interaction sampled from a video viewport.
+ *
+ * @property points Touch points in viewport coordinates, in pixels.
+ * @property viewportSize The preview viewport dimensions, in pixels.
+ * @property contentMode Aspect-preserving fit or fill scaling.
  */
 internal data class InteractionFrame(
-    /**
-     * Touch points in viewport coordinates, in pixels.
-     */
     val points: List<PointF>,
-
-    /**
-     * The preview viewport dimensions, in pixels.
-     */
     val viewportSize: SizeF,
-
-    /**
-     * Aspect-preserving fit or fill scaling.
-     */
     val contentMode: VideoContentMode,
 )

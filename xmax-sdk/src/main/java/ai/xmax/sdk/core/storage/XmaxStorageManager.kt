@@ -18,11 +18,10 @@ import java.io.File
 
 /**
  * Provides public file transfer operations backed by the storage service.
+ *
+ * @property storageService The service validating and executing file uploads and downloads.
  */
 internal class XmaxStorageManager(
-    /**
-     * The service validating and executing file uploads and downloads.
-     */
     private val storageService: StorageServicing,
 ) : XmaxStorageManaging {
 

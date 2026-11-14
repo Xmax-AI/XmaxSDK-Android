@@ -34,16 +34,12 @@ import org.json.JSONObject
 
 /**
  * Coordinates media transfers, temporary credentials, and image safety checks.
+ *
+ * @property apiService The server API client.
+ * @property storageManager The object storage transport.
  */
 internal class StorageService(
-    /**
-     * The server API client.
-     */
     private val apiService: ApiServicing,
-
-    /**
-     * The object storage transport.
-     */
     private val storageManager: StorageManaging,
 ) : StorageServicing {
 
@@ -792,16 +788,12 @@ internal class StorageService(
 
     /**
      * The image or video types accepted by storage services.
+     *
+     * @property value The string representation used for configuration or display.
+     * @property label The readable name used in logs or errors.
      */
     private enum class MediaType(
-        /**
-         * The string representation used for configuration or display.
-         */
         val value: String,
-
-        /**
-         * The readable name used in logs or errors.
-         */
         val label: String,
     ) {
 

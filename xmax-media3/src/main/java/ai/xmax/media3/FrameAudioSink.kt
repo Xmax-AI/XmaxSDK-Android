@@ -27,39 +27,26 @@ import java.util.ArrayDeque
  * The AudioTrack playback clock prevents prebuffered audio from reaching RTC ahead of playback.
  *
  * @param delegate The sink performing audio playback.
+ * @property input The function returning the current external media sink.
  */
 @UnstableApi
 internal class FrameAudioSink(
     delegate: AudioSink,
-
-    /**
-     * The function returning the current external media sink.
-     */
     private val input: () -> RealtimeExternalFrameSink?,
 ) : ForwardingAudioSink(delegate) {
 
     /**
      * A PCM packet and its timeline position.
+     *
+     * @property data The binary data to read, transfer, or retain.
+     * @property ptsUs The packet's media presentation timestamp, in microseconds.
+     * @property sampleRate The input sample rate, in Hz.
+     * @property channelCount The number of interleaved PCM channels.
      */
     private data class Packet(
-        /**
-         * The binary data to read, transfer, or retain.
-         */
         val data: ByteArray,
-
-        /**
-         * The packet's media presentation timestamp, in microseconds.
-         */
         val ptsUs: Long,
-
-        /**
-         * The input sample rate, in Hz.
-         */
         val sampleRate: Int,
-
-        /**
-         * The number of interleaved PCM channels.
-         */
         val channelCount: Int,
     )
 

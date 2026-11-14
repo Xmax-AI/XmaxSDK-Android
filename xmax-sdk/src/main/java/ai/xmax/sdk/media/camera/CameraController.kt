@@ -10,313 +10,306 @@
 
 package ai.xmax.sdk.media.camera
 
+import ai.xmax.sdk.AudioFrame
 import ai.xmax.sdk.CameraPosition
 import ai.xmax.sdk.MediaServicing
 import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
+import ai.xmax.sdk.RealtimeCameraRotation
+import ai.xmax.sdk.RealtimeMediaSource
 import ai.xmax.sdk.RealtimeMediaStream
 import ai.xmax.sdk.RealtimeVideoFormat
-import ai.xmax.sdk.RealtimeMediaSource
 import ai.xmax.sdk.RealtimeVideoTrack
+import ai.xmax.sdk.VideoFrame
 import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxErrorCode
 import ai.xmax.sdk.cleanupAfterFailure
 import ai.xmax.sdk.cleanupResources
 import ai.xmax.sdk.foundation.permissions.PermissionManaging
-import ai.xmax.sdk.foundation.rtc.RtcManaging
+import ai.xmax.sdk.media.audio.MicrophoneCapture
+import ai.xmax.sdk.media.video.Yuv420VideoFrameConverter
+import ai.xmax.sdk.render.video.LocalVideoFramePreview
 import ai.xmax.sdk.render.video.VideoRenderBinding
 import ai.xmax.sdk.render.video.VideoRenderRegistry
 import ai.xmax.sdk.stream.StreamID
-import android.content.Context
 import androidx.compose.ui.unit.IntSize
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Coordinates camera permissions, internal RTC capture, and local preview resources.
+ * Coordinates SDK-owned camera and microphone capture, local preview, and the active camera track.
+ *
+ * @property camera The Android camera capture.
+ * @property microphone The Android microphone capture.
+ * @property permissionManager The app's Android camera and microphone permission checker.
+ * @property mediaService The service resolving media dimensions and model constraints.
+ * @property videoListener The receiver of frames available for publication.
+ * @property audioListener The receiver of microphone PCM packets.
+ * @property videoErrorListener The receiver of camera and preview failures.
+ * @property audioErrorListener The receiver of microphone failures.
  */
 internal class CameraController(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
-    private val rtcManager: RtcManaging,
-
-    /**
-     * The Android camera and recording permission checker.
-     */
+    private val camera: CameraCapture,
+    private val microphone: MicrophoneCapture,
     private val permissionManager: PermissionManaging,
-
-    /**
-     * The service resolving media dimensions and model constraints.
-     */
     private val mediaService: MediaServicing,
-
-    /**
-     * The media failure callback.
-     */
-    private val errorListener: (XmaxError) -> Unit = {},
+    private val videoListener: (VideoFrame) -> Unit = {},
+    private val audioListener: (AudioFrame) -> Unit = {},
+    private val videoErrorListener: (XmaxError) -> Unit = {},
+    private val audioErrorListener: (XmaxError) -> Unit = {},
 ) {
 
     /**
-     * Creates a camera controller.
-     *
-     * @param context The Android context used for system services and media resources.
-     * @param rtcManager The manager for RTC capture, publication, subscription, and rendering.
-     * @param mediaService The service resolving dimensions and model input constraints.
-     * @param errorListener The media failure callback.
+     * The track owned by the active camera source.
      */
-    constructor(
-        context: Context,
-        rtcManager: RtcManaging,
-        mediaService: MediaServicing = ai.xmax.sdk.service.media.MediaService(),
-        errorListener: (XmaxError) -> Unit = {},
-    ) : this(
-        rtcManager = rtcManager,
-        permissionManager = ai.xmax.sdk.foundation.permissions.PermissionManager(context),
-        mediaService = mediaService,
-        errorListener = errorListener,
-    )
+    @Volatile var currentTrack: RealtimeVideoTrack? = null
+        private set
 
     /**
-     * The lock protecting camera input state.
+     * Whether the current source should capture microphone audio while connected.
      */
-    private val stateLock = Any()
+    @Volatile var useMicrophone = false
+        private set
 
     /**
-     * The active camera track.
-     */
-    private var activeTrack: RealtimeVideoTrack? = null
-
-    /**
-     * The microphone option selected when creating this camera source.
-     */
-    private var storedUseMicrophone = false
-
-    /**
-     * Whether microphone capture has started.
-     */
-    private var isMicrophoneCapturing = false
-
-    /**
-     * The preview readiness listener retained when native capture resources are released.
+     * The listener retained across local camera lifetimes.
      */
     @Volatile private var previewReadyListener: RealtimeCameraPreviewReadyListener? = null
 
     /**
-     * The current camera track snapshot.
+     * The preview associated with the active track, retained during format and lens changes.
      */
-    val currentTrack: RealtimeVideoTrack?
-        get() = synchronized(stateLock) { activeTrack }
+    private var preview: LocalVideoFramePreview? = null
 
     /**
-     * Whether the current camera source enables microphone input.
+     * The correction retained across format changes and lens switches.
      */
-    val useMicrophone: Boolean
-        get() = synchronized(stateLock) { activeTrack != null && storedUseMicrophone }
+    @Volatile private var cameraRotation = RealtimeCameraRotation.ROTATION_0
 
     /**
-     * Replaces the camera preview readiness listener; null unregisters it.
+     * The revision used to ignore frame and failure callbacks from replaced captures.
+     */
+    private val captureRevision = AtomicLong()
+
+    /**
+     * Replaces the listener notified after a camera frame reaches the preview.
      *
-     * @param listener The event listener, or null to unregister it.
+     * @param listener The new listener, or null to clear it.
      */
     fun setPreviewReadyListener(
         listener: RealtimeCameraPreviewReadyListener?,
     ) {
         previewReadyListener = listener
-        rtcManager.setCameraPreviewReadyListener(listener)
     }
 
     /**
-     * Creates a local camera stream and starts its preview.
+     * Starts the local camera. Microphone capture is deferred until connection.
      *
-     * Your app must obtain camera permission before creation and recording permission before
-     * enabling the microphone. Microphone capture starts on connection and stops on disconnection,
-     * without local playback. Input dimensions must satisfy the model constraints.
-     *
-     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
-     * @param position The front or rear camera to use.
-     * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
-     * false.
+     * @param videoFormat The requested model-supported camera output.
+     * @param position The initial front or rear camera.
+     * @param useMicrophone Whether the connection will publish microphone audio.
+     * @param rotation The clockwise correction relative to automatic orientation.
      */
     suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
         position: CameraPosition,
         useMicrophone: Boolean = false,
+        rotation: RealtimeCameraRotation = RealtimeCameraRotation.ROTATION_0,
     ): RealtimeMediaStream {
-        if (currentTrack != null) {
-            throw XmaxError(
-                code = XmaxErrorCode.INVALID_CONFIGURATION,
-                message = "Stop the current local camera stream before creating another one",
-            )
-        }
+        check(currentTrack == null)
+        val format = resolveVideoFormat(videoFormat)
+        val track = RealtimeVideoTrack(LOCAL_VIDEO_TRACK_ID, format, position)
+        permissionManager.ensureCameraPermission()
+        if (useMicrophone) permissionManager.ensureMicrophonePermission()
 
-        val resolvedFormat = resolveVideoFormat(videoFormat)
-        val track = RealtimeVideoTrack(
-            id = LOCAL_VIDEO_TRACK_ID,
-            videoFormat = resolvedFormat,
-            position = position,
+        val previewReported = AtomicBoolean(false)
+        var previewPixels = IntArray(0)
+        val framePreview = LocalVideoFramePreview(
+            makeBitmap = { frame ->
+                val pixelCount = frame.format.width * frame.format.height
+                if (previewPixels.size != pixelCount) {
+                    previewPixels = IntArray(pixelCount)
+                }
+                Yuv420VideoFrameConverter.makePreviewBitmap(
+                    frame = frame,
+                    reusablePixels = previewPixels,
+                )
+            },
+            onDisplayed = {
+                val listener = previewReadyListener
+                if (listener != null && currentTrack === track && previewReported.compareAndSet(false, true)) {
+                    listener.onCameraPreviewReady()
+                }
+            },
+            onFailure = { if (currentTrack === track) videoErrorListener(XmaxError.from(it)) },
         )
+        preview = framePreview
 
         try {
-            permissionManager.ensureCameraPermission()
-            if (useMicrophone) permissionManager.ensureMicrophonePermission()
-            rtcManager.switchCamera(position)
-            rtcManager.setCameraPreviewReadyListener(previewReadyListener)
-            rtcManager.startVideoCapture(
-                width = resolvedFormat.width,
-                height = resolvedFormat.height,
-                frameRate = resolvedFormat.fps,
-            )
+            startCapture(format, position, framePreview, rotation)
             VideoRenderRegistry.register(
                 track,
                 VideoRenderBinding(
-                    attachHandler = { view, contentMode ->
-                        try {
-                            view.prepareRtcVideoRendering()
-                            rtcManager.bindLocalVideo(
-                                view.rtcRenderView,
-                                contentMode,
-                            )
-                        } catch (
-                            error: Throwable,
-                        ) {
-                            errorListener(XmaxError.from(error))
-                            throw error
-                        }
-                    },
-                    detachHandler = { rtcManager.unbindLocalVideo() },
+                    attachHandler = framePreview::attach,
+                    detachHandler = framePreview::detach,
                 ),
             )
 
-            synchronized(stateLock) {
-                activeTrack = track
-                storedUseMicrophone = useMicrophone
-            }
-
-            return RealtimeMediaStream(
-                StreamID.LOCAL.value,
-                track,
-            )
-        } catch (
-            error: Throwable,
-        ) {
-            cleanupAfterFailure(
-                error,
-                { VideoRenderRegistry.unregister(track) },
-                { rtcManager.stopVideoCapture() },
-            )
+            this.useMicrophone = useMicrophone
+            cameraRotation = rotation
+            currentTrack = track
+            return RealtimeMediaStream(StreamID.LOCAL.value, track)
+        } catch (error: Throwable) {
+            cleanupAfterFailure(error, { stopLocalCameraStream() })
             throw XmaxError.from(error)
         }
     }
 
     /**
-     * Updates camera output while retaining the lens, track, and preview; failure retains the previous
-     * format.
+     * Applies a new format to the existing camera track and preview.
      *
-     * @param videoFormat Model-supported dimensions, capture frame rate, and encoding settings.
-     * @throws XmaxError If the camera is not started, the format is unsupported, or capture configuration
-     * fails.
+     * @param videoFormat The requested model-supported camera output.
      */
-    fun updateVideoFormat(
+    suspend fun updateVideoFormat(
         videoFormat: RealtimeVideoFormat,
     ) {
-        synchronized(stateLock) {
-            val track = activeTrack
-                ?: throw XmaxError(
-                    XmaxErrorCode.INVALID_CONFIGURATION,
-                    "Camera preview is not started",
-                )
-            val resolved = resolveVideoFormat(videoFormat)
-            if (resolved == track.videoFormat) return
+        val track = requireTrack()
+        val format = resolveVideoFormat(videoFormat)
+        if (format == track.videoFormat) return
 
-            rtcManager.updateVideoCaptureFormat(
-                resolved.width,
-                resolved.height,
-                resolved.fps,
-            )
-            track.updateVideoFormat(resolved)
-        }
+        replaceCapture(track, format, checkNotNull(track.position))
+        track.updateVideoFormat(format)
     }
 
     /**
-     * Starts microphone capture for the current camera source.
-     */
-    fun startMicrophoneCapture() {
-        val shouldStart = synchronized(stateLock) {
-            if (activeTrack == null || !storedUseMicrophone || isMicrophoneCapturing) {
-                false
-            } else {
-                isMicrophoneCapturing = true
-                true
-            }
-        }
-        if (shouldStart) rtcManager.startAudioCapture()
-    }
-
-    /**
-     * Stops microphone capture for the current camera source.
-     */
-    fun stopMicrophoneCapture() {
-        if (!synchronized(stateLock) { isMicrophoneCapturing }) return
-
-        rtcManager.stopAudioCapture()
-        synchronized(stateLock) { isMicrophoneCapturing = false }
-    }
-
-    /**
-     * Stops the local camera stream.
+     * Changes rotation on the running camera and discards queued preview work from the old angle.
      *
-     * Other input sources are unaffected.
+     * @param rotation The clockwise correction relative to automatic orientation.
+     */
+    suspend fun setCameraRotation(
+        rotation: RealtimeCameraRotation,
+    ) {
+        requireTrack()
+        if (rotation == cameraRotation) return
+
+        val framePreview = checkNotNull(preview)
+        camera.setRotation(rotation) {
+            framePreview.discardPendingFrame()
+            cameraRotation = rotation
+        }
+    }
+
+    /**
+     * Starts SDK microphone capture for the current connection if enabled.
+     */
+    suspend fun startMicrophoneCapture() {
+        if (useMicrophone) microphone.start(audioListener, audioErrorListener)
+    }
+
+    /**
+     * Releases the microphone while preserving camera preview and settings.
+     */
+    suspend fun stopMicrophoneCapture() {
+        microphone.stop()
+    }
+
+    /**
+     * Stops local capture and releases the track and its rendering binding.
      */
     suspend fun stopLocalCameraStream() {
-        val track = synchronized(stateLock) {
-            activeTrack.also {
-                activeTrack = null
-                storedUseMicrophone = false
-            }
-        }
+        captureRevision.incrementAndGet()
+        val track = currentTrack
+        val framePreview = preview
+        currentTrack = null
+        preview = null
+        useMicrophone = false
+        cameraRotation = RealtimeCameraRotation.ROTATION_0
 
-        try {
-            cleanupResources(
-                { stopMicrophoneCapture() },
-                { track?.let(VideoRenderRegistry::unregister) },
-                { if (track != null) rtcManager.unbindLocalVideo() },
-                { rtcManager.stopVideoCapture() },
-            )
-        } finally {
-            synchronized(stateLock) { isMicrophoneCapturing = false }
-        }
+        cleanupResources(
+            { microphone.stop() },
+            { track?.let { VideoRenderRegistry.binding(it)?.detach() } },
+            { track?.let(VideoRenderRegistry::unregister) },
+            { framePreview?.close() },
+            { camera.stop() },
+        )
     }
 
     /**
-     * Switches front and rear cameras and updates the track's position.
+     * Switches lenses while retaining the camera track and preview binding.
      */
     suspend fun switchCamera(): RealtimeMediaStream {
-        val track = currentTrack
-        val position = track?.position
-        if (track == null || track.videoFormat == null || position == null) {
-            throw XmaxError(
-                code = XmaxErrorCode.RTC_ERROR,
-                message = "Local camera preview is not started",
-            )
-        }
+        val track = requireTrack()
+        val position = if (track.position == CameraPosition.FRONT) CameraPosition.BACK else CameraPosition.FRONT
+        replaceCapture(track, checkNotNull(track.videoFormat), position)
+        track.updatePosition(position)
 
-        val nextPosition = when (position) {
-            CameraPosition.FRONT -> CameraPosition.BACK
-            CameraPosition.BACK -> CameraPosition.FRONT
-        }
+        return RealtimeMediaStream(StreamID.LOCAL.value, track)
+    }
 
-        return try {
-            rtcManager.switchCamera(nextPosition)
-
-            track.updatePosition(nextPosition)
-            RealtimeMediaStream(
-                StreamID.LOCAL.value,
-                track,
-            )
-        } catch (
-            error: Throwable,
-        ) {
+    /**
+     * Starts a replacement and restores the previous lens and format if startup fails.
+     *
+     * @param track The existing track retaining its current format until replacement succeeds.
+     * @param format The new output format.
+     * @param position The new camera position.
+     */
+    private suspend fun replaceCapture(
+        track: RealtimeVideoTrack,
+        format: RealtimeVideoFormat,
+        position: CameraPosition,
+    ) {
+        val framePreview = checkNotNull(preview)
+        try {
+            startCapture(format, position, framePreview)
+        } catch (error: Throwable) {
+            cleanupAfterFailure(error, {
+                try {
+                    startCapture(checkNotNull(track.videoFormat), checkNotNull(track.position), framePreview)
+                } catch (restoreError: Exception) {
+                    videoErrorListener(XmaxError.from(restoreError))
+                    throw restoreError
+                }
+            })
             throw XmaxError.from(error)
         }
     }
+
+    /**
+     * Starts capture with callbacks scoped to its revision.
+     *
+     * @param format The output format.
+     * @param position The camera position.
+     * @param framePreview The bound preview receiving the same oriented frames as RTC.
+     * @param rotation The correction to apply when capture starts.
+     */
+    private suspend fun startCapture(
+        format: RealtimeVideoFormat,
+        position: CameraPosition,
+        framePreview: LocalVideoFramePreview,
+        rotation: RealtimeCameraRotation = cameraRotation,
+    ) {
+        val revision = captureRevision.incrementAndGet()
+        framePreview.discardPendingFrame()
+        camera.start(
+            format = format,
+            position = position,
+            rotation = rotation,
+            onFrame = { frame ->
+                if (captureRevision.get() == revision) {
+                    framePreview.enqueue(frame)
+                    videoListener(frame)
+                }
+            },
+            onError = { error -> if (captureRevision.get() == revision) videoErrorListener(error) },
+        )
+    }
+
+    /**
+     * Returns the active track for a camera control operation.
+     */
+    private fun requireTrack(): RealtimeVideoTrack = currentTrack ?: throw XmaxError(
+        XmaxErrorCode.INVALID_CONFIGURATION,
+        "Camera preview is not started",
+    )
 
     /**
      * Validates or resolves camera input using the model's constraints.

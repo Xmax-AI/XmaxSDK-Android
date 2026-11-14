@@ -14,11 +14,10 @@ import androidx.compose.ui.unit.IntSize
 
 /**
  * A camera resolution preset whose availability depends on the selected model.
+ *
+ * @property size The output dimensions, in pixels, without frame rate or bitrate settings.
  */
 public enum class RealtimeCameraPreset(
-    /**
-     * The output dimensions, in pixels, without frame rate or bitrate settings.
-     */
     public val size: IntSize,
 ) {
 

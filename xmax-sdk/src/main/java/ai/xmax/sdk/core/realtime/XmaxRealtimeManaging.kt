@@ -74,6 +74,20 @@ public interface XmaxRealtimeManaging {
     )
 
     /**
+     * Applies a clockwise correction to the active camera's preview and generation input.
+     *
+     * The correction is relative to automatic camera orientation and takes effect on subsequent
+     * frames. The view binding, generation task, and RTC connection are retained. Frames are
+     * cropped to the configured output dimensions while preserving their aspect ratio.
+     *
+     * @param rotation The absolute correction angle. Zero restores automatic orientation.
+     * @throws XmaxError If no local camera is active or another operation prevents the update.
+     */
+    public suspend fun setCameraRotation(
+        rotation: RealtimeCameraRotation,
+    )
+
+    /**
      * The committed uplink level, or null before connection, during disconnection, or without local
      * publication.
      */
@@ -224,19 +238,47 @@ public interface XmaxRealtimeManaging {
         preset: RealtimeCameraPreset,
         position: CameraPosition = CameraPosition.FRONT,
         useMicrophone: Boolean = false,
-    ): RealtimeMediaStream {
-        val format = options.model.supportedVideoFormats.firstOrNull {
-            it.width == preset.size.width && it.height == preset.size.height
-        } ?: throw XmaxError(
-            XmaxErrorCode.INVALID_CONFIGURATION,
-            "Model does not support the requested camera preset",
-        )
-        return createLocalCameraStream(
-            format,
-            position,
-            useMicrophone,
-        )
-    }
+    ): RealtimeMediaStream = createLocalCameraStream(
+        videoFormat = resolveCameraPreset(preset),
+        position = position,
+        useMicrophone = useMicrophone,
+    )
+
+    /**
+     * Creates a camera stream from a resolution preset with an optional orientation correction.
+     *
+     * @param preset The model-supported camera resolution.
+     * @param position The initial camera position.
+     * @param useMicrophone Whether to capture microphone audio while connected.
+     * @param rotation The clockwise correction relative to automatic orientation.
+     * @return A media stream containing the local camera track.
+     */
+    public suspend fun createLocalCameraStream(
+        preset: RealtimeCameraPreset,
+        position: CameraPosition = CameraPosition.FRONT,
+        useMicrophone: Boolean = false,
+        rotation: RealtimeCameraRotation = RealtimeCameraRotation.ROTATION_0,
+    ): RealtimeMediaStream = createLocalCameraStream(
+        videoFormat = resolveCameraPreset(preset),
+        position = position,
+        useMicrophone = useMicrophone,
+        rotation = rotation,
+    )
+
+    /**
+     * Resolves the selected preset to a model-supported format.
+     *
+     * @param preset The requested camera resolution.
+     * @return The matching format with the model's default frame rate.
+     */
+    private fun resolveCameraPreset(
+        preset: RealtimeCameraPreset,
+    ): RealtimeVideoFormat = options.model.supportedVideoFormats.firstOrNull {
+        it.width == preset.size.width && it.height == preset.size.height
+    } ?: throw XmaxError(
+        XmaxErrorCode.INVALID_CONFIGURATION,
+        "Model does not support the requested camera preset",
+    )
 
     /**
      * Creates a local camera stream using the model's default video format.
@@ -258,11 +300,31 @@ public interface XmaxRealtimeManaging {
     )
 
     /**
+     * Creates a camera stream at the model's default format with an optional orientation correction.
+     *
+     * @param position The initial camera position.
+     * @param useMicrophone Whether to capture microphone audio while connected.
+     * @param rotation The clockwise correction relative to automatic orientation.
+     * @return A media stream containing the local camera track.
+     */
+    public suspend fun createLocalCameraStream(
+        position: CameraPosition = CameraPosition.FRONT,
+        useMicrophone: Boolean = false,
+        rotation: RealtimeCameraRotation = RealtimeCameraRotation.ROTATION_0,
+    ): RealtimeMediaStream = createLocalCameraStream(
+        videoFormat = options.model.defaultCameraVideoFormat,
+        position = position,
+        useMicrophone = useMicrophone,
+        rotation = rotation,
+    )
+
+    /**
      * Creates a local camera stream and starts its preview.
      *
-     * Your app must obtain camera permission before creation and recording permission before
-     * enabling the microphone. Microphone capture starts on connection and stops on disconnection,
-     * without local playback. Input dimensions must satisfy the model constraints.
+     * XmaxSDK owns camera and microphone capture. Your app must obtain camera permission before
+     * creation and recording permission before enabling the microphone. Microphone capture starts
+     * on connection and stops on disconnection without local playback. Input dimensions must
+     * satisfy the model constraints.
      *
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @param position The front or rear camera to use.
@@ -274,6 +336,26 @@ public interface XmaxRealtimeManaging {
         videoFormat: RealtimeVideoFormat,
         position: CameraPosition,
         useMicrophone: Boolean = false,
+    ): RealtimeMediaStream
+
+    /**
+     * Creates a local camera stream and starts preview with the specified orientation correction.
+     *
+     * Your app must obtain camera permission and, when enabling the microphone, recording
+     * permission. The same corrected frames drive preview and generation.
+     *
+     * @param videoFormat The fixed output dimensions, frame rate, and uplink encoding settings.
+     * @param position The initial camera position.
+     * @param useMicrophone Whether to capture microphone audio while connected.
+     * @param rotation The clockwise correction relative to automatic orientation. Zero preserves
+     * automatic orientation.
+     * @return A media stream containing the local camera track.
+     */
+    public suspend fun createLocalCameraStream(
+        videoFormat: RealtimeVideoFormat,
+        position: CameraPosition,
+        useMicrophone: Boolean = false,
+        rotation: RealtimeCameraRotation = RealtimeCameraRotation.ROTATION_0,
     ): RealtimeMediaStream
 
     /**

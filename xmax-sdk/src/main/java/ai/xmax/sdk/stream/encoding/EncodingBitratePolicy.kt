@@ -67,16 +67,12 @@ internal object EncodingBitratePolicy {
 
     /**
      * A reference point for encoder bitrate interpolation.
+     *
+     * @property value The pixel area or frame rate used for lookup and interpolation.
+     * @property bitrate The encoder bitrate, in kbps.
      */
     private data class BitratePoint(
-        /**
-         * The pixel area or frame rate used for lookup and interpolation.
-         */
         val value: Double,
-
-        /**
-         * The encoder bitrate, in kbps.
-         */
         val bitrate: Double,
     )
 

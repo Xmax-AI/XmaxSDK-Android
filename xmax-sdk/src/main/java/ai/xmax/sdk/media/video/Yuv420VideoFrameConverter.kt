@@ -23,7 +23,7 @@ import android.media.Image
 import java.nio.ByteBuffer
 
 /**
- * Converts flexible Android YUV420 decoder output to compact I420 for RTC.
+ * Converts Android YUV420 images to contiguous I420.
  */
 internal object Yuv420VideoFrameConverter {
 
@@ -35,6 +35,7 @@ internal object Yuv420VideoFrameConverter {
      * @param outputHeight The output height, in pixels.
      * @param rotation The rotation applied to the source image.
      * @param timestampUs The monotonic frame timestamp, in microseconds.
+     * @param mirrored Whether to mirror the output horizontally after rotation.
      * @return A frame with the requested pixel format, dimensions, and orientation.
      */
     fun convert(
@@ -43,6 +44,7 @@ internal object Yuv420VideoFrameConverter {
         outputHeight: Int,
         rotation: VideoRotation,
         timestampUs: Long,
+        mirrored: Boolean = false,
     ): VideoFrame {
         if (image.format != ImageFormat.YUV_420_888 || image.planes.size < PLANE_COUNT) {
             throw mediaError("The video decoder output is not YUV 4:2:0")
@@ -70,6 +72,7 @@ internal object Yuv420VideoFrameConverter {
             outputHeight = outputHeight,
             rotation = rotation,
             timestampUs = timestampUs,
+            mirrored = mirrored,
         )
     }
 
@@ -81,6 +84,7 @@ internal object Yuv420VideoFrameConverter {
      * @param outputHeight The output height, in pixels.
      * @param rotation The rotation applied to the source image.
      * @param timestampUs The monotonic frame timestamp, in microseconds.
+     * @param mirrored Whether to mirror the output horizontally after rotation.
      * @return A frame with the requested pixel format, dimensions, and orientation.
      */
     internal fun convert(
@@ -89,26 +93,34 @@ internal object Yuv420VideoFrameConverter {
         outputHeight: Int,
         rotation: VideoRotation,
         timestampUs: Long,
+        mirrored: Boolean = false,
     ): VideoFrame {
         validate(
             source,
             outputWidth,
             outputHeight,
         )
-        val y = ByteArray(outputWidth * outputHeight)
+        val lumaSize = outputWidth.toLong() * outputHeight
+        val frameSize = lumaSize + lumaSize / 2
+        if (frameSize > Int.MAX_VALUE) {
+            throw mediaError("The I420 frame exceeds the maximum buffer size")
+        }
+
+        val yLength = lumaSize.toInt()
         val chromaWidth = outputWidth / CHROMA_SUBSAMPLING
         val chromaHeight = outputHeight / CHROMA_SUBSAMPLING
-        val u = ByteArray(chromaWidth * chromaHeight)
-        val v = ByteArray(chromaWidth * chromaHeight)
+        val chromaLength = chromaWidth * chromaHeight
+        val uOffset = yLength
+        val vOffset = uOffset + chromaLength
+        val output = ByteArray(frameSize.toInt())
 
         val convertedNatively = NativeYuv420Converter.convert(
             source = source,
             outputWidth = outputWidth,
             outputHeight = outputHeight,
             rotation = rotation,
-            y = y,
-            u = u,
-            v = v,
+            output = output,
+            mirrored = mirrored,
         )
         if (!convertedNatively) {
             val mapping = SourceMapping(
@@ -116,11 +128,12 @@ internal object Yuv420VideoFrameConverter {
                 outputWidth,
                 outputHeight,
                 rotation,
+                mirrored,
             )
             copyLuma(
                 source.planes[Y_PLANE],
                 mapping,
-                y,
+                output,
             )
             copyChroma(
                 uPlane = source.planes[U_PLANE],
@@ -128,8 +141,9 @@ internal object Yuv420VideoFrameConverter {
                 mapping = mapping,
                 outputWidth = outputWidth,
                 outputHeight = outputHeight,
-                u = u,
-                v = v,
+                output = output,
+                uOffset = uOffset,
+                vOffset = vOffset,
             )
         }
 
@@ -142,18 +156,23 @@ internal object Yuv420VideoFrameConverter {
             timestampUs = timestampUs,
             planes = listOf(
                 VideoFramePlane(
-                    y,
+                    output,
                     stride = outputWidth,
+                    byteLength = yLength,
                     copyData = false,
                 ),
                 VideoFramePlane(
-                    u,
+                    output,
                     stride = chromaWidth,
+                    byteOffset = uOffset,
+                    byteLength = chromaLength,
                     copyData = false,
                 ),
                 VideoFramePlane(
-                    v,
+                    output,
                     stride = chromaWidth,
+                    byteOffset = vOffset,
+                    byteLength = chromaLength,
                     copyData = false,
                 ),
             ),
@@ -164,10 +183,13 @@ internal object Yuv420VideoFrameConverter {
      * Converts a frame to a local preview Bitmap without changing uplink pixels.
      *
      * @param frame The video frame to process, display, or submit.
+     * @param reusablePixels Optional ARGB storage of at least width times height elements.
+     *   The caller must give the conversion exclusive access until this function returns.
      * @return An image for local display.
      */
     fun makePreviewBitmap(
         frame: VideoFrame,
+        reusablePixels: IntArray? = null,
     ): Bitmap {
         if (frame.format.pixelFormat != VideoPixelFormat.I420 || frame.planes.size != PLANE_COUNT) {
             throw IllegalArgumentException("Decoded video preview requires an I420 frame")
@@ -178,18 +200,38 @@ internal object Yuv420VideoFrameConverter {
         val yPlane = frame.planes[Y_PLANE]
         val uPlane = frame.planes[U_PLANE]
         val vPlane = frame.planes[V_PLANE]
-        val y = yPlane.selectedBytesView()
-        val u = uPlane.selectedBytesView()
-        val v = vPlane.selectedBytesView()
-        val pixels = IntArray(width * height)
+        val chromaWidth = width / CHROMA_SUBSAMPLING + width % CHROMA_SUBSAMPLING
+        val chromaHeight = height / CHROMA_SUBSAMPLING + height % CHROMA_SUBSAMPLING
+        require(
+            yPlane.containsPixels(
+                width,
+                height,
+            ) && uPlane.containsPixels(
+                chromaWidth,
+                chromaHeight,
+            ) && vPlane.containsPixels(
+                chromaWidth,
+                chromaHeight,
+            ),
+        ) { "I420 preview planes do not contain the requested dimensions" }
+
+        val y = yPlane.backingBytes()
+        val u = uPlane.backingBytes()
+        val v = vPlane.backingBytes()
+        val pixelCount = width * height
+        val pixels = reusablePixels ?: IntArray(pixelCount)
+        require(pixels.size >= pixelCount) { "The preview pixel buffer is too small" }
 
         if (
             NativeYuv420Converter.convertI420ToArgb(
                 y = y,
+                yOffset = yPlane.byteOffset,
                 yStride = yPlane.stride,
                 u = u,
+                uOffset = uPlane.byteOffset,
                 uStride = uPlane.stride,
                 v = v,
+                vOffset = vPlane.byteOffset,
                 vStride = vPlane.stride,
                 width = width,
                 height = height,
@@ -206,13 +248,15 @@ internal object Yuv420VideoFrameConverter {
 
         var outputOffset = 0
         for (row in 0 until height) {
-            val yRow = row * yPlane.stride
+            val yRow = yPlane.byteOffset + row * yPlane.stride
             val chromaRow = row / CHROMA_SUBSAMPLING
+            val uRow = uPlane.byteOffset + chromaRow * uPlane.stride
+            val vRow = vPlane.byteOffset + chromaRow * vPlane.stride
             for (column in 0 until width) {
                 val luma = (y[yRow + column].toInt() and 0xFF) - LUMA_OFFSET
-                val chromaOffset = chromaRow * uPlane.stride + column / CHROMA_SUBSAMPLING
-                val chromaU = (u[chromaOffset].toInt() and 0xFF) - CHROMA_OFFSET
-                val chromaV = (v[chromaOffset].toInt() and 0xFF) - CHROMA_OFFSET
+                val chromaColumn = column / CHROMA_SUBSAMPLING
+                val chromaU = (u[uRow + chromaColumn].toInt() and 0xFF) - CHROMA_OFFSET
+                val chromaV = (v[vRow + chromaColumn].toInt() and 0xFF) - CHROMA_OFFSET
                 val normalizedLuma = luma.coerceAtLeast(0)
                 val red = clampColor(
                     (YUV_LUMA_MULTIPLIER * normalizedLuma + YUV_RED_V * chromaV + ROUNDING) shr 8,
@@ -236,6 +280,17 @@ internal object Yuv420VideoFrameConverter {
             Bitmap.Config.ARGB_8888,
         )
     }
+
+    /**
+     * Checks that the plane's valid range contains all requested pixel rows.
+     *
+     * @param width The number of pixels per row.
+     * @param height The number of rows.
+     */
+    private fun VideoFramePlane.containsPixels(
+        width: Int,
+        height: Int,
+    ): Boolean = stride >= width && (height - 1L) * stride + width <= byteLength
 
     /**
      * Copies the Y luma plane using output-to-source coordinates.
@@ -279,8 +334,9 @@ internal object Yuv420VideoFrameConverter {
      * @param mapping The output-to-source coordinate mapping.
      * @param outputWidth The output width, in pixels.
      * @param outputHeight The output height, in pixels.
-     * @param u The U pixel plane.
-     * @param v The V pixel plane.
+     * @param output The contiguous I420 output array.
+     * @param uOffset The start of the U plane in the output array.
+     * @param vOffset The start of the V plane in the output array.
      */
     private fun copyChroma(
         uPlane: Plane,
@@ -288,8 +344,9 @@ internal object Yuv420VideoFrameConverter {
         mapping: SourceMapping,
         outputWidth: Int,
         outputHeight: Int,
-        u: ByteArray,
-        v: ByteArray,
+        output: ByteArray,
+        uOffset: Int,
+        vOffset: Int,
     ) {
         var outputOffset = 0
         for (targetY in 0 until outputHeight / CHROMA_SUBSAMPLING) {
@@ -306,11 +363,11 @@ internal object Yuv420VideoFrameConverter {
                     displayX,
                     displayY,
                 ) / CHROMA_SUBSAMPLING
-                u[outputOffset] = uPlane.sample(
+                output[uOffset + outputOffset] = uPlane.sample(
                     sourceX,
                     sourceY,
                 )
-                v[outputOffset] = vPlane.sample(
+                output[vOffset + outputOffset] = vPlane.sample(
                     sourceX,
                     sourceY,
                 )
@@ -360,66 +417,37 @@ internal object Yuv420VideoFrameConverter {
 
     /**
      * A YUV420 source image with dimensions, crop region, and pixel planes.
+     *
+     * @property width The frame width, in pixels.
+     * @property height The frame height, in pixels.
+     * @property cropLeft The left crop edge, in pixels.
+     * @property cropTop The top crop edge, in pixels.
+     * @property cropWidth The crop width, in pixels.
+     * @property cropHeight The crop height, in pixels.
+     * @property planes The pixel planes in format order.
      */
     internal data class Source(
-        /**
-         * The frame width, in pixels.
-         */
         val width: Int,
-
-        /**
-         * The frame height, in pixels.
-         */
         val height: Int,
-
-        /**
-         * The left crop edge, in pixels.
-         */
         val cropLeft: Int,
-
-        /**
-         * The top crop edge, in pixels.
-         */
         val cropTop: Int,
-
-        /**
-         * The crop width, in pixels.
-         */
         val cropWidth: Int,
-
-        /**
-         * The crop height, in pixels.
-         */
         val cropHeight: Int,
-
-        /**
-         * The pixel planes in format order.
-         */
         val planes: List<Plane>,
     )
 
     /**
      * A pixel plane buffer with row and pixel strides.
+     *
+     * @property buffer The buffer containing data to process.
+     * @property rowStride The row stride, in bytes.
+     * @property pixelStride The pixel stride within each row, in bytes.
+     * @property baseOffset The valid data's starting byte offset.
      */
     internal data class Plane(
-        /**
-         * The buffer containing data to process.
-         */
         val buffer: ByteBuffer,
-
-        /**
-         * The row stride, in bytes.
-         */
         val rowStride: Int,
-
-        /**
-         * The pixel stride within each row, in bytes.
-         */
         val pixelStride: Int,
-
-        /**
-         * The valid data's starting byte offset.
-         */
         val baseOffset: Int = buffer.position(),
     ) {
 
@@ -445,22 +473,18 @@ internal object Yuv420VideoFrameConverter {
     /**
      * Maps rotated and scaled output pixels to source image coordinates.
      *
+     * @property source The source dimensions, crop region, and pixel planes.
      * @param outputWidth The output width, in pixels.
      * @param outputHeight The output height, in pixels.
+     * @property rotation The rotation applied to the source image.
+     * @param mirrored Whether to mirror the output horizontally after rotation.
      */
     private class SourceMapping(
-        /**
-         * The source dimensions, crop region, and pixel planes.
-         */
         private val source: Source,
-
         outputWidth: Int,
         outputHeight: Int,
-
-        /**
-         * The rotation applied to the source image.
-         */
         private val rotation: VideoRotation,
+        mirrored: Boolean,
     ) {
 
         /**
@@ -497,7 +521,8 @@ internal object Yuv420VideoFrameConverter {
             val displayLeft = (displayWidth - visibleWidth) / 2.0
             val displayTop = (displayHeight - visibleHeight) / 2.0
             targetXs = IntArray(outputWidth) { targetX ->
-                (displayLeft + (targetX + 0.5) / scale)
+                val column = if (mirrored) outputWidth - 1 - targetX else targetX
+                (displayLeft + (column + 0.5) / scale)
                     .toInt().coerceIn(
                         0,
                         displayWidth - 1,

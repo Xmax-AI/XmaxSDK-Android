@@ -32,16 +32,12 @@ internal typealias InteractionListener = suspend (String, List<RealtimePoint>) -
 
 /**
  * Maps view touches to normalized media coordinates and sends trajectories.
+ *
+ * @property listener The event listener.
+ * @property scope The scope for background tasks.
  */
 internal class InteractionController(
-    /**
-     * The event listener.
-     */
     private val listener: InteractionListener = { _, _ -> },
-
-    /**
-     * The scope for background tasks.
-     */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : InteractionControlling {
 
@@ -197,31 +193,23 @@ internal class InteractionController(
 
     /**
      * The task and media format currently permitted to submit trajectories.
+     *
+     * @property taskId The task identifier associating generation requests with result streams.
+     * @property resolvedMediaSize The fixed, resolved media dimensions used for trajectory normalization.
      */
     private data class ActiveInteraction(
-        /**
-         * The task identifier associating generation requests with result streams.
-         */
         val taskId: String,
-
-        /**
-         * The fixed, resolved media dimensions used for trajectory normalization.
-         */
         val resolvedMediaSize: SizeF,
     )
 
     /**
      * A task identifier and trajectory points ready for submission.
+     *
+     * @property taskId The task identifier associating generation requests with result streams.
+     * @property points Trajectory points in normalized media coordinates, from 0 to 1.
      */
     private data class Submission(
-        /**
-         * The task identifier associating generation requests with result streams.
-         */
         val taskId: String,
-
-        /**
-         * Trajectory points in normalized media coordinates, from 0 to 1.
-         */
         val points: List<RealtimePoint>,
     )
 }

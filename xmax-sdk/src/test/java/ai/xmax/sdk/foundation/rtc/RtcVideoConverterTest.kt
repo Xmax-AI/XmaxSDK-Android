@@ -21,38 +21,25 @@ import org.junit.Test
 
 class RtcVideoConverterTest {
     @Test
-    fun `encoder mirror follows camera and resets for external input without changing encoding budget`() {
+    fun `encoder preserves supplied frame orientation and encoding budget`() {
         val configuration = VideoEncodingConfiguration(1024, 1920, 30, 100, 2000)
-        val positions = listOf(CameraPosition.FRONT, CameraPosition.BACK, CameraPosition.FRONT, null)
+        val result = RtcVideoConverter.makeEncoderConfiguration(configuration)
 
-        positions.forEach { position ->
-            val result = RtcVideoConverter.makeEncoderConfiguration(configuration, position)
-            val expected = if (position == CameraPosition.FRONT) {
-                VideoEncoderConfiguration.MIRROR_MODE_TYPE.MIRROR_MODE_ENABLED
-            } else {
-                VideoEncoderConfiguration.MIRROR_MODE_TYPE.MIRROR_MODE_DISABLED
-            }
-
-            assertEquals(expected, result.mirrorMode)
-            assertEquals(1024, result.dimensions.width)
-            assertEquals(1920, result.dimensions.height)
-            assertEquals(30, result.frameRate)
-            assertEquals(100, result.minBitrate)
-            assertEquals(2000, result.bitrate)
-        }
+        assertEquals(VideoEncoderConfiguration.MIRROR_MODE_TYPE.MIRROR_MODE_DISABLED, result.mirrorMode)
+        assertEquals(1024, result.dimensions.width)
+        assertEquals(1920, result.dimensions.height)
+        assertEquals(30, result.frameRate)
+        assertEquals(100, result.minBitrate)
+        assertEquals(2000, result.bitrate)
     }
 
     @Test
-    fun `local preview mirrors automatically while remote rendering stays unmirrored`() {
+    fun `remote canvas preserves the source orientation and user identity`() {
         VideoContentMode.entries.forEach { mode ->
-            val local = RtcVideoConverter.makeLocalCanvas(null, mode)
             val remote = RtcVideoConverter.makeCanvas(null, mode, uid = 123)
 
-            assertEquals(Constants.VIDEO_MIRROR_MODE_AUTO, local.mirrorMode)
             assertEquals(Constants.VIDEO_MIRROR_MODE_DISABLED, remote.mirrorMode)
-            assertEquals(RtcVideoConverter.convertRenderMode(mode), local.renderMode)
             assertEquals(RtcVideoConverter.convertRenderMode(mode), remote.renderMode)
-            assertEquals(0, local.uid)
             assertEquals(123, remote.uid)
         }
     }
@@ -86,6 +73,22 @@ class RtcVideoConverterTest {
             VideoFramePlane(byteArrayOf(4, 3, 2, 1), 4),
         ))
         assertArrayEquals(byteArrayOf(3, 2, 1, 4), RtcVideoConverter.convertFrame(packed).buf)
+    }
+
+    @Test
+    fun `I420 with shared storage and padded rows still packs its valid pixels`() {
+        val bytes = byteArrayOf(1, 2, 0, 3, 4, 0, 5, 6)
+        val frame = VideoFrame(
+            format = VideoFormat(2, 2, VideoPixelFormat.I420),
+            timestampUs = 0,
+            planes = listOf(
+                VideoFramePlane(bytes, stride = 3, byteLength = 6, copyData = false),
+                VideoFramePlane(bytes, stride = 1, byteOffset = 6, byteLength = 1, copyData = false),
+                VideoFramePlane(bytes, stride = 1, byteOffset = 7, byteLength = 1, copyData = false),
+            ),
+        )
+
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5, 6), RtcVideoConverter.convertFrame(frame).buf)
     }
 
     @Test fun `invalid planes fail before native submission`() {

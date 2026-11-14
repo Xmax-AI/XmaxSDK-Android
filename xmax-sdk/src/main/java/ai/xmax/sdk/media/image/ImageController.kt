@@ -27,16 +27,12 @@ import android.net.Uri
 
 /**
  * Coordinates image decoding, repeated frame delivery, and preview.
+ *
+ * @property rtcManager The manager for RTC capture, publication, subscription, and rendering.
+ * @property imageSourceController The component decoding images and supplying repeated frames.
  */
 internal class ImageController(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
     private val rtcManager: RtcManaging,
-
-    /**
-     * The component decoding images and supplying repeated frames.
-     */
     private val imageSourceController: ImageSourceControlling,
 ) {
 

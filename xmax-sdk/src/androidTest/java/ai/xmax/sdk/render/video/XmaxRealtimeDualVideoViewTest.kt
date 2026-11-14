@@ -187,6 +187,7 @@ public class XmaxRealtimeDualVideoViewTest {
             arrayOf(RtcManaging::class.java),
         ) { _, method, args ->
             when (method.name) {
+                "setRemoteAudioFrameListener" -> null
                 "setRemoteVideoFrameListener" -> {
                     @Suppress("UNCHECKED_CAST")
                     receiver = (args!![1] as ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink?)?.let { it::onFirstFrame }
@@ -273,6 +274,7 @@ public class XmaxRealtimeDualVideoViewTest {
             arrayOf(RtcManaging::class.java),
         ) { _, method, args ->
             when (method.name) {
+                "setRemoteAudioFrameListener" -> null
                 "setRemoteVideoFrameListener" -> {
                     @Suppress("UNCHECKED_CAST")
                     val next = (args!![1] as ai.xmax.sdk.foundation.rtc.RtcRemoteVideoSink?)?.let { it::onFirstFrame }

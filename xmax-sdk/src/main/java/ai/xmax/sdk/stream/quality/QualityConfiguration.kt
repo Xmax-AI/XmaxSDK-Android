@@ -14,26 +14,16 @@ import ai.xmax.sdk.RealtimeVideoFormat
 
 /**
  * The media baseline and directional quality levels for a connection.
+ *
+ * @property baseline The resolved local media format, unchanged by transmission adjustments.
+ * @property uplinkLevel The uplink quality level, or null for server-read video without local publication.
+ * @property downlinkLevel The downlink quality level.
+ * @property minimumInputPixels The minimum uplink pixel area.
  */
 internal data class QualityConfiguration(
-    /**
-     * The resolved local media format, unchanged by transmission adjustments.
-     */
     val baseline: RealtimeVideoFormat,
-
-    /**
-     * The uplink quality level, or null for server-read video without local publication.
-     */
     val uplinkLevel: Int?,
-
-    /**
-     * The downlink quality level.
-     */
     val downlinkLevel: Int,
-
-    /**
-     * The minimum uplink pixel area.
-     */
     val minimumInputPixels: Int,
 ) {
 
@@ -53,15 +43,11 @@ internal data class QualityConfiguration(
 
 /**
  * The directional quality proposals for one sample; null leaves a direction unchanged.
+ *
+ * @property uplink The proposed uplink adjustment.
+ * @property downlink The proposed downlink adjustment.
  */
 internal data class QualityChange(
-    /**
-     * The proposed uplink adjustment.
-     */
     val uplink: QualityDirection.Change?,
-
-    /**
-     * The proposed downlink adjustment.
-     */
     val downlink: QualityDirection.Change?,
 )

@@ -12,86 +12,45 @@ package ai.xmax.sdk
 
 /**
  * Uplink video statistics. Unavailable metrics are null.
+ *
+ * @property width The actual encoded width, in pixels.
+ * @property height The actual encoded height, in pixels.
+ * @property captureFrameRate The actual capture frame rate, in fps.
+ * @property encodeFrameRate The actual encoding frame rate, in fps.
+ * @property sendFrameRate The actual transmission frame rate, in fps.
+ * @property bitrateKbps The actual transmitted bitrate, in kbps.
+ * @property packetLossPercent Uplink video packet loss from this device to the RTC cloud, in percent.
  */
 public data class UplinkVideoStatistics(
-    /**
-     * The actual encoded width, in pixels.
-     */
     public val width: Int? = null,
-
-    /**
-     * The actual encoded height, in pixels.
-     */
     public val height: Int? = null,
-
-    /**
-     * The actual capture frame rate, in fps.
-     */
     public val captureFrameRate: Int? = null,
-
-    /**
-     * The actual encoding frame rate, in fps.
-     */
     public val encodeFrameRate: Int? = null,
-
-    /**
-     * The actual transmission frame rate, in fps.
-     */
     public val sendFrameRate: Int? = null,
-
-    /**
-     * The actual transmitted bitrate, in kbps.
-     */
     public val bitrateKbps: Int? = null,
-
-    /**
-     * Uplink video packet loss from this device to the RTC cloud, in percent.
-     */
     public val packetLossPercent: Int? = null,
 )
 
 /**
  * Downlink video statistics. Unavailable metrics are null.
+ *
+ * @property userId The remote user identifier shared with the video track.
+ * @property width The received width, in pixels.
+ * @property height The received height, in pixels.
+ * @property decodeFrameRate The actual decoding frame rate, in fps.
+ * @property renderFrameRate The actual rendering frame rate, in fps.
+ * @property bitrateKbps The actual received bitrate, in kbps.
+ * @property packetLossPercent Downlink video packet loss, in percent.
+ * @property endToEndDelayMs The RTC media end-to-end delay estimate, in milliseconds; excludes the full AI generation pipeline.
  */
 public data class DownlinkVideoStatistics(
-    /**
-     * The remote user identifier shared with the video track.
-     */
     public val userId: String,
-
-    /**
-     * The received width, in pixels.
-     */
     public val width: Int? = null,
-
-    /**
-     * The received height, in pixels.
-     */
     public val height: Int? = null,
-
-    /**
-     * The actual decoding frame rate, in fps.
-     */
     public val decodeFrameRate: Int? = null,
-
-    /**
-     * The actual rendering frame rate, in fps.
-     */
     public val renderFrameRate: Int? = null,
-
-    /**
-     * The actual received bitrate, in kbps.
-     */
     public val bitrateKbps: Int? = null,
-
-    /**
-     * Downlink video packet loss, in percent.
-     */
     public val packetLossPercent: Int? = null,
-
-    /**
-     * The RTC media end-to-end delay estimate, in milliseconds; excludes the full AI generation pipeline.
-     */
     public val endToEndDelayMs: Int? = null,
 )
 

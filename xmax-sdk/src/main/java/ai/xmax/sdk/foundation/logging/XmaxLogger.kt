@@ -15,11 +15,10 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The categories of logs emitted by XmaxSDK.
+ *
+ * @property rawValue The underlying value represented by this object.
  */
 public class XmaxLoggerOption(
-    /**
-     * The underlying value represented by this object.
-     */
     public val rawValue: Int,
 ) {
 
@@ -104,11 +103,10 @@ public class XmaxLoggerOption(
 
 /**
  * A logger with SDK and domain prefixes.
+ *
+ * @property category The business domain of this log category.
  */
 internal class XmaxLogger private constructor(
-    /**
-     * The business domain of this log category.
-     */
     private val category: String,
 ) {
 
@@ -317,16 +315,12 @@ internal class XmaxLogger private constructor(
 
         /**
          * An immutable snapshot of enabled log categories and detail language.
+         *
+         * @property options The enabled log categories.
+         * @property language The language used for log details.
          */
         private data class Configuration(
-            /**
-             * The enabled log categories.
-             */
             val options: Int,
-
-            /**
-             * The language used for log details.
-             */
             val language: Language,
         )
 

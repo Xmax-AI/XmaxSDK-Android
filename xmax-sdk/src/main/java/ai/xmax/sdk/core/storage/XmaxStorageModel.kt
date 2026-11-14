@@ -12,16 +12,12 @@ package ai.xmax.sdk
 
 /**
  * Progress for one file transfer.
+ *
+ * @property completedBytes The number of bytes transferred.
+ * @property totalBytes The total byte count; may be nonpositive before the transport knows the size.
  */
 public data class XmaxStorageProgress(
-    /**
-     * The number of bytes transferred.
-     */
     public val completedBytes: Long,
-
-    /**
-     * The total byte count; may be nonpositive before the transport knows the size.
-     */
     public val totalBytes: Long,
 ) {
 
@@ -57,35 +53,24 @@ public fun interface XmaxStorageProgressListener {
 
 /**
  * A remote file produced by a successful upload.
+ *
+ * @property url The uploaded URL; content safety checks may return an adjusted server URL.
+ * @property objectKey The remote object key.
+ * @property etag The storage entity tag, or null if not provided.
  */
 public data class XmaxUploadedFile(
-    /**
-     * The uploaded URL; content safety checks may return an adjusted server URL.
-     */
     public val url: String,
-
-    /**
-     * The remote object key.
-     */
     public val objectKey: String,
-
-    /**
-     * The storage entity tag, or null if not provided.
-     */
     public val etag: String? = null,
 )
 
 /**
  * A local file produced by a successful download.
+ *
+ * @property filePath The local destination path supplied to the download call.
+ * @property byteCount The actual number of bytes written successfully.
  */
 public data class XmaxDownloadedFile(
-    /**
-     * The local destination path supplied to the download call.
-     */
     public val filePath: String,
-
-    /**
-     * The actual number of bytes written successfully.
-     */
     public val byteCount: Long,
 )

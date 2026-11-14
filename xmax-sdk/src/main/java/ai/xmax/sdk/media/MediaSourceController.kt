@@ -29,21 +29,14 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * Coordinates local video metadata, output format, and platform playback.
+ *
+ * @property metadataManager The media metadata reader.
+ * @property mediaService The service resolving media dimensions and model constraints.
+ * @property playerController The component owning local decoding and playback timing.
  */
 internal class MediaSourceController(
-    /**
-     * The media metadata reader.
-     */
     private val metadataManager: MediaFileMetadataManaging,
-
-    /**
-     * The service resolving media dimensions and model constraints.
-     */
     private val mediaService: MediaServicing,
-
-    /**
-     * The component owning local decoding and playback timing.
-     */
     private val playerController: VideoPlayerControlling,
 ) : MediaSourceControlling {
 
@@ -249,16 +242,12 @@ internal class MediaSourceController(
 
     /**
      * The parsed media metadata and final playback configuration.
+     *
+     * @property metadata The original dimensions, orientation, duration, and audio metadata.
+     * @property configuration The media input dimensions, frame rate, rotation, and audio configuration.
      */
     private data class PreparedMedia(
-        /**
-         * The original dimensions, orientation, duration, and audio metadata.
-         */
         val metadata: MediaFileMetadata,
-
-        /**
-         * The media input dimensions, frame rate, rotation, and audio configuration.
-         */
         val configuration: MediaSourceConfiguration,
     )
 }

@@ -14,61 +14,40 @@ import java.io.File
 
 /**
  * Temporary credentials for object storage transfers.
+ *
+ * @property accessKeyId The temporary storage access key identifier.
+ * @property secretAccessKey The temporary secret access key; never log it.
+ * @property sessionToken The temporary storage session token.
  */
 internal data class StorageCredential(
-    /**
-     * The temporary storage access key identifier.
-     */
     val accessKeyId: String,
-
-    /**
-     * The temporary secret access key; never log it.
-     */
     val secretAccessKey: String,
-
-    /**
-     * The temporary storage session token.
-     */
     val sessionToken: String,
 )
 
 /**
  * The object storage location and temporary credentials.
+ *
+ * @property bucket The storage bucket name.
+ * @property region The storage region.
+ * @property endpoint The storage endpoint.
+ * @property credential The temporary credentials for this transfer.
  */
 internal data class StorageConfiguration(
-    /**
-     * The storage bucket name.
-     */
     val bucket: String,
-
-    /**
-     * The storage region.
-     */
     val region: String,
-
-    /**
-     * The storage endpoint.
-     */
     val endpoint: String,
-
-    /**
-     * The temporary credentials for this transfer.
-     */
     val credential: StorageCredential,
 )
 
 /**
  * The permitted object prefix and storage configuration for an upload.
+ *
+ * @property prefix The prefix for object or record keys.
+ * @property configuration The storage endpoint, region, bucket, and temporary credentials.
  */
 internal data class TemporaryStorageConfiguration(
-    /**
-     * The prefix for object or record keys.
-     */
     val prefix: String,
-
-    /**
-     * The storage endpoint, region, bucket, and temporary credentials.
-     */
     val configuration: StorageConfiguration,
 )
 
@@ -84,11 +63,10 @@ internal sealed interface StorageSource {
 
     /**
      * An upload source backed by a local file.
+     *
+     * @property file A readable local file.
      */
     data class LocalFile(
-        /**
-         * A readable local file.
-         */
         val file: File,
     ) : StorageSource {
 
@@ -100,11 +78,10 @@ internal sealed interface StorageSource {
 
     /**
      * An upload source backed by a byte array.
+     *
+     * @property data The binary data to read, transfer, or retain.
      */
     data class Bytes(
-        /**
-         * The binary data to read, transfer, or retain.
-         */
         val data: ByteArray,
     ) : StorageSource {
 
@@ -117,35 +94,24 @@ internal sealed interface StorageSource {
 
 /**
  * An accessible object after a successful upload.
+ *
+ * @property url The resource or request URL.
+ * @property objectKey The complete object key within the bucket.
+ * @property etag The storage entity tag, or null if the service omits it.
  */
 internal data class StoredFile(
-    /**
-     * The resource or request URL.
-     */
     val url: String,
-
-    /**
-     * The complete object key within the bucket.
-     */
     val objectKey: String,
-
-    /**
-     * The storage entity tag, or null if the service omits it.
-     */
     val etag: String? = null,
 )
 
 /**
  * The local file and actual size after a successful download.
+ *
+ * @property file A readable local file.
+ * @property byteCount The size, in bytes.
  */
 internal data class DownloadedFile(
-    /**
-     * A readable local file.
-     */
     val file: File,
-
-    /**
-     * The size, in bytes.
-     */
     val byteCount: Long,
 )

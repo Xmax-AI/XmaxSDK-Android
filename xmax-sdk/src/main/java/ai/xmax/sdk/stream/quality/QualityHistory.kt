@@ -16,21 +16,14 @@ import android.content.Context
  * The successfully applied model and directional levels retained for one hour.
  *
  * Records are isolated by RTC vendor, model, and direction; L2 is used without a valid record.
+ *
+ * @property readValue The function reading a direction's saved quality record.
+ * @property writeValue The function saving a direction's quality level and timestamp.
+ * @property now The Unix millisecond clock used to expire history.
  */
 internal class QualityHistory(
-    /**
-     * The function reading a direction's saved quality record.
-     */
     private val readValue: (String) -> Entry? = { null },
-
-    /**
-     * The function saving a direction's quality level and timestamp.
-     */
     private val writeValue: (String, Entry) -> Unit = { _, _ -> },
-
-    /**
-     * The Unix millisecond clock used to expire history.
-     */
     private val now: () -> Long = System::currentTimeMillis,
 ) {
 
@@ -86,16 +79,12 @@ internal class QualityHistory(
 
     /**
      * A quality history record and its Unix millisecond timestamp.
+     *
+     * @property level The quality level to apply or retain; 1 is highest.
+     * @property savedAt The Unix millisecond timestamp when the level was saved.
      */
     data class Entry(
-        /**
-         * The quality level to apply or retain; 1 is highest.
-         */
         val level: Int,
-
-        /**
-         * The Unix millisecond timestamp when the level was saved.
-         */
         val savedAt: Long,
     )
 

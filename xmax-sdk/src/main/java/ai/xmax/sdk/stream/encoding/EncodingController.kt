@@ -19,11 +19,10 @@ import ai.xmax.sdk.foundation.rtc.VideoEncodingConfiguration
 
 /**
  * Applies RTC encoding settings for a realtime video format.
+ *
+ * @property rtcManager The manager for RTC capture, publication, subscription, and rendering.
  */
 internal class EncodingController(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
     private val rtcManager: RtcManaging,
 ) : EncodingControlling {
 

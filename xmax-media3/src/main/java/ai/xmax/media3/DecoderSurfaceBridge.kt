@@ -29,16 +29,12 @@ import kotlinx.coroutines.CompletableDeferred
 
 /**
  * A decoder surface bridging Media3 output to local preview and external RTC video input.
+ *
+ * @property input The function returning the current external media sink.
+ * @property sourceFormat The original pixel dimensions fixed for the current source binding.
  */
 internal class DecoderSurfaceBridge(
-    /**
-     * The function returning the current external media sink.
-     */
     private val input: () -> RealtimeExternalFrameSink?,
-
-    /**
-     * The original pixel dimensions fixed for the current source binding.
-     */
     private val sourceFormat: () -> RealtimeVideoFormat?,
 ) {
 

@@ -221,19 +221,6 @@ public class RtcManagerTest {
     }
 
     @Test
-    public fun `internal audio capture lifecycle is forwarded`() = runTest {
-        val engine = FakeRtcPlatform(FakeRtcRoom())
-        val manager = RtcManager(FakeRtcEngineManager(engine))
-        manager.initialize()
-
-        manager.startAudioCapture()
-        manager.stopAudioCapture()
-
-        assertEquals(1, engine.internalAudioStartCount)
-        assertEquals(1, engine.internalAudioStopCount)
-    }
-
-    @Test
     public fun `quality listener is retained across initialization and cleared on destroy`() = runTest {
         val engine = FakeRtcPlatform(FakeRtcRoom())
         val manager = RtcManager(FakeRtcEngineManager(engine))
@@ -1037,8 +1024,6 @@ private class FakeRtcPlatform(
     var externalVideoSourceCount = 0
     var externalAudioStartCount = 0
     var externalAudioStopCount = 0
-    var internalAudioStartCount = 0
-    var internalAudioStopCount = 0
     val remoteAudioVolumes = mutableListOf<Pair<String, Int>>()
     val remoteFrameListeners = mutableListOf<Pair<String, ((Int, Int) -> Unit)?>>()
     val remoteFrameSinks = mutableListOf<RtcRemoteVideoSink?>()
@@ -1077,30 +1062,6 @@ private class FakeRtcPlatform(
         return 0
     }
 
-    override fun startAudioCapture(): Int {
-        internalAudioStartCount += 1
-        return 0
-    }
-
-    override fun stopAudioCapture(): Int {
-        internalAudioStopCount += 1
-        return 0
-    }
-
-    override fun startVideoCapture(width: Int, height: Int, frameRate: Int): Int = 0
-    override fun updateVideoCaptureFormat(width: Int, height: Int, frameRate: Int): Int = 0
-
-    override fun stopVideoCapture(): Int = 0
-
-    override fun switchCamera(position: ai.xmax.sdk.CameraPosition): Int = 0
-
-    override fun bindLocalVideo(
-        view: android.view.View,
-        contentMode: ai.xmax.sdk.VideoContentMode,
-    ): Int = 0
-
-    override fun unbindLocalVideo(): Int = 0
-
     override fun bindRemoteVideo(
         userId: String,
         view: android.view.View,
@@ -1109,7 +1070,6 @@ private class FakeRtcPlatform(
 
     override fun unbindRemoteVideo(userId: String): Int = 0
 
-    override fun setCameraPreviewReadyListener(listener: (() -> Unit)?) = Unit
 
     val remoteAudioFrames = mutableListOf<Pair<String, RtcRemoteAudioFrameListener?>>()
     var remoteAudioFrameResult = 0

@@ -15,6 +15,8 @@ import ai.xmax.sdk.*
 import ai.xmax.sdk.foundation.permissions.PermissionManaging
 import ai.xmax.sdk.media.MediaController
 import ai.xmax.sdk.media.camera.CameraController
+import ai.xmax.sdk.media.camera.FakeCameraCapture
+import ai.xmax.sdk.media.camera.FakeMicrophoneCapture
 import ai.xmax.sdk.service.media.MediaService
 import ai.xmax.sdk.stream.room.RtcManagingCall
 import ai.xmax.sdk.stream.room.RtcManagingStub
@@ -41,7 +43,7 @@ class ExternalVideoReplacementTest {
         val frames = mutableListOf<VideoFrame>()
         val errors = mutableListOf<XmaxError>()
         val external = ExternalVideoController(rtc, service, frames::add, {}, errors::add)
-        val controller = MediaController(rtc, CameraController(rtc, object : PermissionManaging {
+        val controller = MediaController(rtc, CameraController(FakeCameraCapture(), FakeMicrophoneCapture(), object : PermissionManaging {
             override suspend fun ensureCameraPermission() = error("No camera expected")
             override suspend fun ensureMicrophonePermission() = error("No microphone expected")
         }, service), externalController = external)

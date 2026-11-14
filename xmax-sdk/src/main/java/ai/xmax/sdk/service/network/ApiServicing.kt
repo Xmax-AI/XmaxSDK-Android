@@ -17,11 +17,10 @@ import org.json.JSONObject
 
 /**
  * An HTTP method supported by the Xmax API.
+ *
+ * @property wireValue The protocol string value.
  */
 internal enum class ApiMethod(
-    /**
-     * The protocol string value.
-     */
     internal val wireValue: String,
 ) {
 

@@ -18,29 +18,17 @@ import ai.xmax.sdk.RealtimeVideoFormat
  *
  * A candidate level is committed only after successful application.
  *
+ * @property baseline The original input format used to calculate quality levels.
  * @param level The quality level to apply or retain; 1 is highest.
+ * @property downlink Whether this direction is downlink rather than uplink.
+ * @property policy The thresholds and cooldowns for quality adaptation.
+ * @property minimumInputPixels The minimum uplink pixel area; ignored for downlink.
  */
 internal class QualityDirection(
-    /**
-     * The original input format used to calculate quality levels.
-     */
     val baseline: RealtimeVideoFormat,
-
     level: Int,
-
-    /**
-     * Whether this direction is downlink rather than uplink.
-     */
     val downlink: Boolean,
-
-    /**
-     * The thresholds and cooldowns for quality adaptation.
-     */
     private val policy: QualityPolicy = QualityPolicy(),
-
-    /**
-     * The minimum uplink pixel area; ignored for downlink.
-     */
     val minimumInputPixels: Int = 0,
 ) {
 
@@ -97,21 +85,14 @@ internal class QualityDirection(
 
     /**
      * A quality adjustment with its old level, target, and reason.
+     *
+     * @property from The previous quality level.
+     * @property to The target quality level.
+     * @property reason The reason for the transition or failure.
      */
     data class Change(
-        /**
-         * The previous quality level.
-         */
         val from: Int,
-
-        /**
-         * The target quality level.
-         */
         val to: Int,
-
-        /**
-         * The reason for the transition or failure.
-         */
         val reason: String,
     )
 

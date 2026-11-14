@@ -15,11 +15,10 @@ import java.nio.ByteOrder
 
 /**
  * Splits original PCM16 into short, playback-paced chunks without resampling or mixing channels.
+ *
+ * @property emit The callback receiving complete audio packets and microsecond timestamps.
  */
 internal class PcmPacketizer(
-    /**
-     * The callback receiving complete audio packets and microsecond timestamps.
-     */
     private val emit: (ByteArray, Long) -> Unit,
 ) {
 

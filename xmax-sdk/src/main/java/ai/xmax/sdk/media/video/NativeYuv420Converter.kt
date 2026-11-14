@@ -82,9 +82,8 @@ internal object NativeYuv420Converter {
      * @param outputWidth The output width, in pixels.
      * @param outputHeight The output height, in pixels.
      * @param rotation The rotation applied to the source image.
-     * @param y The Y pixel plane.
-     * @param u The U pixel plane.
-     * @param v The V pixel plane.
+     * @param output The output array containing Y, U, and V consecutively.
+     * @param mirrored Whether to mirror the output horizontally after rotation.
      * @return True on conversion success, false if unavailable or failed.
      */
     fun convert(
@@ -92,9 +91,8 @@ internal object NativeYuv420Converter {
         outputWidth: Int,
         outputHeight: Int,
         rotation: VideoRotation,
-        y: ByteArray,
-        u: ByteArray,
-        v: ByteArray,
+        output: ByteArray,
+        mirrored: Boolean = false,
     ): Boolean {
         if (!isAvailable || source.planes.any { !it.buffer.isDirect }) return false
 
@@ -124,9 +122,8 @@ internal object NativeYuv420Converter {
                 outputWidth = outputWidth,
                 outputHeight = outputHeight,
                 rotationDegrees = rotation.degrees,
-                outputY = y,
-                outputU = u,
-                outputV = v,
+                mirrored = mirrored,
+                output = output,
             )
         }.getOrDefault(false)
     }
@@ -134,11 +131,14 @@ internal object NativeYuv420Converter {
     /**
      * Converts I420 pixels into the caller's ARGB array.
      *
-     * @param y The Y pixel plane.
+     * @param y The array containing the Y pixel plane.
+     * @param yOffset The first byte of the Y plane in its array.
      * @param yStride The Y-plane row stride, in bytes.
-     * @param u The U pixel plane.
+     * @param u The array containing the U pixel plane.
+     * @param uOffset The first byte of the U plane in its array.
      * @param uStride The U-plane row stride, in bytes.
-     * @param v The V pixel plane.
+     * @param v The array containing the V pixel plane.
+     * @param vOffset The first byte of the V plane in its array.
      * @param vStride The V-plane row stride, in bytes.
      * @param width The frame width, in pixels.
      * @param height The frame height, in pixels.
@@ -147,10 +147,13 @@ internal object NativeYuv420Converter {
      */
     fun convertI420ToArgb(
         y: ByteArray,
+        yOffset: Int,
         yStride: Int,
         u: ByteArray,
+        uOffset: Int,
         uStride: Int,
         v: ByteArray,
+        vOffset: Int,
         vStride: Int,
         width: Int,
         height: Int,
@@ -158,10 +161,13 @@ internal object NativeYuv420Converter {
     ): Boolean = isAvailable && runCatching {
         convertI420ToArgbNative(
             y = y,
+            yOffset = yOffset,
             yStride = yStride,
             u = u,
+            uOffset = uOffset,
             uStride = uStride,
             v = v,
+            vOffset = vOffset,
             vStride = vStride,
             width = width,
             height = height,
@@ -193,9 +199,8 @@ internal object NativeYuv420Converter {
      * @param outputWidth The output width, in pixels.
      * @param outputHeight The output height, in pixels.
      * @param rotationDegrees The clockwise rotation angle, in degrees.
-     * @param outputY The output Y luma array.
-     * @param outputU The output U chroma array.
-     * @param outputV The output V chroma array.
+     * @param mirrored Whether to mirror the output horizontally after rotation.
+     * @param output The output array containing Y, U, and V consecutively.
      * @return True if conversion succeeds.
      */
     private external fun convertNative(
@@ -220,19 +225,21 @@ internal object NativeYuv420Converter {
         outputWidth: Int,
         outputHeight: Int,
         rotationDegrees: Int,
-        outputY: ByteArray,
-        outputU: ByteArray,
-        outputV: ByteArray,
+        mirrored: Boolean,
+        output: ByteArray,
     ): Boolean
 
     /**
      * Converts I420 pixels into an ARGB array using the native converter.
      *
-     * @param y The Y pixel plane.
+     * @param y The array containing the Y pixel plane.
+     * @param yOffset The first byte of the Y plane in its array.
      * @param yStride The Y-plane row stride, in bytes.
-     * @param u The U pixel plane.
+     * @param u The array containing the U pixel plane.
+     * @param uOffset The first byte of the U plane in its array.
      * @param uStride The U-plane row stride, in bytes.
-     * @param v The V pixel plane.
+     * @param v The array containing the V pixel plane.
+     * @param vOffset The first byte of the V plane in its array.
      * @param vStride The V-plane row stride, in bytes.
      * @param width The frame width, in pixels.
      * @param height The frame height, in pixels.
@@ -241,10 +248,13 @@ internal object NativeYuv420Converter {
      */
     private external fun convertI420ToArgbNative(
         y: ByteArray,
+        yOffset: Int,
         yStride: Int,
         u: ByteArray,
+        uOffset: Int,
         uStride: Int,
         v: ByteArray,
+        vOffset: Int,
         vStride: Int,
         width: Int,
         height: Int,

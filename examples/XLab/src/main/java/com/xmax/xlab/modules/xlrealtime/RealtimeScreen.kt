@@ -109,6 +109,7 @@ import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxEnvironment
 import ai.xmax.sdk.RealtimeConnectionState
 import ai.xmax.sdk.CameraPosition
+import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeConfiguration
 import ai.xmax.sdk.RealtimeContext
 import ai.xmax.sdk.RealtimeMediaStream
@@ -223,6 +224,7 @@ public fun RealtimeScreen(
     val referenceErrorMessage = xLabText(R.string.realtime_reference_error)
     val referenceRetryErrorMessage = xLabText(R.string.realtime_reference_retry_error)
     val cameraSwitchErrorMessage = xLabText(R.string.realtime_camera_switch_error)
+    val cameraRotationErrorMessage = xLabText(R.string.realtime_camera_rotate_error)
     val focusManager = LocalFocusManager.current
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -319,6 +321,8 @@ public fun RealtimeScreen(
     }
     var cameraSwitchJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
     var cameraFormatJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
+    var cameraRotationJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
+    var cameraRotation by remember(realtimeManager) { mutableStateOf(RealtimeCameraRotation.ROTATION_0) }
     var cameraVideoFormat by remember(realtimeManager) { mutableStateOf(realtimeManager.currentCameraVideoFormat) }
     var isCameraFormatMenuVisible by remember { mutableStateOf(false) }
     var localAudioVolumeJob by remember(realtimeManager) { mutableStateOf<Job?>(null) }
@@ -485,6 +489,7 @@ public fun RealtimeScreen(
                     qualityAdjustmentJob?.cancelAndJoin()
                     cameraSwitchJob?.cancelAndJoin()
                     cameraFormatJob?.cancelAndJoin()
+                    cameraRotationJob?.cancelAndJoin()
                     realtimeOperationMutex.withLock {
                         // Manager 的公共监听器跨 close 保留；页面销毁时由拥有者显式注销。
                         runCatching { realtimeManager.setStateListener(null) }
@@ -536,8 +541,40 @@ public fun RealtimeScreen(
     }
 
     fun canRequestGeneration(): Boolean = !isSuspendedForBackground && !cameraSwitching && cameraFormatJob == null &&
+        cameraRotationJob == null &&
         preparedSource == currentSource && localMediaStream != null &&
         (currentSource !is RealtimeSource.Camera || cameraPreviewReady)
+
+    fun rotateCamera() {
+        if (currentSource !is RealtimeSource.Camera || generationBusy || !canRequestGeneration()) return
+
+        cameraRotationJob = scope.launch(start = CoroutineStart.LAZY) {
+            val requestJob = coroutineContext[Job]
+            try {
+                realtimeOperationMutex.withLock {
+                    if (!isSuspendedForBackground && preparedSource == currentSource &&
+                        localMediaStream != null && cameraPreviewReady && currentSource is RealtimeSource.Camera
+                    ) {
+                        val rotations = RealtimeCameraRotation.entries
+                        val next = rotations[(cameraRotation.ordinal + 1) % rotations.size]
+                        realtimeManager.setCameraRotation(next)
+                        cameraRotation = next
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Toast.makeText(
+                    context,
+                    xLabErrorText(error.message, cameraRotationErrorMessage, localizedContext),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } finally {
+                if (cameraRotationJob === requestJob) cameraRotationJob = null
+            }
+        }
+        cameraRotationJob?.start()
+    }
 
     fun toggleRecording() {
         when (recordingState) {
@@ -698,6 +735,8 @@ public fun RealtimeScreen(
         cameraSwitchJob = null
         cameraFormatJob?.cancelAndJoin()
         cameraFormatJob = null
+        cameraRotationJob?.cancelAndJoin()
+        cameraRotationJob = null
         isCameraFormatMenuVisible = false
         realtimeOperationMutex.withLock {
             val selectedSource = currentSource
@@ -741,6 +780,7 @@ public fun RealtimeScreen(
                         localMediaStream = realtimeManager.createLocalCameraStream(
                             position = CameraPosition.FRONT,
                             useMicrophone = true,
+                            rotation = cameraRotation,
                         )
                     }
                     is RealtimeSource.Image -> {
@@ -1079,6 +1119,24 @@ public fun RealtimeScreen(
                     ) {
                         Text("⟳", color = Color.White, fontSize = 27.sp, lineHeight = 27.sp)
                     }
+                    val canRotate = !generationBusy && canRequestGeneration()
+                    val rotationLabel = xLabText(R.string.realtime_camera_rotate)
+                    OverlayAction(
+                        label = rotationLabel,
+                        enabled = canRotate,
+                        modifier = Modifier
+                            .alpha(if (canRotate) 1f else 0.4f)
+                            .semantics { contentDescription = rotationLabel },
+                        onClick = ::rotateCamera,
+                    ) {
+                        Text(
+                            text = "${cameraRotation.degrees}°",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            lineHeight = 13.sp,
+                            maxLines = 1,
+                        )
+                    }
                     Box(modifier = Modifier.size(58.dp)) {
                         OverlayAction(
                             label = xLabText(R.string.realtime_volume),
@@ -1103,7 +1161,7 @@ public fun RealtimeScreen(
                             connectionState = qualityConnectionState,
                             generationBusy = generationBusy,
                             cameraSwitching = cameraSwitching,
-                            cameraFormatUpdating = cameraFormatJob != null,
+                            cameraFormatUpdating = cameraFormatJob != null || cameraRotationJob != null,
                             isSuspendedForBackground = isSuspendedForBackground,
                         )
                         val canUpdate = formatHint == null

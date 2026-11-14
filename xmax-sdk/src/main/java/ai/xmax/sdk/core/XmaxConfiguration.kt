@@ -14,13 +14,10 @@ package ai.xmax.sdk
  * The credentials, service environment, and logging options for an Xmax client.
  *
  * @param apiKey The API key issued by the developer platform; do not log or expose it.
+ * @property loggerOptions Enabled log categories; disabled by default. Creating a client updates the shared logger.
  */
 public class XmaxConfiguration @JvmOverloads constructor(
     apiKey: String,
-
-    /**
-     * Enabled log categories; disabled by default. Creating a client updates the shared logger.
-     */
     public val loggerOptions: XmaxLoggerOption = XmaxLoggerOption.none,
 ) {
 

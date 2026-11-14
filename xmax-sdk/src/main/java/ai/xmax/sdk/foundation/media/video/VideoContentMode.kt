@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * The layout of video content within a rendering view.
+ *
+ * @property value The string representation used for configuration or display.
  */
 public enum class VideoContentMode(
-    /**
-     * The string representation used for configuration or display.
-     */
     public val value: String,
 ) {
 

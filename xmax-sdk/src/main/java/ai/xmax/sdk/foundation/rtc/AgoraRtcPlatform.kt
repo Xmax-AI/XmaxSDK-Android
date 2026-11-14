@@ -11,7 +11,6 @@
 package ai.xmax.sdk.foundation.rtc
 
 import ai.xmax.sdk.AudioFrame
-import ai.xmax.sdk.CameraPosition
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.VideoFrame
 import ai.xmax.sdk.XmaxError
@@ -30,11 +29,9 @@ import io.agora.rtc2.RtcEngineConfig
 import io.agora.rtc2.RtcEngineEx
 import io.agora.rtc2.UserInfo
 import io.agora.rtc2.audio.AudioTrackConfig
-import io.agora.rtc2.video.CameraCapturerConfiguration
 import io.agora.rtc2.video.IVideoFrameObserver
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -79,13 +76,10 @@ internal fun isAgoraVideoPublished(
  * An Agora adapter for RTC engine operations.
  *
  * @param context The Android context used for system services and media resources.
+ * @property appId The RTC App ID, not an App Certificate or room token.
  */
 private class AgoraRtcPlatform(
     context: Context,
-
-    /**
-     * The RTC App ID, not an App Certificate or room token.
-     */
     private val appId: String,
 ) : RtcPlatform {
 
@@ -98,11 +92,6 @@ private class AgoraRtcPlatform(
      * The network quality, performance, and media statistics listener.
      */
     private val qualityListener = AtomicReference<RtcQualityListener?>()
-
-    /**
-     * The local camera preview readiness listener.
-     */
-    private val previewListener = AtomicReference<(() -> Unit)?>()
 
     /**
      * The active RTC room.
@@ -125,38 +114,9 @@ private class AgoraRtcPlatform(
     private var externalVideo = false
 
     /**
-     * Whether external audio input is enabled.
-     */
-    private var externalAudio = false
-
-    /**
      * The Agora-assigned external audio track identifier.
      */
     private var audioTrackId = -1
-
-    /**
-     * The camera position used for capture.
-     */
-    private val awaitingCameraFrame = AtomicBoolean(false)
-
-    /**
-     * The active front or rear camera.
-     */
-    private var cameraPosition = CameraPosition.FRONT
-
-    /**
-     * The camera capture dimensions and frame rate.
-     */
-    private var captureFormat = CameraCapturerConfiguration.CaptureFormat(
-        1080,
-        1920,
-        30,
-    )
-
-    /**
-     * Whether camera capture has started.
-     */
-    private var cameraStarted = false
 
     /**
      * The configured uplink encoding settings.
@@ -174,25 +134,7 @@ private class AgoraRtcPlatform(
                 mContext = context.applicationContext
                 mAppId = this@AgoraRtcPlatform.appId
                 mChannelProfile = Constants.CHANNEL_PROFILE_LIVE_BROADCASTING
-                mEventHandler = object : IRtcEngineEventHandler() {
-
-                    /**
-                     * Reports the first frame from the local source for preview readiness.
-                     *
-                     * @param source The RTC capture source identifier.
-                     * @param width The frame width, in pixels.
-                     * @param height The frame height, in pixels.
-                     * @param elapsed The RTC-reported elapsed time, in milliseconds.
-                     */
-                    override fun onFirstLocalVideoFrame(
-                        source: Constants.VideoSourceType,
-                        width: Int,
-                        height: Int,
-                        elapsed: Int,
-                    ) {
-                        previewListener.get()?.invoke()
-                    }
-                }
+                mEventHandler = object : IRtcEngineEventHandler() {}
             },
         ) as RtcEngineEx
 
@@ -259,14 +201,14 @@ private class AgoraRtcPlatform(
                         override fun getMirrorApplied() = false
 
                         /**
-                         * Selects post-capture and pre-render frame observation.
+                         * Selects pre-render frame observation.
                          *
-                         * @return The capture and pre-render observation position bitmask.
+                         * @return The pre-render observation position bitmask.
                          */
-                        override fun getObservedFramePosition() = IVideoFrameObserver.POSITION_PRE_RENDERER or IVideoFrameObserver.POSITION_POST_CAPTURER
+                        override fun getObservedFramePosition() = IVideoFrameObserver.POSITION_PRE_RENDERER
 
                         /**
-                         * Confirms a new camera frame and allows it to continue through RTC processing.
+                         * Allows capture frames to continue through RTC processing.
                          *
                          * @param source The RTC capture source identifier.
                          * @param frame The video frame to process, display, or submit.
@@ -275,14 +217,7 @@ private class AgoraRtcPlatform(
                         override fun onCaptureVideoFrame(
                             source: Int,
                             frame: io.agora.base.VideoFrame,
-                        ): Boolean {
-                            if (awaitingCameraFrame.compareAndSet(
-                                true,
-                                false,
-                            )) previewListener.get()?.invoke()
-
-                            return true
-                        }
+                        ) = true
 
                         /**
                          * Allows pre-encode frames to continue to the encoder.
@@ -365,10 +300,7 @@ private class AgoraRtcPlatform(
     override fun configureVideoEncoding(
         configuration: VideoEncodingConfiguration,
     ): Int {
-        val encoderConfiguration = RtcVideoConverter.makeEncoderConfiguration(
-            configuration,
-            cameraPosition = cameraPosition.takeUnless { externalVideo },
-        )
+        val encoderConfiguration = RtcVideoConverter.makeEncoderConfiguration(configuration)
         val connection = if (externalVideo) activeRoom.get()?.videoEncodingConnection() else null
         val result = if (connection != null) {
             engine.setVideoEncoderConfigurationEx(
@@ -384,8 +316,7 @@ private class AgoraRtcPlatform(
     }
 
     /**
-     * Updates encoding mirroring after camera or source changes, preserving dimensions, frame rate, and
-     * bitrate.
+     * Reapplies the current encoder settings after a source or publication change.
      *
      * @return The RTC result: nonnegative if accepted, negative on failure.
      */
@@ -461,7 +392,6 @@ private class AgoraRtcPlatform(
         if (id < 0) return id
 
         audioTrackId = id
-        externalAudio = true
         return 0
     }
 
@@ -474,193 +404,10 @@ private class AgoraRtcPlatform(
         if (audioTrackId < 0) return 0
 
         val result = engine.destroyCustomAudioTrack(audioTrackId)
-        if (result >= 0) {
-            audioTrackId = -1
-            externalAudio = false
-        }
+        if (result >= 0) audioTrackId = -1
 
         return result
     }
-
-    /**
-     * Selects internal RTC audio input and starts microphone capture.
-     *
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    override fun startAudioCapture(): Int {
-        if (externalAudio) {
-            val result = stopExternalAudioSource()
-            if (result < 0) return result
-        }
-
-        return engine.enableLocalAudio(true)
-    }
-
-    /**
-     * Stops internal RTC microphone capture.
-     *
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    override fun stopAudioCapture(): Int = engine.enableLocalAudio(false)
-
-    /**
-     * Starts internal RTC camera capture with the requested format.
-     *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @param frameRate The video frame rate, in fps.
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    override fun startVideoCapture(
-        width: Int,
-        height: Int,
-        frameRate: Int,
-    ): Int {
-        val source = engine.setExternalVideoSource(
-            false,
-            false,
-            Constants.ExternalVideoSourceType.VIDEO_FRAME,
-        )
-        if (source < 0) return source
-
-        externalVideo = false
-        val config = updateVideoCaptureFormat(
-            width,
-            height,
-            frameRate,
-        )
-        if (config < 0) return config
-
-        val enable = engine.enableLocalVideo(true)
-        if (enable < 0) return enable
-
-        awaitingCameraFrame.set(true)
-        val result = engine.startPreview()
-        if (result >= 0) cameraStarted = true
-        return result
-    }
-
-    /**
-     * Updates capture dimensions and preview cropping while retaining the camera and render binding.
-     * Restores the previous capture and encoding configuration if the update fails.
-     *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @param frameRate The capture frame rate, in fps.
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    override fun updateVideoCaptureFormat(
-        width: Int,
-        height: Int,
-        frameRate: Int,
-    ): Int {
-        val previousCapture = captureFormat
-        val previousEncoding = videoEncodingConfiguration
-        val restoredEncoding = previousEncoding ?: VideoEncodingConfiguration(
-            width = previousCapture.width,
-            height = previousCapture.height,
-            frameRate = previousCapture.fps,
-        )
-        val nextEncoding = restoredEncoding.copy(
-            width = width,
-            height = height,
-            frameRate = frameRate,
-        )
-        val encoding = configureVideoEncoding(nextEncoding)
-        if (encoding < 0) return encoding
-
-        captureFormat = CameraCapturerConfiguration.CaptureFormat(
-            width,
-            height,
-            frameRate,
-        )
-        val result = engine.setCameraCapturerConfiguration(cameraConfiguration())
-        if (result < 0) {
-            captureFormat = previousCapture
-            engine.setCameraCapturerConfiguration(cameraConfiguration())
-            configureVideoEncoding(restoredEncoding)
-            videoEncodingConfiguration = previousEncoding
-        }
-
-        return result
-    }
-
-    /**
-     * Stops internal RTC camera capture.
-     *
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    override fun stopVideoCapture(): Int {
-        cameraStarted = false
-        awaitingCameraFrame.set(false)
-        val preview = engine.stopPreview()
-        val capture = engine.enableLocalVideo(false)
-        return if (preview < 0) preview else capture
-    }
-
-    /**
-     * Switches the camera used by internal RTC capture.
-     *
-     * @param position The front or rear camera to use.
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    override fun switchCamera(
-        position: CameraPosition,
-    ): Int {
-        if (cameraStarted && cameraPosition != position) {
-            awaitingCameraFrame.set(true)
-            val result = engine.switchCamera()
-            if (result < 0) return result
-        }
-        cameraPosition = position
-        if (!cameraStarted) {
-            val result = engine.setCameraCapturerConfiguration(cameraConfiguration())
-            if (result < 0) return result
-        }
-
-        return updateVideoEncoding()
-    }
-
-    /**
-     * Builds the current camera position and capture format configuration.
-     *
-     * @return The current camera capture configuration.
-     */
-    private fun cameraConfiguration() = CameraCapturerConfiguration(
-        if (cameraPosition == CameraPosition.FRONT) CameraCapturerConfiguration.CAMERA_DIRECTION.CAMERA_FRONT
-        else CameraCapturerConfiguration.CAMERA_DIRECTION.CAMERA_REAR,
-        captureFormat,
-    ).apply { followEncodeDimensionRatio = true }
-
-    /**
-     * Binds local video to a rendering view.
-     *
-     * @param view The view to bind or unbind.
-     * @param contentMode Aspect-preserving fit or fill scaling.
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    override fun bindLocalVideo(
-        view: View,
-        contentMode: VideoContentMode,
-    ): Int =
-        engine.setupLocalVideo(
-            RtcVideoConverter.makeLocalCanvas(
-                view,
-                contentMode,
-            ),
-        )
-
-    /**
-     * Unbinds the local rendering view.
-     *
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    override fun unbindLocalVideo(): Int = engine.setupLocalVideo(
-        RtcVideoConverter.makeLocalCanvas(
-            null,
-            VideoContentMode.FILL,
-        ),
-    )
 
     /**
      * Binds a remote user's video to a view with the requested scaling mode.
@@ -705,15 +452,6 @@ private class AgoraRtcPlatform(
             room.connection(),
         )
     }
-
-    /**
-     * Replaces the camera preview readiness listener; null unregisters it.
-     *
-     * @param listener The event listener, or null to unregister it.
-     */
-    override fun setCameraPreviewReadyListener(
-        listener: (() -> Unit)?,
-    ) { previewListener.set(listener) }
 
     /**
      * Replaces the frame listener for a remote stream.
@@ -803,11 +541,10 @@ private class AgoraRtcPlatform(
     /**
      * A room membership with independent callbacks, sending queue, and account mappings; ignores callbacks
      * after leaving.
+     *
+     * @property roomId The RTC room identifier.
      */
     private inner class AgoraRoom(
-        /**
-         * The RTC room identifier.
-         */
         val roomId: String,
     ) : RtcRoom {
 
@@ -1346,9 +1083,8 @@ private class AgoraRtcPlatform(
         ): Int {
             val result = engine.updateChannelMediaOptionsEx(
                 ChannelMediaOptions().apply {
-                    publishCameraTrack = publish && !externalVideo
-                    publishCustomVideoTrack = publish && externalVideo
-                    if (externalVideo) customVideoTrackId = 0
+                    publishCustomVideoTrack = publish
+                    customVideoTrackId = 0
                 },
                 connection(),
             )
@@ -1369,9 +1105,8 @@ private class AgoraRtcPlatform(
             publish: Boolean,
         ): Int = engine.updateChannelMediaOptionsEx(
             ChannelMediaOptions().apply {
-                publishMicrophoneTrack = publish && !externalAudio
-                publishCustomAudioTrack = publish && externalAudio
-                if (externalAudio) publishCustomAudioTrackId = audioTrackId
+                publishCustomAudioTrack = publish
+                if (audioTrackId >= 0) publishCustomAudioTrackId = audioTrackId
             },
             connection(),
         )

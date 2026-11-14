@@ -14,26 +14,16 @@ package ai.xmax.sdk
  * A realtime generation model supported by XmaxSDK.
  *
  * [id] identifies the model in server session requests.
+ *
+ * @property id The model identifier sent to the server.
+ * @property displayName The display name shown to developers and users.
+ * @property maximumInputPixels The maximum local frame pixel area; also limits generation canvases when fixed buckets are absent.
+ * @property cameraPresets The fixed resolution buckets supported by the model.
  */
 public enum class RealtimeModel(
-    /**
-     * The model identifier sent to the server.
-     */
     public val id: String,
-
-    /**
-     * The display name shown to developers and users.
-     */
     public val displayName: String,
-
-    /**
-     * The maximum local frame pixel area; also limits generation canvases when fixed buckets are absent.
-     */
     public val maximumInputPixels: Int,
-
-    /**
-     * The fixed resolution buckets supported by the model.
-     */
     private val cameraPresets: List<RealtimeCameraPreset>,
 ) {
 

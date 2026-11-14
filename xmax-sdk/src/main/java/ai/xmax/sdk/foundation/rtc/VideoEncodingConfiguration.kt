@@ -12,37 +12,21 @@ package ai.xmax.sdk.foundation.rtc
 
 /**
  * The encoding settings for the RTC main video stream.
+ *
+ * @property width The frame width, in pixels.
+ * @property height The frame height, in pixels.
+ * @property frameRate The video frame rate, in fps.
+ * @property minimumBitrate The minimum encoder bitrate, in kbps; defaults to 0.
+ * @property maximumBitrate The maximum encoder bitrate, in kbps.
+ * @property encoderPreference The frame-rate or image-quality preference under bandwidth limits; defaults to
+ * `EncoderPreference.MAINTAIN_FRAMERATE`.
  */
 internal data class VideoEncodingConfiguration(
-    /**
-     * The frame width, in pixels.
-     */
     val width: Int,
-
-    /**
-     * The frame height, in pixels.
-     */
     val height: Int,
-
-    /**
-     * The video frame rate, in fps.
-     */
     val frameRate: Int,
-
-    /**
-     * The minimum encoder bitrate, in kbps; defaults to 0.
-     */
     val minimumBitrate: Int = 0,
-
-    /**
-     * The maximum encoder bitrate, in kbps.
-     */
     val maximumBitrate: Int = -1,
-
-    /**
-     * The frame-rate or image-quality preference under bandwidth limits; defaults to
-     * `EncoderPreference.MAINTAIN_FRAMERATE`.
-     */
     val encoderPreference: EncoderPreference = EncoderPreference.MAINTAIN_FRAMERATE,
 ) {
 

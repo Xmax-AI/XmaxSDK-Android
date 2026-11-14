@@ -24,13 +24,10 @@ import kotlinx.coroutines.launch
  * failures are isolated.
  *
  * @param dispatcher The dispatcher for main-thread notifications; defaults to `Dispatchers.Main`.
+ * @property remoteMediaFrames The serial output queue retained for this realtime manager's lifetime.
  */
 internal class RealtimeCallbacks(
     dispatcher: CoroutineDispatcher = Dispatchers.Main,
-
-    /**
-     * The serial output queue retained for this realtime manager's lifetime.
-     */
     val remoteMediaFrames: RealtimeMediaFrameDispatcher = RealtimeMediaFrameDispatcher(),
 ) {
 

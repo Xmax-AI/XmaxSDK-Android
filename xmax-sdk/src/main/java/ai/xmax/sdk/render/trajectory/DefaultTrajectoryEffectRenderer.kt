@@ -557,16 +557,12 @@ public class DefaultTrajectoryEffectRenderer(
 
     /**
      * The position and animation origin of an active trajectory.
+     *
+     * @property location The touch position in view pixels.
+     * @property startTime The monotonic trajectory start time, in seconds.
      */
     private data class ActiveTrajectory(
-        /**
-         * The touch position in view pixels.
-         */
         var location: PointF,
-
-        /**
-         * The monotonic trajectory start time, in seconds.
-         */
         val startTime: Double,
     )
 

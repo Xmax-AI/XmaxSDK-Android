@@ -555,6 +555,39 @@ class StreamControllerTest {
     }
 
     @Test
+    fun `camera frames follow video publication even without a generation task`() = runTest {
+        val rtc = RtcManagingStub()
+        val controller = StreamController(
+            rtcManager = rtc,
+            roomController = RoomController(
+                rtc,
+                RoomHeartbeat(rtc, sleeper = { awaitCancellation() }, scope = this),
+            ),
+            encodingController = EncodingStub,
+            qualityController = QualityStub,
+            generationScope = this,
+            renderDispatcher = StandardTestDispatcher(testScheduler),
+        )
+        val frame = VideoFrame(
+            format = VideoFormat(2, 2, VideoPixelFormat.RGBA),
+            timestampUs = 0L,
+            planes = listOf(VideoFramePlane(ByteArray(16), stride = 8)),
+        )
+
+        controller.pushCameraVideoFrame(frame)
+        controller.connect(
+            RealtimeSessionConnection("room-id", "user-id", "token", "bot-id"),
+            includeLocalAudio = false,
+        ) {}
+        controller.pushCameraVideoFrame(frame)
+        controller.disconnect()
+        controller.pushCameraVideoFrame(frame)
+
+        assertEquals(listOf(RtcManagingCall.PushExternalVideoFrame(frame, null)),
+            rtc.calls.filterIsInstance<RtcManagingCall.PushExternalVideoFrame>())
+    }
+
+    @Test
     fun `external frames are gated by generation without legacy SEI`() = runTest {
         val rtc = RtcManagingStub()
         val controller = StreamController(

@@ -18,26 +18,16 @@ import org.json.JSONObject
  * The SDK runtime environment.
  *
  * Metadata is shared by API requests and room signals.
+ *
+ * @property platform The client platform name.
+ * @property osVersion The operating system version.
+ * @property sdkVersion The XmaxSDK version.
+ * @property deviceModel The device model.
  */
 internal data class RuntimeInfo(
-    /**
-     * The client platform name.
-     */
     val platform: String,
-
-    /**
-     * The operating system version.
-     */
     val osVersion: String,
-
-    /**
-     * The XmaxSDK version.
-     */
     val sdkVersion: String,
-
-    /**
-     * The device model.
-     */
     val deviceModel: String,
 ) {
 

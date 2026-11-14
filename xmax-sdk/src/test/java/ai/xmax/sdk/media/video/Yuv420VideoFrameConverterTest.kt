@@ -13,14 +13,16 @@ package ai.xmax.sdk.media.video
 
 import ai.xmax.sdk.VideoPixelFormat
 import ai.xmax.sdk.VideoRotation
+import ai.xmax.sdk.foundation.rtc.RtcVideoConverter
 import java.nio.ByteBuffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 public class Yuv420VideoFrameConverterTest {
     @Test
-    public fun `converter preserves identity I420 planes`() {
+    public fun `converter writes packed I420 that RTC can submit directly`() {
         val frame = Yuv420VideoFrameConverter.convert(
             source = source(
                 width = 4,
@@ -40,9 +42,12 @@ public class Yuv420VideoFrameConverterTest {
         assertEquals(2, frame.format.height)
         assertEquals(12_345, frame.timestampUs)
         assertEquals(listOf(4, 2, 2), frame.planes.map { it.stride })
-        assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8), frame.planes[0].data)
-        assertArrayEquals(byteArrayOf(10, 11), frame.planes[1].data)
-        assertArrayEquals(byteArrayOf(20, 21), frame.planes[2].data)
+        assertEquals(listOf(0, 8, 10), frame.planes.map { it.byteOffset })
+        assertEquals(listOf(8, 2, 2), frame.planes.map { it.byteLength })
+        val output = frame.planes.first().backingBytes()
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 20, 21), output)
+        frame.planes.forEach { assertSame(output, it.backingBytes()) }
+        assertSame(output, RtcVideoConverter.convertFrame(frame).buf)
     }
 
     @Test
@@ -63,9 +68,31 @@ public class Yuv420VideoFrameConverterTest {
             timestampUs = 0,
         )
 
-        assertArrayEquals(byteArrayOf(5, 1, 6, 2, 7, 3, 8, 4), frame.planes[0].data)
-        assertArrayEquals(byteArrayOf(10, 11), frame.planes[1].data)
-        assertArrayEquals(byteArrayOf(20, 21), frame.planes[2].data)
+        assertArrayEquals(byteArrayOf(5, 1, 6, 2, 7, 3, 8, 4), frame.planes[0].selectedBytes())
+        assertArrayEquals(byteArrayOf(10, 11), frame.planes[1].selectedBytes())
+        assertArrayEquals(byteArrayOf(20, 21), frame.planes[2].selectedBytes())
+    }
+
+    @Test
+    public fun `front camera mirror is applied after rotation`() {
+        val frame = Yuv420VideoFrameConverter.convert(
+            source = source(
+                width = 4,
+                height = 2,
+                y = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+                u = byteArrayOf(10, 11),
+                v = byteArrayOf(20, 21),
+            ),
+            outputWidth = 2,
+            outputHeight = 4,
+            rotation = VideoRotation.ROTATION_90,
+            timestampUs = 0,
+            mirrored = true,
+        )
+
+        assertArrayEquals(byteArrayOf(1, 5, 2, 6, 3, 7, 4, 8), frame.planes[0].selectedBytes())
+        assertArrayEquals(byteArrayOf(10, 11), frame.planes[1].selectedBytes())
+        assertArrayEquals(byteArrayOf(20, 21), frame.planes[2].selectedBytes())
     }
 
     private fun source(

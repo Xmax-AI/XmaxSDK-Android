@@ -18,16 +18,12 @@ import java.nio.ByteBuffer
  * Borrows an Agora frame and exposes owned I420 on the remote audio/video rendering clock.
  *
  * Native VideoCanvas owns display; pixel data is copied only for application media output.
+ *
+ * @property frame The video frame to process, display, or submit.
+ * @property renderClockOffsetUs The fixed microsecond offset from native video time to the remote audio rendering clock.
  */
 internal class AgoraRemoteVideoFrame(
-    /**
-     * The video frame to process, display, or submit.
-     */
     private val frame: VideoFrame,
-
-    /**
-     * The fixed microsecond offset from native video time to the remote audio rendering clock.
-     */
     private val renderClockOffsetUs: Long,
 ) : RtcRemoteVideoFrame {
 

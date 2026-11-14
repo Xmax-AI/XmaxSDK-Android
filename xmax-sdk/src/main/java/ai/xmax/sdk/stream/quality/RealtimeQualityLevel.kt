@@ -14,11 +14,10 @@ package ai.xmax.sdk
  * A transport quality level, from highest quality at L1 to lowest bandwidth at L5.
  *
  * Transport levels are independent of network quality ratings.
+ *
+ * @property rawValue The tier number, from 1 to 5.
  */
 public enum class RealtimeQualityLevel(
-    /**
-     * The tier number, from 1 to 5.
-     */
     public val rawValue: Int,
 ) {
 

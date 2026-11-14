@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * The clockwise rotation applied to a video frame.
+ *
+ * @property degrees The rotation angle, in degrees.
  */
 internal enum class VideoRotation(
-    /**
-     * The rotation angle, in degrees.
-     */
     val degrees: Int,
 ) {
 

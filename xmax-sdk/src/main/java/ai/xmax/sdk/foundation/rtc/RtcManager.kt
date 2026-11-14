@@ -11,8 +11,6 @@
 package ai.xmax.sdk.foundation.rtc
 
 import ai.xmax.sdk.AudioFrame
-import ai.xmax.sdk.CameraPosition
-import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.VideoFrame
 import ai.xmax.sdk.XmaxError
@@ -46,19 +44,13 @@ import kotlinx.coroutines.withTimeout
 /**
  * Manages RTC leases, connection waits, and event validity.
  *
+ * @property engineManager The manager owning the process-wide RTC engine.
+ * @property joinTimeoutMillis The room join timeout in milliseconds; defaults to `JOIN_TIMEOUT_MILLIS`.
  * @param callbackScope The scope dispatching asynchronous callbacks.
  */
 internal class RtcManager(
-    /**
-     * The manager owning the process-wide RTC engine.
-     */
     private val engineManager: RtcEngineManager,
-
-    /**
-     * The room join timeout in milliseconds; defaults to `JOIN_TIMEOUT_MILLIS`.
-     */
     private val joinTimeoutMillis: Long = JOIN_TIMEOUT_MILLIS,
-
     callbackScope: CoroutineScope? = null,
 ) : RtcManaging {
 
@@ -80,7 +72,7 @@ internal class RtcManager(
     private val nativeGate = ReentrantReadWriteLock(true)
 
     /**
-     * The lock protecting room, preview, and callback registrations.
+     * The lock protecting room and callback registrations.
      */
     private val stateLock = Any()
 
@@ -115,21 +107,6 @@ internal class RtcManager(
     private var qualityListener: WeakReference<RtcQualityListener>? = null
 
     /**
-     * The camera preview listener registration revision.
-     */
-    private var cameraListenerVersion = 0L
-
-    /**
-     * The camera input revision rejecting stale preview callbacks.
-     */
-    private var cameraSourceVersion = 0L
-
-    /**
-     * The current camera preview readiness listener.
-     */
-    private var cameraPreviewReadyListener: RealtimeCameraPreviewReadyListener? = null
-
-    /**
      * The remote frame subscription registration.
      */
     private var remoteFrameRegistration: RemoteFrameRegistration? = null
@@ -138,26 +115,6 @@ internal class RtcManager(
      * The PCM receiver bound to the active room and engine lease.
      */
     private var remoteAudioRegistration: RemoteAudioRegistration? = null
-
-    /**
-     * Whether local camera capture is active.
-     */
-    private var isCameraVideoSourceActive = false
-
-    /**
-     * Whether the current camera has produced a frame.
-     */
-    private var hasCapturedFirstLocalVideoFrame = false
-
-    /**
-     * Whether the current camera has a local preview canvas.
-     */
-    private var hasBoundLocalVideoCanvas = false
-
-    /**
-     * Whether readiness has been reported for the current camera preview.
-     */
-    private var hasReportedCameraPreviewReady = false
 
     /**
      * Creates an RTC manager.
@@ -245,9 +202,6 @@ internal class RtcManager(
                     }
                     lease.engine.setEventListener(bridge)
                     lease.engine.setQualityListener(synchronized(stateLock) { qualityListener?.get() })
-                    lease.engine.setCameraPreviewReadyListener {
-                        if (isCurrentLease(lease)) markFirstLocalVideoFrameCaptured()
-                    }
                 }
             } catch (
                 error: Throwable,
@@ -277,14 +231,10 @@ internal class RtcManager(
                         engineLease.also {
                             engineLease = null
                             remoteFrameRegistration = null
-                            cameraPreviewReadyListener = null
-                            resetCameraPreviewReadinessLocked(cameraSourceActive = false)
-                            hasBoundLocalVideoCanvas = false
                         }
                     }
                     lease?.engine?.setEventListener(null)
                     lease?.engine?.setQualityListener(null)
-                    lease?.engine?.setCameraPreviewReadyListener(null)
                 } },
                 { lease?.let(engineManager::release) },
             )
@@ -362,9 +312,6 @@ internal class RtcManager(
      * Selects external frames as the primary video source.
      */
     override fun useExternalVideoSource() {
-        synchronized(stateLock) {
-            resetCameraPreviewReadinessLocked(cameraSourceActive = false)
-        }
         performEngineOperation("setVideoSourceType") {
             it.useExternalVideoSource()
         }
@@ -383,153 +330,8 @@ internal class RtcManager(
      * Stops RTC external audio input.
      */
     override fun stopExternalAudioSource() {
-        performOptionalEngineOperation("stopAudioCapture") {
+        performOptionalEngineOperation("stopExternalAudioSource") {
             it.stopExternalAudioSource()
-        }
-    }
-
-    /**
-     * Selects internal RTC audio input and starts microphone capture.
-     */
-    override fun startAudioCapture() {
-        performEngineOperation("startAudioCapture") {
-            it.startAudioCapture()
-        }
-    }
-
-    /**
-     * Stops internal RTC microphone capture.
-     */
-    override fun stopAudioCapture() {
-        performOptionalEngineOperation("stopAudioCapture") {
-            it.stopAudioCapture()
-        }
-    }
-
-    /**
-     * Starts internal RTC camera capture with the requested format.
-     *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @param frameRate The video frame rate, in fps.
-     */
-    override fun startVideoCapture(
-        width: Int,
-        height: Int,
-        frameRate: Int,
-    ) {
-        validateVideoDimensions(
-            width,
-            height,
-            frameRate,
-        )
-        synchronized(stateLock) {
-            resetCameraPreviewReadinessLocked(cameraSourceActive = true)
-        }
-
-        try {
-            performEngineOperation("startVideoCapture") {
-                it.startVideoCapture(
-                    width,
-                    height,
-                    frameRate,
-                )
-            }
-        } catch (
-            error: Throwable,
-        ) {
-            synchronized(stateLock) {
-                resetCameraPreviewReadinessLocked(cameraSourceActive = false)
-            }
-            throw error
-        }
-    }
-
-    /**
-     * Updates camera capture while retaining the lens, preview binding, and readiness state.
-     *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @param frameRate The capture frame rate, in fps.
-     */
-    override fun updateVideoCaptureFormat(
-        width: Int,
-        height: Int,
-        frameRate: Int,
-    ) {
-        validateVideoDimensions(
-            width,
-            height,
-            frameRate,
-        )
-        performEngineOperation("updateVideoCaptureFormat") {
-            it.updateVideoCaptureFormat(
-                width,
-                height,
-                frameRate,
-            )
-        }
-    }
-
-    /**
-     * Stops internal RTC camera capture.
-     */
-    override fun stopVideoCapture() {
-        try {
-            performOptionalEngineOperation("stopVideoCapture") {
-                it.stopVideoCapture()
-            }
-        } finally {
-            synchronized(stateLock) {
-                resetCameraPreviewReadinessLocked(cameraSourceActive = false)
-            }
-        }
-    }
-
-    /**
-     * Switches the camera used by internal RTC capture.
-     *
-     * @param position The front or rear camera to use.
-     */
-    override fun switchCamera(
-        position: CameraPosition,
-    ) {
-        performEngineOperation("switchCamera") {
-            it.switchCamera(position)
-        }
-    }
-
-    /**
-     * Binds local video to a rendering view.
-     *
-     * @param view The view to bind or unbind.
-     * @param contentMode Aspect-preserving fit or fill scaling.
-     */
-    override fun bindLocalVideo(
-        view: View,
-        contentMode: VideoContentMode,
-    ) {
-        performEngineOperation("setLocalVideoCanvas") {
-            it.bindLocalVideo(
-                view,
-                contentMode,
-            )
-        }
-        markLocalVideoCanvasBound()
-    }
-
-    /**
-     * Unbinds the local rendering view.
-     */
-    override fun unbindLocalVideo() {
-        try {
-            performOptionalEngineOperation("setLocalVideoCanvas") {
-                it.unbindLocalVideo()
-            }
-        } finally {
-            synchronized(stateLock) {
-                hasBoundLocalVideoCanvas = false
-            }
         }
     }
 
@@ -835,23 +637,6 @@ internal class RtcManager(
     }
 
     /**
-     * Sets the camera preview readiness listener; null unregisters it.
-     *
-     * @param listener The event listener, or null to unregister it.
-     */
-    override fun setCameraPreviewReadyListener(
-        listener: RealtimeCameraPreviewReadyListener?,
-    ) {
-        val shouldNotify = synchronized(stateLock) {
-            cameraListenerVersion++
-            cameraPreviewReadyListener = listener
-            markCameraPreviewReadyReportedIfNeededLocked()
-        }
-
-        notifyCameraPreviewReady(shouldNotify)
-    }
-
-    /**
      * Registers continuous remote frames for the current generation; clearing it also stops the receiver's
      * remote rendering.
      *
@@ -1053,36 +838,20 @@ internal class RtcManager(
 
     /**
      * A PCM registration tied to one room and engine lease.
+     *
+     * @property stream The owning remote stream.
+     * @property streamId The native publisher identifier.
+     * @property room The owning room context.
+     * @property lease The owning engine lease.
+     * @property listener The PCM receiver.
+     * @property isActive Whether native callbacks may still be delivered.
      */
     private class RemoteAudioRegistration(
-        /**
-         * The owning remote stream.
-         */
         val stream: RemoteStream,
-
-        /**
-         * The native publisher identifier.
-         */
         val streamId: String,
-
-        /**
-         * The owning room context.
-         */
         val room: RoomContext,
-
-        /**
-         * The owning engine lease.
-         */
         val lease: RtcEngineLease,
-
-        /**
-         * The PCM receiver.
-         */
         val listener: RtcRemoteAudioFrameListener,
-
-        /**
-         * Whether native callbacks may still be delivered.
-         */
         var isActive: Boolean = true,
     )
 
@@ -1430,130 +1199,24 @@ internal class RtcManager(
 
     /**
      * A remote frame listener bound to its room and engine, preventing cross-connection frame delivery.
+     *
+     * @property stream The remote stream identified by room and user.
+     * @property streamId The remote media stream or data channel identifier.
+     * @property room The RTC room associated with this operation.
+     * @property lease The current exclusive engine lease.
+     * @property listener The event listener.
+     * @property isActive Whether this subscription is still active; defaults to true.
+     * @property framePending Whether this subscription awaits its first-frame notification; defaults to false.
      */
     private class RemoteFrameRegistration(
-        /**
-         * The remote stream identified by room and user.
-         */
         val stream: RemoteStream,
-
-        /**
-         * The remote media stream or data channel identifier.
-         */
         val streamId: String,
-
-        /**
-         * The RTC room associated with this operation.
-         */
         val room: RoomContext,
-
-        /**
-         * The current exclusive engine lease.
-         */
         val lease: RtcEngineLease,
-
-        /**
-         * The event listener.
-         */
         val listener: RtcRemoteVideoSink,
-
-        /**
-         * Whether this subscription is still active; defaults to true.
-         */
         var isActive: Boolean = true,
-
-        /**
-         * Whether this subscription awaits its first-frame notification; defaults to false.
-         */
         var framePending: Boolean = false,
     )
-
-    /**
-     * Records the first captured frame and checks preview readiness.
-     */
-    private fun markFirstLocalVideoFrameCaptured() {
-        val shouldNotify = synchronized(stateLock) {
-            hasCapturedFirstLocalVideoFrame = true
-            markCameraPreviewReadyReportedIfNeededLocked()
-        }
-
-        notifyCameraPreviewReady(shouldNotify)
-    }
-
-    /**
-     * Records local video canvas binding and checks preview readiness.
-     */
-    private fun markLocalVideoCanvasBound() {
-        val shouldNotify = synchronized(stateLock) {
-            hasBoundLocalVideoCanvas = true
-            markCameraPreviewReadyReportedIfNeededLocked()
-        }
-
-        notifyCameraPreviewReady(shouldNotify)
-    }
-
-    /**
-     * Resets preview readiness for a new camera source and its first frame.
-     *
-     * @param cameraSourceActive Whether the current input uses camera capture.
-     */
-    private fun resetCameraPreviewReadinessLocked(
-        cameraSourceActive: Boolean,
-    ) {
-        cameraSourceVersion++
-        isCameraVideoSourceActive = cameraSourceActive
-        hasCapturedFirstLocalVideoFrame = false
-        hasReportedCameraPreviewReady = false
-    }
-
-    /**
-     * Marks preview notification complete once both the captured frame and canvas are ready.
-     *
-     * @return True if preview readiness must be notified now.
-     */
-    private fun markCameraPreviewReadyReportedIfNeededLocked(): Boolean {
-        if (!isCameraVideoSourceActive ||
-            !hasCapturedFirstLocalVideoFrame ||
-            !hasBoundLocalVideoCanvas ||
-            hasReportedCameraPreviewReady ||
-            cameraPreviewReadyListener == null
-        ) {
-            return false
-        }
-
-        hasReportedCameraPreviewReady = true
-        return true
-    }
-
-    /**
-     * Notifies the camera preview listener when readiness conditions are met.
-     *
-     * @param shouldNotify Whether readiness notification is due.
-     */
-    private fun notifyCameraPreviewReady(
-        shouldNotify: Boolean,
-    ) {
-        if (!shouldNotify) return
-
-        val registration = synchronized(stateLock) {
-            Triple(
-                cameraListenerVersion,
-                cameraSourceVersion,
-                cameraPreviewReadyListener,
-            )
-        }
-
-        eventCallbackScope.launch {
-            val current = synchronized(stateLock) {
-                cameraListenerVersion == registration.first && cameraSourceVersion == registration.second
-            }
-            if (current) runCatching { registration.third?.onCameraPreviewReady() }.onFailure {
-                XmaxLogger.realtime.warn(
-                    message = { "Camera preview listener failed: ${it.message}" },
-                )
-            }
-        }
-    }
 
     /**
      * Creates a pending room join and its completion waiter.
@@ -1914,61 +1577,40 @@ internal class RtcManager(
 
     /**
      * An active RTC room and its local operation identity.
+     *
+     * @property roomId The RTC room identifier.
+     * @property room The RTC room associated with this operation.
+     * @property id The connection identifier used to reject old room callbacks.
      */
     private data class RoomContext(
-        /**
-         * The RTC room identifier.
-         */
         val roomId: String,
-
-        /**
-         * The RTC room associated with this operation.
-         */
         val room: RtcRoom,
-
-        /**
-         * The connection identifier used to reject old room callbacks.
-         */
         val id: UUID = UUID.randomUUID(),
     )
 
     /**
      * A pending join with remote publication events received during entry.
+     *
+     * @property context The identifiers and resources for this room operation.
+     * @property id The room connection identity owning this pending join.
+     * @property result The waiter completed when the operation finishes.
+     * @property remoteVideoPublications Remote publication states received during room entry.
      */
     private data class PendingJoin(
-        /**
-         * The identifiers and resources for this room operation.
-         */
         val context: RoomContext,
-
-        /**
-         * The room connection identity owning this pending join.
-         */
         val id: UUID = context.id,
-
-        /**
-         * The waiter completed when the operation finishes.
-         */
         val result: CompletableDeferred<Unit> = CompletableDeferred(),
-
-        /**
-         * Remote publication states received during room entry.
-         */
         val remoteVideoPublications: MutableMap<RemoteStream, Boolean> = linkedMapOf(),
     )
 
     /**
      * Rooms and pending joins that must be released when leaving.
+     *
+     * @property active The joined room, or null without an active room.
+     * @property pending The pending room join, or null when no join is pending.
      */
     private data class RoomResources(
-        /**
-         * The joined room, or null without an active room.
-         */
         val active: RoomContext?,
-
-        /**
-         * The pending room join, or null when no join is pending.
-         */
         val pending: PendingJoin?,
     )
 

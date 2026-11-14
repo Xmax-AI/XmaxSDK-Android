@@ -11,6 +11,7 @@
 #include <jni.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 /**
  * Copies tightly packed RGBA into independently owned, bilinearly resized storage.
@@ -159,6 +160,42 @@ static jboolean valid_plane(
 }
 
 /**
+ * Copies a validated plane with pixel stride 1 or 2 to tightly packed output.
+ *
+ * @param plane The source plane to copy.
+ * @param width The number of samples in each row.
+ * @param height The number of rows.
+ * @param output The destination plane.
+ */
+static void copy_plane(
+    const Plane *plane,
+    jint width,
+    jint height,
+    uint8_t *restrict output
+) {
+    const uint8_t *input = plane->data + plane->offset;
+    if (plane->pixel_stride == 1) {
+        if (plane->row_stride == width) {
+            memcpy(output, input, (size_t) width * height);
+            return;
+        }
+
+        for (jint y = 0; y < height; ++y) {
+            memcpy(output + (size_t) y * width, input + (size_t) y * plane->row_stride, width);
+        }
+        return;
+    }
+
+    for (jint y = 0; y < height; ++y) {
+        const uint8_t *src_row = input + (size_t) y * plane->row_stride;
+        uint8_t *dst_row = output + (size_t) y * width;
+        for (jint x = 0; x < width; ++x) {
+            dst_row[x] = src_row[(size_t) x * 2];
+        }
+    }
+}
+
+/**
  * Maps display coordinates to the source before cropping and rotation.
  *
  * @param display_x The horizontal display coordinate.
@@ -228,9 +265,8 @@ static inline void source_coordinate(
  * @param output_width The output width; must be positive and even.
  * @param output_height The output height; must be positive and even.
  * @param rotation The clockwise rotation: 0, 90, 180, or 270 degrees.
- * @param output_y The contiguous output Y-plane array.
- * @param output_u The contiguous output U-plane array.
- * @param output_v The contiguous output V-plane array.
+ * @param mirrored Whether to mirror across the output width after rotation.
+ * @param output The output array containing Y, U, and V consecutively.
  * @return JNI_TRUE on success; JNI_FALSE for invalid input, insufficient memory, or inaccessible buffers.
  */
 JNIEXPORT jboolean JNICALL
@@ -258,9 +294,8 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
     jint output_width,
     jint output_height,
     jint rotation,
-    jbyteArray output_y,
-    jbyteArray output_u,
-    jbyteArray output_v
+    jboolean mirrored,
+    jbyteArray output
 ) {
     (void) instance;
     if (source_width <= 0 || source_height <= 0 || crop_left < 0 || crop_top < 0 ||
@@ -269,15 +304,15 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
         output_width <= 0 || output_height <= 0 ||
         (output_width & 1) != 0 || (output_height & 1) != 0 ||
         (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) ||
-        output_y == NULL || output_u == NULL || output_v == NULL) {
+        output == NULL) {
         return JNI_FALSE;
     }
 
     const jint chroma_width = output_width / 2;
     const jint chroma_height = output_height / 2;
-    if ((*env)->GetArrayLength(env, output_y) < output_width * output_height ||
-        (*env)->GetArrayLength(env, output_u) < chroma_width * chroma_height ||
-        (*env)->GetArrayLength(env, output_v) < chroma_width * chroma_height) {
+    const int64_t luma_size = (int64_t) output_width * output_height;
+    const int64_t chroma_size = (int64_t) chroma_width * chroma_height;
+    if ((*env)->GetArrayLength(env, output) < luma_size + 2 * chroma_size) {
         return JNI_FALSE;
     }
 
@@ -310,6 +345,21 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
         return JNI_FALSE;
     }
 
+    if (rotation == 0 && !mirrored && crop_left == 0 && crop_top == 0 &&
+        crop_width == source_width && crop_height == source_height &&
+        output_width == source_width && output_height == source_height &&
+        y_plane.pixel_stride == 1 && u_plane.pixel_stride <= 2 && v_plane.pixel_stride <= 2) {
+        jbyte *bytes = (*env)->GetByteArrayElements(env, output, NULL);
+        if (bytes == NULL) return JNI_FALSE;
+
+        uint8_t *pixels = (uint8_t *) bytes;
+        copy_plane(&y_plane, output_width, output_height, pixels);
+        copy_plane(&u_plane, chroma_width, chroma_height, pixels + luma_size);
+        copy_plane(&v_plane, chroma_width, chroma_height, pixels + luma_size + chroma_size);
+        (*env)->ReleaseByteArrayElements(env, output, bytes, 0);
+        return JNI_TRUE;
+    }
+
     jint *target_x = malloc((size_t) output_width * sizeof(jint));
     jint *target_y = malloc((size_t) output_height * sizeof(jint));
     if (target_x == NULL || target_y == NULL) {
@@ -328,7 +378,8 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
     const double display_top = (display_height - output_height / scale) / 2.0;
 
     for (jint x = 0; x < output_width; ++x) {
-        jint mapped = (jint) (display_left + (x + 0.5) / scale);
+        const jint column = mirrored ? output_width - 1 - x : x;
+        jint mapped = (jint) (display_left + (column + 0.5) / scale);
         if (mapped < 0) mapped = 0;
         if (mapped >= display_width) mapped = display_width - 1;
         target_x[x] = mapped;
@@ -340,17 +391,14 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
         target_y[y] = mapped;
     }
 
-    jbyte *y_result = (*env)->GetByteArrayElements(env, output_y, NULL);
-    jbyte *u_result = (*env)->GetByteArrayElements(env, output_u, NULL);
-    jbyte *v_result = (*env)->GetByteArrayElements(env, output_v, NULL);
-    if (y_result == NULL || u_result == NULL || v_result == NULL) {
-        if (v_result != NULL) (*env)->ReleaseByteArrayElements(env, output_v, v_result, 0);
-        if (u_result != NULL) (*env)->ReleaseByteArrayElements(env, output_u, u_result, 0);
-        if (y_result != NULL) (*env)->ReleaseByteArrayElements(env, output_y, y_result, 0);
+    jbyte *y_result = (*env)->GetByteArrayElements(env, output, NULL);
+    if (y_result == NULL) {
         free(target_x);
         free(target_y);
         return JNI_FALSE;
     }
+    jbyte *u_result = y_result + luma_size;
+    jbyte *v_result = u_result + chroma_size;
 
     jint output_index = 0;
     for (jint y = 0; y < output_height; ++y) {
@@ -392,9 +440,7 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
         }
     }
 
-    (*env)->ReleaseByteArrayElements(env, output_v, v_result, 0);
-    (*env)->ReleaseByteArrayElements(env, output_u, u_result, 0);
-    (*env)->ReleaseByteArrayElements(env, output_y, y_result, 0);
+    (*env)->ReleaseByteArrayElements(env, output, y_result, 0);
     free(target_x);
     free(target_y);
     return JNI_TRUE;
@@ -405,11 +451,14 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertNative(
  *
  * @param env The current thread's JNI environment.
  * @param instance The calling Kotlin singleton, unused by this function.
- * @param y_data The Y luma plane.
+ * @param y_data The array containing the Y luma plane.
+ * @param y_offset The first byte of the Y plane.
  * @param y_stride The Y-plane row stride, in bytes.
- * @param u_data The U chroma plane.
+ * @param u_data The array containing the U chroma plane.
+ * @param u_offset The first byte of the U plane.
  * @param u_stride The U-plane row stride, in bytes.
- * @param v_data The V chroma plane.
+ * @param v_data The array containing the V chroma plane.
+ * @param v_offset The first byte of the V plane.
  * @param v_stride The V-plane row stride, in bytes.
  * @param width The image width, in pixels.
  * @param height The image height, in pixels.
@@ -421,10 +470,13 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertI420ToArgbNative(
     JNIEnv *env,
     jobject instance,
     jbyteArray y_data,
+    jint y_offset,
     jint y_stride,
     jbyteArray u_data,
+    jint u_offset,
     jint u_stride,
     jbyteArray v_data,
+    jint v_offset,
     jint v_stride,
     jint width,
     jint height,
@@ -432,35 +484,49 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertI420ToArgbNative(
 ) {
     (void) instance;
     if (y_data == NULL || u_data == NULL || v_data == NULL || output_pixels == NULL ||
-        width <= 0 || height <= 0 || y_stride < width ||
-        u_stride < (width + 1) / 2 || v_stride < (width + 1) / 2 ||
-        (*env)->GetArrayLength(env, y_data) < y_stride * height ||
-        (*env)->GetArrayLength(env, u_data) < u_stride * ((height + 1) / 2) ||
-        (*env)->GetArrayLength(env, v_data) < v_stride * ((height + 1) / 2) ||
-        (*env)->GetArrayLength(env, output_pixels) < width * height) {
+        y_offset < 0 || u_offset < 0 || v_offset < 0 || width <= 0 || height <= 0) {
         return JNI_FALSE;
     }
 
-    jbyte *y = (*env)->GetByteArrayElements(env, y_data, NULL);
-    jbyte *u = (*env)->GetByteArrayElements(env, u_data, NULL);
-    jbyte *v = (*env)->GetByteArrayElements(env, v_data, NULL);
-    jint *pixels = (*env)->GetIntArrayElements(env, output_pixels, NULL);
-    if (y == NULL || u == NULL || v == NULL || pixels == NULL) {
-        if (pixels != NULL) (*env)->ReleaseIntArrayElements(env, output_pixels, pixels, 0);
-        if (v != NULL) (*env)->ReleaseByteArrayElements(env, v_data, v, JNI_ABORT);
-        if (u != NULL) (*env)->ReleaseByteArrayElements(env, u_data, u, JNI_ABORT);
-        if (y != NULL) (*env)->ReleaseByteArrayElements(env, y_data, y, JNI_ABORT);
+    const jint chroma_width = width / 2 + width % 2;
+    const jint chroma_height = height / 2 + height % 2;
+    if (y_stride < width || u_stride < chroma_width || v_stride < chroma_width ||
+        (*env)->GetArrayLength(env, y_data) < y_offset + (int64_t) (height - 1) * y_stride + width ||
+        (*env)->GetArrayLength(env, u_data) < u_offset + (int64_t) (chroma_height - 1) * u_stride + chroma_width ||
+        (*env)->GetArrayLength(env, v_data) < v_offset + (int64_t) (chroma_height - 1) * v_stride + chroma_width ||
+        (*env)->GetArrayLength(env, output_pixels) < (int64_t) width * height) {
         return JNI_FALSE;
     }
+
+    // Acquire each backing array once so packed planes share a single JNI array access.
+    const jboolean u_shares_y = (*env)->IsSameObject(env, u_data, y_data);
+    const jboolean v_shares_y = (*env)->IsSameObject(env, v_data, y_data);
+    const jboolean v_shares_u = !v_shares_y && (*env)->IsSameObject(env, v_data, u_data);
+    jbyte *y = (*env)->GetByteArrayElements(env, y_data, NULL);
+    if (y == NULL) return JNI_FALSE;
+    jbyte *u = u_shares_y ? y : (*env)->GetByteArrayElements(env, u_data, NULL);
+    jbyte *v = NULL;
+    jboolean converted = JNI_FALSE;
+    if (u == NULL) goto release_arrays;
+    if (v_shares_y) {
+        v = y;
+    } else if (v_shares_u) {
+        v = u;
+    } else {
+        v = (*env)->GetByteArrayElements(env, v_data, NULL);
+    }
+    if (v == NULL) goto release_arrays;
+    jint *pixels = (*env)->GetIntArrayElements(env, output_pixels, NULL);
+    if (pixels == NULL) goto release_arrays;
 
     jint output_index = 0;
     for (jint row = 0; row < height; ++row) {
-        const jint y_row = row * y_stride;
-        const jint chroma_row = (row / 2) * u_stride;
-        const jint chroma_v_row = (row / 2) * v_stride;
+        const jint y_row = y_offset + row * y_stride;
+        const jint chroma_u_row = u_offset + (row / 2) * u_stride;
+        const jint chroma_v_row = v_offset + (row / 2) * v_stride;
         for (jint column = 0; column < width; ++column) {
             const jint luma = ((uint8_t) y[y_row + column]) - 16;
-            const jint chroma_u = ((uint8_t) u[chroma_row + column / 2]) - 128;
+            const jint chroma_u = ((uint8_t) u[chroma_u_row + column / 2]) - 128;
             const jint chroma_v = ((uint8_t) v[chroma_v_row + column / 2]) - 128;
             const jint normalized_luma = luma > 0 ? luma : 0;
             const jint red = clamp_color((298 * normalized_luma + 409 * chroma_v + 128) >> 8);
@@ -475,8 +541,11 @@ Java_ai_xmax_sdk_media_video_NativeYuv420Converter_convertI420ToArgbNative(
     }
 
     (*env)->ReleaseIntArrayElements(env, output_pixels, pixels, 0);
-    (*env)->ReleaseByteArrayElements(env, v_data, v, JNI_ABORT);
-    (*env)->ReleaseByteArrayElements(env, u_data, u, JNI_ABORT);
+    converted = JNI_TRUE;
+
+release_arrays:
+    if (v != NULL && !v_shares_y && !v_shares_u) (*env)->ReleaseByteArrayElements(env, v_data, v, JNI_ABORT);
+    if (u != NULL && !u_shares_y) (*env)->ReleaseByteArrayElements(env, u_data, u, JNI_ABORT);
     (*env)->ReleaseByteArrayElements(env, y_data, y, JNI_ABORT);
-    return JNI_TRUE;
+    return converted;
 }

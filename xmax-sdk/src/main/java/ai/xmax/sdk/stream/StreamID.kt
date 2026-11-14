@@ -12,11 +12,10 @@ package ai.xmax.sdk.stream
 
 /**
  * The internal local and remote media stream identifiers.
+ *
+ * @property value The string representation used for configuration or display.
  */
 internal enum class StreamID(
-    /**
-     * The string representation used for configuration or display.
-     */
     val value: String,
 ) {
 

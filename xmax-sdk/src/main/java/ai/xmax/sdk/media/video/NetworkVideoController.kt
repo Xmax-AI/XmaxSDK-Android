@@ -41,16 +41,12 @@ import kotlinx.coroutines.withContext
 
 /**
  * A network video preview whose URL is independently read by the generation server.
+ *
+ * @property context The Android context for system services and media resources.
+ * @property mediaService The service resolving media dimensions and model constraints.
  */
 internal class NetworkVideoController(
-    /**
-     * The Android context for system services and media resources.
-     */
     private val context: Context,
-
-    /**
-     * The service resolving media dimensions and model constraints.
-     */
     private val mediaService: MediaServicing,
 ) {
 
@@ -179,16 +175,12 @@ internal fun validateNetworkVideoUrl(
 /**
  * Player and Surface operations run serially on the main thread; preview failure does not end the independent
  * server task.
+ *
+ * @property context The Android context for system services and media resources.
+ * @property uri A media URI accessible to your app.
  */
 private class NetworkVideoPreview(
-    /**
-     * The Android context for system services and media resources.
-     */
     private val context: Context,
-
-    /**
-     * A media URI accessible to your app.
-     */
     private val uri: Uri,
 ) {
 

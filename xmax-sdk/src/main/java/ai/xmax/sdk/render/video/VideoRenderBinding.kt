@@ -17,16 +17,12 @@ import java.lang.ref.WeakReference
 
 /**
  * Binds realtime tracks to Android rendering views.
+ *
+ * @property attachHandler The function binding a track to a view and scaling mode.
+ * @property detachHandler The function detaching a track's view.
  */
 internal class VideoRenderBinding(
-    /**
-     * The function binding a track to a view and scaling mode.
-     */
     private val attachHandler: (XmaxRealtimeVideoView, VideoContentMode) -> Unit,
-
-    /**
-     * The function detaching a track's view.
-     */
     private val detachHandler: (XmaxRealtimeVideoView) -> Unit,
 ) {
 

@@ -47,11 +47,10 @@ internal interface DecodedImage {
 
 /**
  * An orientation-normalized Android Bitmap that supplies reusable RGBA frames.
+ *
+ * @property bitmap The Android Bitmap to process or display.
  */
 internal class BitmapDecodedImage(
-    /**
-     * The Android Bitmap to process or display.
-     */
     private val bitmap: Bitmap,
 ) : DecodedImage {
 

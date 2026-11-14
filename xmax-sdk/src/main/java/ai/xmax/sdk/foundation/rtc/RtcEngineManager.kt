@@ -22,31 +22,23 @@ import kotlinx.coroutines.sync.Mutex
 
 /**
  * Exclusive ownership of the process-wide RTC engine.
+ *
+ * @property id The lease identifier used to authorize engine release.
+ * @property engine The platform engine executing RTC operations.
  */
 internal data class RtcEngineLease(
-    /**
-     * The lease identifier used to authorize engine release.
-     */
     val id: UUID = UUID.randomUUID(),
-
-    /**
-     * The platform engine executing RTC operations.
-     */
     val engine: RtcPlatform,
 )
 
 /**
  * Serializes exclusive access to the process-wide RTC engine.
+ *
+ * @property makeEngine The factory creating an RTC platform engine.
+ * @property destroyEngine The function releasing native RTC engine resources.
  */
 internal open class RtcEngineManager internal constructor(
-    /**
-     * The factory creating an RTC platform engine.
-     */
     private val makeEngine: () -> RtcPlatform?,
-
-    /**
-     * The function releasing native RTC engine resources.
-     */
     private val destroyEngine: () -> Unit,
 ) {
 

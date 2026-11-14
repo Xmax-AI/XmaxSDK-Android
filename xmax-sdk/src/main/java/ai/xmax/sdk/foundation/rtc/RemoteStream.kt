@@ -12,16 +12,12 @@ package ai.xmax.sdk.foundation.rtc
 
 /**
  * A remote main stream in an RTC room.
+ *
+ * @property roomId The RTC room identifier.
+ * @property userId The room's business user identifier.
  */
 internal data class RemoteStream(
-    /**
-     * The RTC room identifier.
-     */
     val roomId: String,
-
-    /**
-     * The room's business user identifier.
-     */
     val userId: String,
 ) {
 

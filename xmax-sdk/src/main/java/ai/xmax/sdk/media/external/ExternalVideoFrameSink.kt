@@ -19,34 +19,19 @@ import ai.xmax.sdk.media.video.NativeYuv420Converter
  *
  * Invalidation waits for synchronous submissions and rejects all subsequent frames and errors.
  *
+ * @property sourceVideoFormat The original pixel dimensions declared by the source.
+ * @property videoFormat The processed format shared by local preview and generation.
  * @param hasAudio Whether this binding accepts external PCM audio.
+ * @property frameListener The synchronous receiver of copied, resized video frames.
+ * @property audioListener The synchronous receiver of converted audio packets.
+ * @property errorListener The receiver of the binding's first unrecoverable failure.
  */
 internal class ExternalVideoFrameSink(
-    /**
-     * The original pixel dimensions declared by the source.
-     */
     private val sourceVideoFormat: RealtimeVideoFormat,
-
-    /**
-     * The processed format shared by local preview and generation.
-     */
     override val videoFormat: RealtimeVideoFormat,
-
     hasAudio: Boolean,
-
-    /**
-     * The synchronous receiver of copied, resized video frames.
-     */
     private val frameListener: (VideoFrame) -> Unit,
-
-    /**
-     * The synchronous receiver of converted audio packets.
-     */
     private val audioListener: (AudioFrame) -> Unit,
-
-    /**
-     * The receiver of the binding's first unrecoverable failure.
-     */
     private val errorListener: (XmaxError) -> Unit,
 ) : RealtimeExternalFrameSink {
 

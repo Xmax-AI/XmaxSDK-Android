@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="realtime_camera_rotate">旋转</string>
+    <string name="realtime_camera_rotate_error">无法旋转摄像头画面</string>
     <string name="realtime_camera_format">比例</string>
     <string name="realtime_camera_format_error">摄像头比例切换失败</string>
     <string name="realtime_camera_format_stop_hint">请先停止生成，再切换比例</string>

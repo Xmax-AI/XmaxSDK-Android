@@ -26,11 +26,10 @@ import kotlin.math.ln
 
 /**
  * The sizing rules for local media, generation canvases, and returned media.
+ *
+ * @property model The model defining input constraints; defaults to `RealtimeModel.X2_1`.
  */
 internal class MediaService(
-    /**
-     * The model defining input constraints; defaults to `RealtimeModel.X2_1`.
-     */
     override val model: RealtimeModel = RealtimeModel.X2_1,
 ) : MediaServicing {
 

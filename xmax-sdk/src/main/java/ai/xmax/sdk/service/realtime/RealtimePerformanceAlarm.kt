@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * A realtime performance limitation state.
+ *
+ * @property value The string representation used for configuration or display.
  */
 public enum class RealtimePerformanceStatus(
-    /**
-     * The string representation used for configuration or display.
-     */
     public val value: String,
 ) {
 
@@ -33,16 +32,12 @@ public enum class RealtimePerformanceStatus(
 
 /**
  * A realtime device performance alarm.
+ *
+ * @property status The current device limitation or recovery state.
+ * @property suggestedVideoFormat The suggested video format, or null without a valid suggestion.
  */
 public data class RealtimePerformanceAlarm(
-    /**
-     * The current device limitation or recovery state.
-     */
     public val status: RealtimePerformanceStatus,
-
-    /**
-     * The suggested video format, or null without a valid suggestion.
-     */
     public val suggestedVideoFormat: RealtimeVideoFormat?,
 )
 

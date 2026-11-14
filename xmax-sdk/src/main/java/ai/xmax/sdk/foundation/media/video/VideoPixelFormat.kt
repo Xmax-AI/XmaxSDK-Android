@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * A pixel format supported by video frames.
+ *
+ * @property value The string representation used for configuration or display.
  */
 internal enum class VideoPixelFormat(
-    /**
-     * The string representation used for configuration or display.
-     */
     val value: String,
 ) {
 

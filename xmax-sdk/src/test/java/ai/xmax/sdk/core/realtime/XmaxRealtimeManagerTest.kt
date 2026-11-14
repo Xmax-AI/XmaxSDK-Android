@@ -1315,6 +1315,25 @@ class XmaxRealtimeManagerTest {
         f.manager.close()
     }
 
+    @Test fun `camera rotation works during generation without restarting the session or task`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        val local = f.manager.createLocalCameraStream(rotation = RealtimeCameraRotation.ROTATION_90)
+        assertEquals(RealtimeCameraRotation.ROTATION_90, f.media.cameraRotationAtCreation)
+        f.stream.confirmation = CompletableDeferred(Unit)
+        f.manager.startGeneration(local, RealtimeContext("initial"))
+        val taskId = f.manager.currentState.taskId
+
+        f.manager.setCameraRotation(RealtimeCameraRotation.ROTATION_180)
+
+        assertEquals(RealtimeCameraRotation.ROTATION_180, f.media.cameraRotationUpdate)
+        assertSame(local.videoTrack, f.media.currentTrack)
+        assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
+        assertEquals(taskId, f.manager.currentState.taskId)
+        assertEquals(listOf("initial"), f.stream.startedPrompts)
+        assertEquals(1, f.session.count)
+        f.manager.close()
+    }
+
     @Test fun `camera enters ready only after preview callback`() = runTest {
         val f = Fixture(StandardTestDispatcher(testScheduler))
         f.media.reportPreviewReadyOnCreate = false
@@ -1909,6 +1928,8 @@ private class MediaStub : MediaControlling {
     var createError: XmaxError? = null
     var registeredCameraPreviewReadyListener: RealtimeCameraPreviewReadyListener? = null
     var reportPreviewReadyOnCreate = true
+    var cameraRotationAtCreation: RealtimeCameraRotation? = null
+    var cameraRotationUpdate: RealtimeCameraRotation? = null
     var cameraStartCount = 0
     var cameraStartBarrier: CompletableDeferred<Unit>? = null
     var stopBarrier: CompletableDeferred<Unit>? = null
@@ -1920,10 +1941,12 @@ private class MediaStub : MediaControlling {
         videoFormat: RealtimeVideoFormat,
         position: CameraPosition,
         useMicrophone: Boolean,
+        rotation: RealtimeCameraRotation,
     ): RealtimeMediaStream {
         cameraStartBarrier?.await()
         createError?.let { throw it }
         cameraStartCount++
+        cameraRotationAtCreation = rotation
         volumeAtStart = volume
         hasAudio = useMicrophone
         val track = RealtimeVideoTrack("local", videoFormat, position = position)
@@ -1933,7 +1956,13 @@ private class MediaStub : MediaControlling {
         }
         return RealtimeMediaStream("local", track)
     }
-    override fun startMicrophoneCapture() {
+    override suspend fun setCameraRotation(
+        rotation: RealtimeCameraRotation,
+    ) {
+        cameraRotationUpdate = rotation
+    }
+
+    override suspend fun startMicrophoneCapture() {
         if (hasAudio) microphoneStartCount += 1
     }
     override suspend fun updateCameraFormat(videoFormat: RealtimeVideoFormat) {
@@ -1943,7 +1972,7 @@ private class MediaStub : MediaControlling {
         createError?.let { throw it }
         currentTrack!!.updateVideoFormat(videoFormat)
     }
-    override fun stopMicrophoneCapture() {
+    override suspend fun stopMicrophoneCapture() {
         if (hasAudio) microphoneStopCount += 1
     }
     override suspend fun createLocalImageStream(

@@ -36,31 +36,18 @@ import org.json.JSONObject
 
 /**
  * Manages RTC room lifecycle, heartbeat, and generation signaling.
+ *
+ * @property rtcManager The manager for RTC capture, publication, subscription, and rendering.
+ * @property heartbeat The component maintaining RTC room heartbeats.
+ * @property commandScope The scope scheduling room command retries and receipt deadlines.
+ * @property relayMessage Submits each complete generation control once through an independent HTTP request.
+ * @property redundantSignalingEnabled Whether generation controls use RTC retries and HTTP relay.
  */
 internal class RoomController(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
     private val rtcManager: RtcManaging,
-
-    /**
-     * The component maintaining RTC room heartbeats.
-     */
     private val heartbeat: RoomHeartbeat = RoomHeartbeat(rtcManager),
-
-    /**
-     * The scope scheduling room command retries and receipt deadlines.
-     */
     private val commandScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-
-    /**
-     * Submits each complete generation control once through an independent HTTP request.
-     */
     private val relayMessage: (suspend (String) -> Unit)? = null,
-
-    /**
-     * Whether generation controls use RTC retries and HTTP relay.
-     */
     private val redundantSignalingEnabled: Boolean = true,
 ) : RoomControlling {
 
@@ -547,36 +534,25 @@ internal class RoomController(
 
         /**
          * The specified room join is pending.
+         *
+         * @property id The room join operation identifier rejecting old results.
          */
         data class Joining(
-            /**
-             * The room join operation identifier rejecting old results.
-             */
             val id: UUID,
         ) : State
 
         /**
          * The room is joined and can send business signals.
+         *
+         * @property userId The room's business user identifier.
+         * @property roomId The joined room identifier.
+         * @property botId The expected service sender, or null when the session does not provide one.
+         * @property operationId The room lifetime rejecting stale receipts.
          */
         data class Joined(
-            /**
-             * The room's business user identifier.
-             */
             val userId: String,
-
-            /**
-             * The joined room identifier.
-             */
             val roomId: String,
-
-            /**
-             * The expected service sender, or null when the session does not provide one.
-             */
             val botId: String?,
-
-            /**
-             * The room lifetime rejecting stale receipts.
-             */
             val operationId: UUID,
         ) : State
 

@@ -18,16 +18,12 @@ import kotlinx.coroutines.withContext
 
 /**
  * Records the durations of realtime generation startup stages.
+ *
+ * @property clockNanos The monotonic clock returning nanoseconds.
+ * @property log The output function receiving formatted log text.
  */
 internal class RealtimeTiming(
-    /**
-     * The monotonic clock returning nanoseconds.
-     */
     private val clockNanos: () -> Long = System::nanoTime,
-
-    /**
-     * The output function receiving formatted log text.
-     */
     private val log: (String) -> Unit = {
         XmaxLogger.timing.info(
             message = { it },
@@ -63,16 +59,12 @@ internal class RealtimeTiming(
 
     /**
      * The startup stages and outcome for one generation task, excluding other tasks' events.
+     *
+     * @property clock The monotonic clock returning nanoseconds.
+     * @property log The output function receiving formatted log text.
      */
     internal class Attempt(
-        /**
-         * The monotonic clock returning nanoseconds.
-         */
         private val clock: () -> Long,
-
-        /**
-         * The output function receiving formatted log text.
-         */
         private val log: (String) -> Unit,
     ) : AbstractCoroutineContextElement(Key) {
 

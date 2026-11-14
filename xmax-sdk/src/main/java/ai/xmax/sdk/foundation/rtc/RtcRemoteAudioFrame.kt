@@ -12,31 +12,18 @@ package ai.xmax.sdk.foundation.rtc
 
 /**
  * Owned PCM from one remote publisher on the RTC render clock.
+ *
+ * @property data The interleaved PCM16 little-endian samples; empty data invalidates continuity.
+ * @property sampleRate The samples per second per channel.
+ * @property channels The number of interleaved channels.
+ * @property samplesPerChannel The number of samples per channel in this packet.
+ * @property renderTimeMs The RTC render timestamp, in milliseconds.
  */
 internal data class RtcRemoteAudioFrame(
-    /**
-     * The interleaved PCM16 little-endian samples; empty data invalidates continuity.
-     */
     val data: ByteArray,
-
-    /**
-     * The samples per second per channel.
-     */
     val sampleRate: Int,
-
-    /**
-     * The number of interleaved channels.
-     */
     val channels: Int,
-
-    /**
-     * The number of samples per channel in this packet.
-     */
     val samplesPerChannel: Int,
-
-    /**
-     * The RTC render timestamp, in milliseconds.
-     */
     val renderTimeMs: Long,
 )
 

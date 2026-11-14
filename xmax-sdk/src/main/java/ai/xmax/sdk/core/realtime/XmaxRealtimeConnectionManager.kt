@@ -32,36 +32,20 @@ import kotlin.math.ceil
  *
  * Connection setup, disconnection, and rollback are serialized to prevent reuse of unreleased
  * resources.
+ *
+ * @property sessionService The service creating, renewing, and closing server sessions.
+ * @property interactionController The controller submitting interaction trajectories.
+ * @property renderController The controller binding video tracks to preview views.
+ * @property streamController The component managing RTC publication, subscriptions, and generation signaling.
+ * @property mediaService Model media sizing rules for transport and returned video.
+ * @property nowNanos The monotonic nanosecond clock for connection startup duration.
  */
 internal class XmaxRealtimeConnectionManager(
-    /**
-     * The service creating, renewing, and closing server sessions.
-     */
     private val sessionService: RealtimeSessionServicing,
-
-    /**
-     * The controller submitting interaction trajectories.
-     */
     private val interactionController: InteractionControlling,
-
-    /**
-     * The controller binding video tracks to preview views.
-     */
     private val renderController: RenderControlling,
-
-    /**
-     * The component managing RTC publication, subscriptions, and generation signaling.
-     */
     private val streamController: StreamControlling,
-
-    /**
-     * Model media sizing rules for transport and returned video.
-     */
     private val mediaService: MediaServicing = MediaService(),
-
-    /**
-     * The monotonic nanosecond clock for connection startup duration.
-     */
     private val nowNanos: () -> Long = System::nanoTime,
 ) {
 
@@ -570,16 +554,12 @@ internal class XmaxRealtimeConnectionManager(
 
     /**
      * A disconnected connection snapshot whose resources remain owned by its cleanup operation.
+     *
+     * @property session The server session and its connection details.
+     * @property remoteTrack The active remote video track.
      */
     private data class ConnectionResources(
-        /**
-         * The server session and its connection details.
-         */
         val session: RealtimeSession?,
-
-        /**
-         * The active remote video track.
-         */
         val remoteTrack: RealtimeVideoTrack?,
     )
 }

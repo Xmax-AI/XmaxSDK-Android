@@ -16,11 +16,10 @@ import java.util.UUID
 
 /**
  * A stable identifier for an active trajectory.
+ *
+ * @property rawValue The underlying value represented by this object.
  */
 public class TrajectoryID internal constructor(
-    /**
-     * The underlying value represented by this object.
-     */
     internal val rawValue: UUID = UUID.randomUUID(),
 ) {
 
@@ -41,26 +40,16 @@ public class TrajectoryID internal constructor(
 
 /**
  * A touch sample delivered to a trajectory renderer.
+ *
+ * @property id The stable identifier for one continuous drag.
+ * @property location The touch position in view pixels.
+ * @property normalizedLocation The normalized touch position within the complete resolved media area.
+ * @property timestamp The monotonic touch timestamp, in seconds.
  */
 public class TrajectoryPoint internal constructor(
-    /**
-     * The stable identifier for one continuous drag.
-     */
     public val id: TrajectoryID,
-
-    /**
-     * The touch position in view pixels.
-     */
     public val location: PointF,
-
-    /**
-     * The normalized touch position within the complete resolved media area.
-     */
     public val normalizedLocation: PointF,
-
-    /**
-     * The monotonic touch timestamp, in seconds.
-     */
     public val timestamp: Double,
 )
 

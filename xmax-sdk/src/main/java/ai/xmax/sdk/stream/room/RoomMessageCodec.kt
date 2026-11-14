@@ -20,21 +20,14 @@ internal class RoomMessageCodec {
 
     /**
      * The fragments and integrity metadata for one partially received message.
+     *
+     * @property count The total fragment count.
+     * @property parts Received fragments indexed by sequence number.
+     * @property bytes The cumulative received payload size in bytes; defaults to 0.
      */
     private data class Record(
-        /**
-         * The total fragment count.
-         */
         val count: Int,
-
-        /**
-         * Received fragments indexed by sequence number.
-         */
         val parts: MutableMap<Int, String> = mutableMapOf(),
-
-        /**
-         * The cumulative received payload size in bytes; defaults to 0.
-         */
         var bytes: Int = 0,
     )
 

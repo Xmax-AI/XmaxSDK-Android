@@ -14,66 +14,37 @@ import ai.xmax.sdk.XmaxError
 
 /**
  * An Xmax realtime generation session.
+ *
+ * @property id The server-assigned generation session identifier.
+ * @property userId The room's business user identifier.
+ * @property status The server session state.
+ * @property connection The RTC room, user, credentials, and result stream returned by the server.
+ * @property closeReason The server closure reason, or null if absent.
+ * @property modelId The assigned model instance identifier used for HTTP event relay.
  */
 internal data class RealtimeSession(
-    /**
-     * The server-assigned generation session identifier.
-     */
     val id: String,
-
-    /**
-     * The room's business user identifier.
-     */
     val userId: String?,
-
-    /**
-     * The server session state.
-     */
     val status: String?,
-
-    /**
-     * The RTC room, user, credentials, and result stream returned by the server.
-     */
     val connection: RealtimeSessionConnection?,
-
-    /**
-     * The server closure reason, or null if absent.
-     */
     val closeReason: String?,
-
-    /**
-     * The assigned model instance identifier used for HTTP event relay.
-     */
     val modelId: String? = null,
 )
 
 /**
  * The RTC connection parameters for a realtime session.
+ *
+ * @property roomId The RTC room identifier.
+ * @property userId The room's business user identifier.
+ * @property token The RTC room authentication token.
+ * @property botName The user publishing generated results.
+ * @property appId The RTC App ID, not a certificate or token; defaults to `RtcEngineManager.DEFAULT_APP_ID`.
  */
 internal data class RealtimeSessionConnection(
-    /**
-     * The RTC room identifier.
-     */
     val roomId: String,
-
-    /**
-     * The room's business user identifier.
-     */
     val userId: String,
-
-    /**
-     * The RTC room authentication token.
-     */
     val token: String,
-
-    /**
-     * The user publishing generated results.
-     */
     val botName: String?,
-
-    /**
-     * The RTC App ID, not a certificate or token; defaults to `RtcEngineManager.DEFAULT_APP_ID`.
-     */
     val appId: String = ai.xmax.sdk.foundation.rtc.RtcEngineManager.DEFAULT_APP_ID,
 )
 

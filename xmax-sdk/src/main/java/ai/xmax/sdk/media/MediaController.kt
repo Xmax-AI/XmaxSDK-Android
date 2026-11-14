@@ -14,6 +14,7 @@ import ai.xmax.sdk.cleanupResources
 import ai.xmax.sdk.cleanupAfterFailure
 import ai.xmax.sdk.CameraPosition
 import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
+import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeMediaStream
 import ai.xmax.sdk.RealtimeReferenceVideo
 import ai.xmax.sdk.RealtimeVideoSampleMethod
@@ -39,41 +40,22 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * Coordinates local media ownership and the RTC engine lifecycle.
+ *
+ * @property rtcManager The manager for configuring and releasing RTC media transports.
+ * @property cameraController The local camera controller.
+ * @property imageController The local image controller.
+ * @property videoController The local video controller.
+ * @property externalController The app-provided external video controller.
+ * @property networkVideoController The controller for video read directly by the server.
+ * @property interactionController The controller submitting interaction trajectories.
  */
 internal class MediaController(
-    /**
-     * The manager for RTC capture, publication, subscription, and rendering.
-     */
     private val rtcManager: RtcManaging,
-
-    /**
-     * The local camera controller.
-     */
     private val cameraController: CameraController,
-
-    /**
-     * The local image controller.
-     */
     private val imageController: ImageController? = null,
-
-    /**
-     * The local video controller.
-     */
     private val videoController: VideoController? = null,
-
-    /**
-     * The app-provided external video controller.
-     */
     private val externalController: ExternalVideoController? = null,
-
-    /**
-     * The controller for video read directly by the server.
-     */
     private val networkVideoController: NetworkVideoController? = null,
-
-    /**
-     * The controller submitting interaction trajectories.
-     */
     private val interactionController: InteractionController = InteractionController(),
 ) : MediaControlling {
 
@@ -231,17 +213,40 @@ internal class MediaController(
      * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
      * @param position The front or rear camera to use.
      * @param useMicrophone Whether to use the microphone; your app must obtain recording permission first.
+     * @param rotation The clockwise correction relative to automatic orientation.
      */
     override suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
         position: CameraPosition,
         useMicrophone: Boolean,
+        rotation: RealtimeCameraRotation,
     ): RealtimeMediaStream = createSource(LocalMediaKind.CAMERA) {
         cameraController.createLocalCameraStream(
             videoFormat,
             position,
             useMicrophone,
+            rotation,
         )
+    }
+
+    /**
+     * Applies orientation correction to the active camera, preserving its track.
+     *
+     * @param rotation The clockwise correction relative to automatic orientation.
+     */
+    override suspend fun setCameraRotation(
+        rotation: RealtimeCameraRotation,
+    ) {
+        operationMutex.withLock {
+            if (synchronized(stateLock) { activeSource } != LocalMediaKind.CAMERA) {
+                throw XmaxError(
+                    XmaxErrorCode.INVALID_CONFIGURATION,
+                    "The current local media source is not a camera",
+                )
+            }
+
+            cameraController.setCameraRotation(rotation)
+        }
     }
 
     /**
@@ -265,9 +270,20 @@ internal class MediaController(
     }
 
     /**
+     * Prepares the camera's RTC input tracks at connection time, independently of preview.
+     */
+    override suspend fun prepareCameraConnection() = operationMutex.withLock {
+        if (synchronized(stateLock) { activeSource } == LocalMediaKind.CAMERA) {
+            rtcManager.initialize()
+            rtcManager.useExternalVideoSource()
+            if (cameraController.useMicrophone) rtcManager.startExternalAudioSource()
+        }
+    }
+
+    /**
      * Starts microphone capture for the current camera source.
      */
-    override fun startMicrophoneCapture() {
+    override suspend fun startMicrophoneCapture() = operationMutex.withLock {
         if (synchronized(stateLock) { activeSource } == LocalMediaKind.CAMERA) {
             cameraController.startMicrophoneCapture()
         }
@@ -276,9 +292,12 @@ internal class MediaController(
     /**
      * Stops microphone capture for the current camera source.
      */
-    override fun stopMicrophoneCapture() {
+    override suspend fun stopMicrophoneCapture() = operationMutex.withLock {
         if (synchronized(stateLock) { activeSource } == LocalMediaKind.CAMERA) {
-            cameraController.stopMicrophoneCapture()
+            cleanupResources(
+                { cameraController.stopMicrophoneCapture() },
+                { if (cameraController.useMicrophone) rtcManager.stopExternalAudioSource() },
+            )
         }
     }
 
@@ -511,7 +530,7 @@ internal class MediaController(
         }
 
         try {
-            rtcManager.initialize()
+            if (kind != LocalMediaKind.CAMERA) rtcManager.initialize()
             create().also {
                 synchronized(stateLock) { activeSource = kind }
             }

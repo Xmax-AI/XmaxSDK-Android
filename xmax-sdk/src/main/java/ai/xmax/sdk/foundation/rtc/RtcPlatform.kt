@@ -11,7 +11,6 @@
 package ai.xmax.sdk.foundation.rtc
 
 import ai.xmax.sdk.AudioFrame
-import ai.xmax.sdk.CameraPosition
 import ai.xmax.sdk.VideoContentMode
 import ai.xmax.sdk.VideoFrame
 import android.view.View
@@ -74,84 +73,6 @@ internal interface RtcPlatform {
     fun stopExternalAudioSource(): Int
 
     /**
-     * Selects internal RTC audio input and starts microphone capture.
-     *
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    fun startAudioCapture(): Int
-
-    /**
-     * Stops internal RTC microphone capture.
-     *
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    fun stopAudioCapture(): Int
-
-    /**
-     * Starts internal RTC camera capture with the requested format.
-     *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @param frameRate The video frame rate, in fps.
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    fun startVideoCapture(
-        width: Int,
-        height: Int,
-        frameRate: Int,
-    ): Int
-
-    /**
-     * Updates camera capture while retaining the lens and local preview binding.
-     *
-     * @param width The frame width, in pixels.
-     * @param height The frame height, in pixels.
-     * @param frameRate The capture frame rate, in fps.
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    fun updateVideoCaptureFormat(
-        width: Int,
-        height: Int,
-        frameRate: Int,
-    ): Int
-
-    /**
-     * Stops internal RTC camera capture.
-     *
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    fun stopVideoCapture(): Int
-
-    /**
-     * Switches the camera used by internal RTC capture.
-     *
-     * @param position The front or rear camera to use.
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    fun switchCamera(
-        position: CameraPosition,
-    ): Int
-
-    /**
-     * Binds local video to a rendering view.
-     *
-     * @param view The view to bind or unbind.
-     * @param contentMode Aspect-preserving fit or fill scaling.
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    fun bindLocalVideo(
-        view: View,
-        contentMode: VideoContentMode,
-    ): Int
-
-    /**
-     * Unbinds the local rendering view.
-     *
-     * @return The RTC result: nonnegative if accepted, negative on failure.
-     */
-    fun unbindLocalVideo(): Int
-
-    /**
      * Binds a remote user's video to a view with the requested scaling mode.
      *
      * @param userId The room's business user identifier.
@@ -174,15 +95,6 @@ internal interface RtcPlatform {
     fun unbindRemoteVideo(
         userId: String,
     ): Int
-
-    /**
-     * Replaces the camera preview readiness listener; null unregisters it.
-     *
-     * @param listener The event listener, or null to unregister it.
-     */
-    fun setCameraPreviewReadyListener(
-        listener: (() -> Unit)?,
-    )
 
     /**
      * Replaces the frame listener for a remote stream.

@@ -26,18 +26,12 @@ import kotlinx.coroutines.launch
  * Serializes remote audio/video output with bounded retention and generation-safe delivery.
  *
  * @param dispatcher The background callback dispatcher.
+ * @property maximumPackets The retained packet limit, including an executing callback.
+ * @property maximumBytes The retained payload byte limit, including an executing callback.
  */
 internal class RealtimeMediaFrameDispatcher(
     dispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1),
-
-    /**
-     * The retained packet limit, including an executing callback.
-     */
     private val maximumPackets: Int = 256,
-
-    /**
-     * The retained payload byte limit, including an executing callback.
-     */
     private val maximumBytes: Long = 32L * 1_024 * 1_024,
 ) {
 
@@ -308,21 +302,14 @@ internal class RealtimeMediaFrameDispatcher(
 
     /**
      * An event retained for one listener revision.
+     *
+     * @property version The listener revision owning this event.
+     * @property event The owned audio or video event.
+     * @property bytes The retained payload size.
      */
     private data class Pending(
-        /**
-         * The listener revision owning this event.
-         */
         val version: Long,
-
-        /**
-         * The owned audio or video event.
-         */
         val event: RealtimeMediaFrame,
-
-        /**
-         * The retained payload size.
-         */
         val bytes: Long,
     )
 }

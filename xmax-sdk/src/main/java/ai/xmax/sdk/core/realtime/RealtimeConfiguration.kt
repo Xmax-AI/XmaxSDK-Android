@@ -12,18 +12,14 @@ package ai.xmax.sdk
 
 /**
  * The model and adaptive quality settings for a realtime manager.
+ *
+ * @property model The model for new sessions; the client environment selects the service region.
+ * @property isAdaptiveQualityEnabled Whether uplink and downlink quality levels adapt automatically.
+ *
+ * Without valid history, enabled connections start at L2. When disabled, each connection starts at L1
+ * without reading or updating quality history. Manual changes remain available.
  */
 public data class RealtimeConfiguration @JvmOverloads constructor(
-    /**
-     * The model for new sessions; the client environment selects the service region.
-     */
     public val model: RealtimeModel = RealtimeModel.X2_1,
-
-    /**
-     * Whether uplink and downlink quality levels adapt automatically.
-     *
-     * Without valid history, enabled connections start at L2. When disabled, each connection starts at L1
-     * without reading or updating quality history. Manual changes remain available.
-     */
     public val isAdaptiveQualityEnabled: Boolean = true,
 )

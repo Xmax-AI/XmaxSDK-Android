@@ -33,21 +33,14 @@ import org.json.JSONObject
 
 /**
  * Manages session creation, heartbeat, and closure.
+ *
+ * @property apiService The server API client.
+ * @property heartbeatSleeper The suspending heartbeat interval controller; defaults to `RealtimeHeartbeatSleeper.live`.
+ * @property heartbeatScope The scope running session heartbeats.
  */
 internal class RealtimeSessionService(
-    /**
-     * The server API client.
-     */
     private val apiService: ApiServicing,
-
-    /**
-     * The suspending heartbeat interval controller; defaults to `RealtimeHeartbeatSleeper.live`.
-     */
     private val heartbeatSleeper: RealtimeHeartbeatSleeper = RealtimeHeartbeatSleeper.live,
-
-    /**
-     * The scope running session heartbeats.
-     */
     private val heartbeatScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : RealtimeSessionServicing {
 
@@ -347,23 +340,16 @@ internal class RealtimeSessionService(
 
     /**
      * The session identifier, revision, and failure callback for one heartbeat lifecycle.
+     *
+     * @property version The revision identifying the owning task or callback.
+     * @property sessionId The server session identifier.
+     * @property firstHeartbeatGraceSeconds The grace period sent with the first heartbeat, in seconds.
+     * @property onFailure The callback receiving a session identifier and renewal failure.
      */
     private data class HeartbeatContext(
-        /**
-         * The revision identifying the owning task or callback.
-         */
         val version: Long,
-
-        /**
-         * The server session identifier.
-         */
         val sessionId: String,
-
         val firstHeartbeatGraceSeconds: Int,
-
-        /**
-         * The callback receiving a session identifier and renewal failure.
-         */
         val onFailure: RealtimeSessionHeartbeatFailureHandler,
     )
 

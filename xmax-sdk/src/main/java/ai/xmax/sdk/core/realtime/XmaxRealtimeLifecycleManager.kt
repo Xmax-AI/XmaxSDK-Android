@@ -37,34 +37,19 @@ import kotlinx.coroutines.withContext
  * Termination cancels affected operations and completes cleanup independently of a waiting caller's
  * cancellation.
  *
+ * @property callbacks The dispatcher for app state and video frame callbacks.
  * @param dispatcher The dispatcher for background operations; defaults to `Dispatchers.Default`.
+ * @property hasLocalMedia The function checking whether local media is still available.
+ * @property errorManager The manager recording errors without owning media or connection resources.
+ * @property onStateChanged Receives lifecycle states after they are committed.
+ * @property cleanup The suspending cleanup operation for a termination scope.
  */
 internal class XmaxRealtimeLifecycleManager(
-    /**
-     * The dispatcher for app state and video frame callbacks.
-     */
     private val callbacks: RealtimeCallbacks,
-
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
-
-    /**
-     * The function checking whether local media is still available.
-     */
     private val hasLocalMedia: () -> Boolean = { false },
-
-    /**
-     * The manager recording errors without owning media or connection resources.
-     */
     private val errorManager: XmaxRealtimeErrorManager = XmaxRealtimeErrorManager(dispatcher),
-
-    /**
-     * Receives lifecycle states after they are committed.
-     */
     private val onStateChanged: (RealtimeState) -> Unit = {},
-
-    /**
-     * The suspending cleanup operation for a termination scope.
-     */
     private val cleanup: suspend (TerminationScope) -> Unit,
 ) {
 
@@ -237,11 +222,10 @@ internal class XmaxRealtimeLifecycleManager(
     /**
      * An operation ownership token that prevents stale asynchronous results from changing the current
      * lifecycle.
+     *
+     * @property operation The lifecycle operation associated with this token.
      */
     inner class Token internal constructor(
-        /**
-         * The lifecycle operation associated with this token.
-         */
         private val operation: Operation,
     ) {
 
@@ -841,26 +825,16 @@ internal class XmaxRealtimeLifecycleManager(
      * A realtime operation and its cancellation and cleanup controls.
      *
      * Validity and termination flags are protected by the lifecycle lock.
+     *
+     * @property kind The operation or media source kind.
+     * @property failureScope The resources to terminate on failure; null requests no additional termination.
+     * @property generation The identifier associating a request or event with its generation task.
+     * @property background Whether this is a background operation; defaults to false.
      */
     internal class Operation(
-        /**
-         * The operation or media source kind.
-         */
         val kind: OperationKind,
-
-        /**
-         * The resources to terminate on failure; null requests no additional termination.
-         */
         var failureScope: TerminationScope?,
-
-        /**
-         * The identifier associating a request or event with its generation task.
-         */
         val generation: GenerationRequest? = null,
-
-        /**
-         * Whether this is a background operation; defaults to false.
-         */
         val background: Boolean = false,
     ) {
 
@@ -905,26 +879,16 @@ internal class XmaxRealtimeLifecycleManager(
      *
      * Pending requests retain conditions until completion; the generation manager retains
      * successful conditions.
+     *
+     * @property job The coroutine task to await or cancel.
+     * @property context Generation prompts and reference media; null reuses cached conditions after the initial request.
+     * @property faceRestoration Whether face restoration is enabled through `face_replace`.
+     * @property resumeGeneration Whether to resume generation after replacing input.
      */
     internal class GenerationRequest(
-        /**
-         * The coroutine task to await or cancel.
-         */
         val job: Job,
-
-        /**
-         * Generation prompts and reference media; null reuses cached conditions after the initial request.
-         */
         var context: RealtimeContext?,
-
-        /**
-         * Whether face restoration is enabled through `face_replace`.
-         */
         var faceRestoration: Boolean?,
-
-        /**
-         * Whether to resume generation after replacing input.
-         */
         val resumeGeneration: Boolean,
     ) {
 
@@ -944,11 +908,10 @@ internal class XmaxRealtimeLifecycleManager(
      * A termination request shared by concurrent cleanup callers.
      *
      * Cleanup repeats if a broader resource scope is requested.
+     *
+     * @property target The resources to terminate.
      */
     private class Termination(
-        /**
-         * The resources to terminate.
-         */
         var target: TerminationScope,
     ) {
 

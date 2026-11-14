@@ -15,29 +15,17 @@ import java.util.UUID
 /**
  * A video frame with pixel data and timing information.
  *
+ * @property format The video dimensions and pixel arrangement.
+ * @property timestampUs The monotonic frame timestamp, in microseconds.
  * @param planes The pixel planes in the format's required order.
+ * @property rotation The rotation applied to the source image; defaults to `VideoRotation.ROTATION_0`.
+ * @property bufferReuseId The identifier of reusable pixel storage, or null without one.
  */
 internal class VideoFrame(
-    /**
-     * The video dimensions and pixel arrangement.
-     */
     val format: VideoFormat,
-
-    /**
-     * The monotonic frame timestamp, in microseconds.
-     */
     val timestampUs: Long,
-
     planes: List<VideoFramePlane>,
-
-    /**
-     * The rotation applied to the source image; defaults to `VideoRotation.ROTATION_0`.
-     */
     val rotation: VideoRotation = VideoRotation.ROTATION_0,
-
-    /**
-     * The identifier of reusable pixel storage, or null without one.
-     */
     val bufferReuseId: UUID? = null,
 ) {
 

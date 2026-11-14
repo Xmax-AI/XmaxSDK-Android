@@ -12,11 +12,10 @@ package ai.xmax.sdk
 
 /**
  * The camera used for capture.
+ *
+ * @property value The string representation used for configuration or display.
  */
 public enum class CameraPosition(
-    /**
-     * The string representation used for configuration or display.
-     */
     public val value: String,
 ) {
 

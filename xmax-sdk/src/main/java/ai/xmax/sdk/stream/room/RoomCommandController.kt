@@ -28,36 +28,25 @@ import kotlinx.coroutines.launch
 
 /**
  * Sends generation commands and manages redundant delivery independently of generation readiness.
+ *
+ * @property sendMessage Submits one complete, independently cancellable transport attempt.
+ * @property scope The scope scheduling command sends and receipt deadlines.
+ * @property relayMessage Submits the complete command once through a separately cancellable HTTP request.
+ * @property redundantSignalingEnabled Whether to schedule retries and submit an HTTP copy after the initial RTC attempt.
  */
 internal class RoomCommandController(
-    /**
-     * Submits one complete, independently cancellable transport attempt.
-     */
     private val sendMessage: (String) -> Deferred<Unit>,
-
-    /**
-     * The scope scheduling command sends and receipt deadlines.
-     */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-
-    /**
-     * Submits the complete command once through a separately cancellable HTTP request.
-     */
     private val relayMessage: (suspend (String) -> Unit)? = null,
-
-    /**
-     * Whether to schedule retries and submit an HTTP copy after the initial RTC attempt.
-     */
     private val redundantSignalingEnabled: Boolean = true,
 ) {
 
     /**
      * Commands with service receipts and a bounded retry schedule.
+     *
+     * @property value The room event name.
      */
     enum class Kind(
-        /**
-         * The room event name.
-         */
         val value: String,
     ) {
 
@@ -79,31 +68,18 @@ internal class RoomCommandController(
 
     /**
      * One immutable command and its pending transport attempts.
+     *
+     * @property kind The generation operation.
+     * @property taskId The generation task owning this command.
+     * @property xid The identifier shared by the original and every redundant attempt.
+     * @property message The serialized payload retained across attempts.
+     * @property ensureCurrent Rejects obsolete configuration until the first complete send succeeds.
      */
     private class Command(
-        /**
-         * The generation operation.
-         */
         val kind: Kind,
-
-        /**
-         * The generation task owning this command.
-         */
         val taskId: String,
-
-        /**
-         * The identifier shared by the original and every redundant attempt.
-         */
         val xid: String,
-
-        /**
-         * The serialized payload retained across attempts.
-         */
         val message: String,
-
-        /**
-         * Rejects obsolete configuration until the first complete send succeeds.
-         */
         val ensureCurrent: () -> Unit,
     ) {
 

@@ -18,22 +18,15 @@ import java.nio.ByteBuffer
  * Byte ranges and row stride must describe a valid plane; invalid configuration throws [XmaxError].
  *
  * @param data The bytes containing this plane's valid range.
+ * @property stride The byte distance between consecutive row starts.
+ * @property byteOffset The start offset of valid bytes; defaults to 0.
  * @param byteLength The valid byte count, or null to use the remaining bytes after the offset.
  * @param copyData Whether to isolate pixels from later input mutations by copying them; defaults to true.
  */
 internal class VideoFramePlane(
     data: ByteArray,
-
-    /**
-     * The byte distance between consecutive row starts.
-     */
     val stride: Int,
-
-    /**
-     * The start offset of valid bytes; defaults to 0.
-     */
     val byteOffset: Int = 0,
-
     byteLength: Int? = null,
     copyData: Boolean = true,
 ) {
@@ -44,7 +37,7 @@ internal class VideoFramePlane(
     private val bytes: ByteArray = if (copyData) data.copyOf() else data
 
     /**
-     * A copy of the plane's pixels.
+     * A copy of the full backing array.
      */
     val data: ByteArray
         get() = bytes.copyOf()
@@ -96,6 +89,13 @@ internal class VideoFramePlane(
         position(0)
         limit(byteLength)
     }
+
+    /**
+     * Returns the shared backing array for read-only access.
+     *
+     * The plane occupies [byteLength] bytes starting at [byteOffset].
+     */
+    internal fun backingBytes(): ByteArray = bytes
 
     /**
      * Copies the buffer's current valid byte range.

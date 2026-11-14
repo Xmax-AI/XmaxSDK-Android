@@ -98,27 +98,17 @@ public enum class XmaxErrorCode {
  *
  * The active operation determines cleanup scope independently of the error.
  *
+ * @property code The SDK error category.
  * @param message The message to send or log.
+ * @property apiCode The server business error code, or null if absent.
+ * @property httpStatus The HTTP status code, or null without a valid response.
  * @param cause The underlying exception that caused this error.
  */
 public class XmaxError(
-    /**
-     * The SDK error category.
-     */
     public val code: XmaxErrorCode,
-
     message: String,
-
-    /**
-     * The server business error code, or null if absent.
-     */
     public val apiCode: Int? = null,
-
-    /**
-     * The HTTP status code, or null without a valid response.
-     */
     public val httpStatus: Int? = null,
-
     cause: Throwable? = null,
 ) : Exception(
     message,

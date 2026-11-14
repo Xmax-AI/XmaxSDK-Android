@@ -15,14 +15,11 @@ package ai.xmax.sdk
  *
  * @param prompt The prompt describing the desired generation.
  * @param referencePath An accessible reference image URL, or null without a reference.
+ * @property referenceVideo The server-read reference video and sampling configuration, or null without video input.
  */
 public class RealtimeContext(
     prompt: String,
     referencePath: String? = null,
-
-    /**
-     * The server-read reference video and sampling configuration, or null without video input.
-     */
     public val referenceVideo: RealtimeReferenceVideo? = null,
 ) {
 

@@ -25,26 +25,16 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  *
  * Generation becomes ready after result-stream confirmation, a renderable remote frame, and audio
  * activation.
+ *
+ * @property interactionController The controller submitting interaction trajectories.
+ * @property streamController The component managing RTC publication, subscriptions, and generation signaling.
+ * @property renderController The remote presentation gate confirming that the first generated frame is ready.
+ * @property taskIdGenerator The function allocating a generation task identifier.
  */
 internal class XmaxRealtimeGenerationManager(
-    /**
-     * The controller submitting interaction trajectories.
-     */
     private val interactionController: InteractionControlling,
-
-    /**
-     * The component managing RTC publication, subscriptions, and generation signaling.
-     */
     private val streamController: StreamControlling,
-
-    /**
-     * The remote presentation gate confirming that the first generated frame is ready.
-     */
     private val renderController: RenderControlling,
-
-    /**
-     * The function allocating a generation task identifier.
-     */
     private val taskIdGenerator: () -> String = ::createTaskId,
 ) {
 

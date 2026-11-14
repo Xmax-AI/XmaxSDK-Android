@@ -14,31 +14,24 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * A realtime stream containing local input or remote generation.
+ *
+ * @property id The media stream identifier.
+ * @property videoTrack The stream's video track.
  */
 public class RealtimeMediaStream internal constructor(
-    /**
-     * The media stream identifier.
-     */
     public val id: String,
-
-    /**
-     * The stream's video track.
-     */
     public val videoTrack: RealtimeVideoTrack?,
 )
 
 /**
  * A realtime video track with dynamic metadata.
  *
+ * @property id The identifier used for rendering and trajectory bindings.
  * @param videoFormat The initial format, omitted when unknown.
  * @param position The initial lens position of a camera track.
  */
 public class RealtimeVideoTrack internal constructor(
-    /**
-     * The identifier used for rendering and trajectory bindings.
-     */
     public val id: String,
-
     videoFormat: RealtimeVideoFormat? = null,
     position: CameraPosition? = null,
 ) {
@@ -101,16 +94,12 @@ public class RealtimeVideoTrack internal constructor(
 
     /**
      * An immutable snapshot of current video format and camera position.
+     *
+     * @property videoFormat The track's current video format.
+     * @property position The local camera track's current camera position, or null for a noncamera track.
      */
     private data class Metadata(
-        /**
-         * The track's current video format.
-         */
         val videoFormat: RealtimeVideoFormat?,
-
-        /**
-         * The local camera track's current camera position, or null for a noncamera track.
-         */
         val position: CameraPosition?,
     )
 }

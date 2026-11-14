@@ -17,36 +17,20 @@ import java.util.UUID
  * Owned, interleaved signed PCM16 little-endian audio from the remote publisher before user mixing.
  *
  * The data remains valid after the callback returns and is independent of playback volume.
+ *
+ * @property pcm The owned PCM bytes.
+ * @property sampleRate The number of samples per second per channel.
+ * @property channels The number of interleaved audio channels.
+ * @property samplesPerChannel The number of samples in each channel.
+ * @property presentationTimeUs The presentation timestamp on the shared remote audio/video timeline, in microseconds.
+ * @property durationUs The sample-derived duration, in microseconds.
  */
 public class RealtimeAudioFrame internal constructor(
-    /**
-     * The owned PCM bytes.
-     */
     private val pcm: ByteArray,
-
-    /**
-     * The number of samples per second per channel.
-     */
     public val sampleRate: Int,
-
-    /**
-     * The number of interleaved audio channels.
-     */
     public val channels: Int,
-
-    /**
-     * The number of samples in each channel.
-     */
     public val samplesPerChannel: Int,
-
-    /**
-     * The presentation timestamp on the shared remote audio/video timeline, in microseconds.
-     */
     public val presentationTimeUs: Long,
-
-    /**
-     * The sample-derived duration, in microseconds.
-     */
     public val durationUs: Long,
 ) {
 
@@ -62,21 +46,14 @@ public class RealtimeAudioFrame internal constructor(
  * Events arrive serially in delivery order, not sorted by presentation time across tracks. Recording
  * should use one origin for both tracks. A new stream identifier starts a new timeline; discontinuity
  * marks the first packet of each track, format/clock changes, or output discarded under backpressure.
+ *
+ * @property streamID The identity shared by audio and video for the current remote stream binding.
+ * @property isDiscontinuous Whether this track starts or resumes after an interruption.
+ * @property content The audio or video packet carried by this event.
  */
 public class RealtimeMediaFrame internal constructor(
-    /**
-     * The identity shared by audio and video for the current remote stream binding.
-     */
     public val streamID: UUID,
-
-    /**
-     * Whether this track starts or resumes after an interruption.
-     */
     public val isDiscontinuous: Boolean,
-
-    /**
-     * The audio or video packet carried by this event.
-     */
     public val content: Content,
 ) {
 
@@ -87,21 +64,19 @@ public class RealtimeMediaFrame internal constructor(
 
         /**
          * Remote audio before user mixing.
+         *
+         * @property frame The owned PCM frame.
          */
         public data class Audio(
-            /**
-             * The owned PCM frame.
-             */
             public val frame: RealtimeAudioFrame,
         ) : Content
 
         /**
          * Remote video ready for application processing.
+         *
+         * @property frame The owned I420 frame.
          */
         public data class Video(
-            /**
-             * The owned I420 frame.
-             */
             public val frame: RealtimeVideoFrame,
         ) : Content
     }

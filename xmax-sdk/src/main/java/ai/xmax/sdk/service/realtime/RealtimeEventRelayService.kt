@@ -20,11 +20,10 @@ import org.json.JSONObject
 
 /**
  * Submits generation controls through HTTP independently of RTC delivery and model acknowledgments.
+ *
+ * @property apiService The authenticated realtime API service for the selected environment.
  */
 internal class RealtimeEventRelayService(
-    /**
-     * The authenticated realtime API service for the selected environment.
-     */
     private val apiService: ApiServicing,
 ) {
 

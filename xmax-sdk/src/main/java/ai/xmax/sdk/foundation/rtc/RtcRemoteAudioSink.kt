@@ -16,11 +16,10 @@ import java.nio.ByteBuffer
 
 /**
  * Copies unmixed PCM only for the selected remote publisher, preserving native playback buffers.
+ *
+ * @property listenerProvider The active PCM receiver resolver for a channel and publisher.
  */
 internal class RtcRemoteAudioSink(
-    /**
-     * The active PCM receiver resolver for a channel and publisher.
-     */
     private val listenerProvider: (String, Int) -> RtcRemoteAudioFrameListener?,
 ) : IAudioFrameObserver {
 

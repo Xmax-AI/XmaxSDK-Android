@@ -17,6 +17,9 @@ import ai.xmax.sdk.media.external.ExternalVideoController
 import ai.xmax.sdk.media.MediaController
 import ai.xmax.sdk.media.MediaControlling
 import ai.xmax.sdk.media.MediaSourceController
+import ai.xmax.sdk.foundation.permissions.PermissionManager
+import ai.xmax.sdk.media.audio.AudioRecordCapture
+import ai.xmax.sdk.media.camera.Camera2Capture
 import ai.xmax.sdk.media.camera.CameraController
 import ai.xmax.sdk.media.interaction.InteractionController
 import ai.xmax.sdk.media.image.ImageController
@@ -146,8 +149,8 @@ internal object XmaxRealtimeFactory {
 
         cleanupResources(
             { if (connection) generationManager.reset(taskId) else generationManager.stop(taskId) },
-            { if (connection) mediaController.stopMicrophoneCapture() },
             { if (connection) connectionManager.disconnect() },
+            { if (connection) mediaController.stopMicrophoneCapture() },
             { mediaController.setLocalAudioPreviewMuted(false) },
             { if (all) mediaController.stopLocalStream() },
         )
@@ -231,10 +234,14 @@ internal object XmaxRealtimeFactory {
         val mediaController: MediaControlling = MediaController(
             rtcManager = rtcManager,
             cameraController = CameraController(
-                context = context,
-                rtcManager = rtcManager,
+                camera = Camera2Capture(context.applicationContext),
+                microphone = AudioRecordCapture(),
+                permissionManager = PermissionManager(context),
                 mediaService = mediaService,
-                errorListener = onMediaError,
+                videoListener = streamController::pushCameraVideoFrame,
+                audioListener = streamController::pushLocalAudioFrame,
+                videoErrorListener = onMediaError,
+                audioErrorListener = onError,
             ),
             imageController = ImageController(
                 rtcManager = rtcManager,
@@ -308,50 +315,25 @@ internal object XmaxRealtimeFactory {
 
 /**
  * The shared components used by the public facade and its lifecycle manager.
+ *
+ * @property lifecycleManager The lifecycle owner that admits operations and merges termination requests.
+ * @property connectionManager The manager that owns the server session and RTC connection.
+ * @property generationManager The manager that sends generation requests and confirms result streams.
+ * @property errorManager The manager that logs and forwards media and connection failures.
+ * @property mediaController The controller that manages local media, preview, and interactions.
+ * @property renderController The controller that manages remote tracks, first-frame readiness, and rendering.
+ * @property streamController The controller that manages RTC connections, signaling, and transport quality.
+ * @property mediaService The service that resolves media dimensions and model input constraints.
+ * @property timing The recorder for generation startup stage durations.
  */
 internal data class XmaxRealtimeComponents(
-    /**
-     * The lifecycle owner that admits operations and merges termination requests.
-     */
     val lifecycleManager: XmaxRealtimeLifecycleManager,
-
-    /**
-     * The manager that owns the server session and RTC connection.
-     */
     val connectionManager: XmaxRealtimeConnectionManager,
-
-    /**
-     * The manager that sends generation requests and confirms result streams.
-     */
     val generationManager: XmaxRealtimeGenerationManager,
-
-    /**
-     * The manager that logs and forwards media and connection failures.
-     */
     val errorManager: XmaxRealtimeErrorManager,
-
-    /**
-     * The controller that manages local media, preview, and interactions.
-     */
     val mediaController: MediaControlling,
-
-    /**
-     * The controller that manages remote tracks, first-frame readiness, and rendering.
-     */
     val renderController: RenderControlling,
-
-    /**
-     * The controller that manages RTC connections, signaling, and transport quality.
-     */
     val streamController: StreamControlling,
-
-    /**
-     * The service that resolves media dimensions and model input constraints.
-     */
     val mediaService: MediaServicing,
-
-    /**
-     * The recorder for generation startup stage durations.
-     */
     val timing: RealtimeTiming,
 )
