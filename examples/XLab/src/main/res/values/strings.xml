@@ -10,6 +10,9 @@
     <string name="realtime_devices_no_cameras">No cameras found</string>
     <string name="realtime_devices_no_microphones">No microphones found</string>
     <string name="realtime_devices_close">Close</string>
+    <string name="realtime_devices_system_default">System default</string>
+    <string name="realtime_devices_stop_generation">Stop generation to switch devices.</string>
+    <string name="realtime_microphone_switch_error">Could not switch microphones</string>
     <string name="realtime_device_camera_front">Front camera</string>
     <string name="realtime_device_camera_rear">Rear camera</string>
     <string name="realtime_device_camera_external">External camera</string>

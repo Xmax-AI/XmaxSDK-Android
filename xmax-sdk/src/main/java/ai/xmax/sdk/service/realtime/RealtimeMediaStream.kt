@@ -37,12 +37,13 @@ public class RealtimeVideoTrack internal constructor(
 ) {
 
     /**
-     * The current format and camera position snapshot.
+     * The current format and camera metadata snapshot.
      */
     private val metadata = AtomicReference(
         Metadata(
             videoFormat,
             position,
+            null,
         ),
     )
 
@@ -53,10 +54,16 @@ public class RealtimeVideoTrack internal constructor(
         get() = metadata.get().videoFormat
 
     /**
-     * The local camera track's current camera position, or null for a noncamera track.
+     * The local camera track's front or rear position, when available.
      */
     public val position: CameraPosition?
         get() = metadata.get().position
+
+    /**
+     * The active camera device for a local camera track, if available.
+     */
+    public val cameraDevice: CameraDevice?
+        get() = metadata.get().cameraDevice
 
     /**
      * Updates the track's exposed format snapshot.
@@ -70,14 +77,14 @@ public class RealtimeVideoTrack internal constructor(
     }
 
     /**
-     * Updates the track's camera position.
+     * Updates the device and lens position together after capture starts.
      *
-     * @param position The front or rear camera to use.
+     * @param device The device capturing video for this track.
      */
-    internal fun updatePosition(
-        position: CameraPosition,
+    internal fun updateCameraDevice(
+        device: CameraDevice,
     ) {
-        updateMetadata { it.copy(position = position) }
+        updateMetadata { it.copy(position = device.position, cameraDevice = device) }
     }
 
     /**
@@ -96,11 +103,13 @@ public class RealtimeVideoTrack internal constructor(
      * An immutable snapshot of current video format and camera position.
      *
      * @property videoFormat The track's current video format.
-     * @property position The local camera track's current camera position, or null for a noncamera track.
+     * @property position The local camera track's front or rear position, when available.
+     * @property cameraDevice The active camera device, when available.
      */
     private data class Metadata(
         val videoFormat: RealtimeVideoFormat?,
         val position: CameraPosition?,
+        val cameraDevice: CameraDevice?,
     )
 }
 

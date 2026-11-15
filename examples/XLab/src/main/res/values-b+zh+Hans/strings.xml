@@ -10,6 +10,9 @@
     <string name="realtime_devices_no_cameras">未发现摄像头</string>
     <string name="realtime_devices_no_microphones">未发现麦克风</string>
     <string name="realtime_devices_close">关闭</string>
+    <string name="realtime_devices_system_default">系统默认</string>
+    <string name="realtime_devices_stop_generation">停止生成后可切换设备</string>
+    <string name="realtime_microphone_switch_error">麦克风切换失败</string>
     <string name="realtime_device_camera_front">前置摄像头</string>
     <string name="realtime_device_camera_rear">后置摄像头</string>
     <string name="realtime_device_camera_external">外接摄像头</string>

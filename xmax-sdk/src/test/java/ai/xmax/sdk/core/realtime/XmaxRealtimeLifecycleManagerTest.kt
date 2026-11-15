@@ -271,9 +271,9 @@ class XmaxRealtimeLifecycleManagerTest {
         assertFalse(restarted)
     }
 
-    @Test fun `generation cannot replace media or switch operations or enter during close`() = runTest {
+    @Test fun `generation cannot interrupt media configuration or connection operations or enter during close`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
-        for (kind in listOf(OperationKind.MEDIA, OperationKind.SWITCH, OperationKind.CONNECTION)) {
+        for (kind in listOf(OperationKind.MEDIA, OperationKind.CONFIGURATION, OperationKind.CONNECTION)) {
             val coordinator = XmaxRealtimeLifecycleManager(RealtimeCallbacks(dispatcher), dispatcher) {}
             val running = async { coordinator.run(kind) { awaitCancellation() } }
             runCurrent()

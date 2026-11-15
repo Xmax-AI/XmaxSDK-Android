@@ -12,8 +12,11 @@
 package ai.xmax.sdk.media.camera
 
 import ai.xmax.sdk.AudioFrame
+import ai.xmax.sdk.CameraDevice
 import ai.xmax.sdk.CameraPosition
+import ai.xmax.sdk.RealtimeCamera
 import ai.xmax.sdk.RealtimeCameraRotation
+import ai.xmax.sdk.RealtimeMicrophone
 import ai.xmax.sdk.RealtimeModel
 import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.VideoFormat
@@ -50,7 +53,12 @@ class CameraControllerTest {
         val controller = cameraController(microphone = microphone, audioListener = submittedAudio::add)
         val media = MediaController(rtc, controller)
 
-        media.createLocalCameraStream(RealtimeModel.X2_1.defaultCameraVideoFormat, CameraPosition.FRONT, true)
+        media.createLocalCameraStream(
+            RealtimeModel.X2_1.defaultCameraVideoFormat,
+            RealtimeCamera.Position(CameraPosition.FRONT),
+            RealtimeMicrophone.SystemDefault,
+            RealtimeCameraRotation.ROTATION_0,
+        )
 
         assertTrue(rtc.calls.isEmpty())
         assertEquals(0, microphone.starts)
@@ -79,7 +87,7 @@ class CameraControllerTest {
         val submittedFrames = mutableListOf<VideoFrame>()
         val controller = cameraController(camera = camera, videoListener = submittedFrames::add)
         val initial = RealtimeModel.X2_1.defaultCameraVideoFormat
-        val stream = controller.createLocalCameraStream(initial, CameraPosition.FRONT)
+        val stream = controller.createLocalCameraStream(initial, RealtimeCamera.Position(CameraPosition.FRONT))
         val track = requireNotNull(stream.videoTrack)
         val binding = VideoRenderRegistry.binding(track)
         val oldReceiver = checkNotNull(camera.receiver)
@@ -87,7 +95,7 @@ class CameraControllerTest {
 
         controller.updateVideoFormat(updated)
         controller.updateVideoFormat(updated)
-        val switched = controller.switchCamera()
+        val switched = controller.switchCamera(RealtimeCamera.Device("back"))
         oldReceiver(frame)
         camera.receiver?.invoke(frame)
 
@@ -109,7 +117,7 @@ class CameraControllerTest {
         val format = RealtimeModel.X2_1.defaultCameraVideoFormat
         val stream = controller.createLocalCameraStream(
             format,
-            CameraPosition.FRONT,
+            RealtimeCamera.Position(CameraPosition.FRONT),
             rotation = RealtimeCameraRotation.ROTATION_90,
         )
         val track = requireNotNull(stream.videoTrack)
@@ -124,13 +132,13 @@ class CameraControllerTest {
         assertSame(binding, VideoRenderRegistry.binding(track))
 
         controller.updateVideoFormat(format.copy(fps = 24))
-        controller.switchCamera()
+        controller.switchCamera(RealtimeCamera.Device("back"))
         assertEquals(
             listOf(RealtimeCameraRotation.ROTATION_90, RealtimeCameraRotation.ROTATION_270, RealtimeCameraRotation.ROTATION_270),
             camera.rotationAtStart,
         )
         controller.stopLocalCameraStream()
-        controller.createLocalCameraStream(format, CameraPosition.FRONT)
+        controller.createLocalCameraStream(format, RealtimeCamera.Position(CameraPosition.FRONT))
         assertEquals(RealtimeCameraRotation.ROTATION_0, camera.rotationAtStart.last())
         controller.stopLocalCameraStream()
     }
@@ -149,7 +157,7 @@ class CameraControllerTest {
         val camera = FakeCameraCapture()
         val controller = cameraController(camera = camera)
         val initial = RealtimeModel.X2_1.defaultCameraVideoFormat
-        val track = requireNotNull(controller.createLocalCameraStream(initial, CameraPosition.FRONT).videoTrack)
+        val track = requireNotNull(controller.createLocalCameraStream(initial, RealtimeCamera.Position(CameraPosition.FRONT)).videoTrack)
         val updated = initial.copy(width = 1920, height = 1080)
         val failure = XmaxError(XmaxErrorCode.MEDIA_ERROR, "Camera format failed")
 
@@ -162,6 +170,61 @@ class CameraControllerTest {
     }
 
     @Test
+    fun `explicit camera retains its track output and rotation across failed and successful switches`() = runTest {
+        val camera = FakeCameraCapture()
+        val controller = cameraController(camera = camera)
+        val format = RealtimeModel.X2_1.defaultCameraVideoFormat
+        val track = requireNotNull(controller.createLocalCameraStream(
+            videoFormat = format,
+            selection = RealtimeCamera.Device("usb"),
+            microphone = RealtimeMicrophone.Disabled,
+            rotation = RealtimeCameraRotation.ROTATION_90,
+        ).videoTrack)
+        assertEquals("usb", track.cameraDevice?.id)
+        assertNull(track.position)
+
+        val updated = format.copy(fps = 24)
+        controller.updateVideoFormat(updated)
+        val failure = XmaxError(XmaxErrorCode.MEDIA_ERROR, "Replacement could not start")
+        camera.startFailure = failure
+        assertSame(failure, runCatching { controller.switchCamera(RealtimeCamera.Device("back")) }.exceptionOrNull())
+        assertEquals("usb", track.cameraDevice?.id)
+        assertSame(track, controller.switchCamera(RealtimeCamera.Device("back")).videoTrack)
+        assertEquals("back", track.cameraDevice?.id)
+        assertEquals(updated, track.videoFormat)
+        assertEquals(listOf("usb", "usb", "back", "usb", "back"), camera.deviceIds)
+        assertTrue(camera.rotationAtStart.all { it == RealtimeCameraRotation.ROTATION_90 })
+        controller.stopLocalCameraStream()
+    }
+
+    @Test
+    fun `microphone selection starts on connect and restores the prior input after a failed switch`() = runTest {
+        val microphone = FakeMicrophoneCapture()
+        val controller = cameraController(microphone = microphone)
+        controller.createLocalCameraStream(
+            videoFormat = RealtimeModel.X2_1.defaultCameraVideoFormat,
+            selection = RealtimeCamera.Position(CameraPosition.FRONT),
+            microphone = RealtimeMicrophone.Device("headset"),
+            rotation = RealtimeCameraRotation.ROTATION_0,
+        )
+        controller.switchMicrophone("usb")
+        assertFalse(microphone.isCapturing)
+        controller.startMicrophoneCapture()
+        assertEquals(listOf("usb"), microphone.deviceIds)
+
+        val failure = XmaxError(XmaxErrorCode.MEDIA_ERROR, "Routing failed")
+        microphone.startFailure = failure
+        assertSame(failure, runCatching { controller.switchMicrophone("headset") }.exceptionOrNull())
+        assertEquals(listOf("usb", "headset", "usb"), microphone.deviceIds)
+        assertTrue(microphone.isCapturing)
+
+        controller.switchMicrophone(null)
+        controller.switchMicrophone(null)
+        assertEquals(listOf("usb", "headset", "usb", null), microphone.deviceIds)
+        controller.stopLocalCameraStream()
+    }
+
+    @Test
     fun `unsupported preset is rejected before requesting camera access`() = runTest {
         val camera = FakeCameraCapture()
         val permissions = object : PermissionManaging by GrantedPermissions {
@@ -170,7 +233,7 @@ class CameraControllerTest {
         val controller = cameraController(camera = camera, permissions = permissions)
 
         val error = runCatching {
-            controller.createLocalCameraStream(RealtimeVideoFormat(832, 1472, 24), CameraPosition.FRONT)
+            controller.createLocalCameraStream(RealtimeVideoFormat(832, 1472, 24), RealtimeCamera.Position(CameraPosition.FRONT))
         }.exceptionOrNull()
 
         assertEquals(XmaxErrorCode.INVALID_CONFIGURATION, (error as? XmaxError)?.code)
@@ -184,7 +247,10 @@ class CameraControllerTest {
         val delivered = mutableListOf<VideoFrame>()
         val controller = cameraController(camera = camera, videoListener = delivered::add)
         val operation = launch {
-            controller.createLocalCameraStream(RealtimeModel.X2_1.defaultCameraVideoFormat, CameraPosition.FRONT)
+            controller.createLocalCameraStream(
+                RealtimeModel.X2_1.defaultCameraVideoFormat,
+                RealtimeCamera.Position(CameraPosition.FRONT),
+            )
         }
         runCurrent()
         val receiver = checkNotNull(camera.receiver)
@@ -205,8 +271,8 @@ class CameraControllerTest {
         val controller = cameraController(camera = camera, microphone = microphone)
         val track = requireNotNull(controller.createLocalCameraStream(
             RealtimeModel.X2_1.defaultCameraVideoFormat,
-            CameraPosition.FRONT,
-            useMicrophone = true,
+            RealtimeCamera.Position(CameraPosition.FRONT),
+            microphone = RealtimeMicrophone.SystemDefault,
         ).videoTrack)
         controller.startMicrophoneCapture()
         val failure = IllegalStateException("Microphone cleanup failed")
@@ -246,7 +312,8 @@ class CameraControllerTest {
 }
 
 internal class FakeCameraCapture : CameraCapture {
-    val starts = mutableListOf<Pair<RealtimeVideoFormat, CameraPosition>>()
+    val starts = mutableListOf<Pair<RealtimeVideoFormat, CameraPosition?>>()
+    val deviceIds = mutableListOf<String>()
     val rotationAtStart = mutableListOf<RealtimeCameraRotation>()
     val rotationUpdates = mutableListOf<RealtimeCameraRotation>()
     var receiver: ((VideoFrame) -> Unit)? = null
@@ -255,12 +322,18 @@ internal class FakeCameraCapture : CameraCapture {
 
     override suspend fun start(
         format: RealtimeVideoFormat,
-        position: CameraPosition,
+        selection: RealtimeCamera,
         rotation: RealtimeCameraRotation,
         onFrame: (VideoFrame) -> Unit,
         onError: (XmaxError) -> Unit,
-    ) {
+    ): CameraDevice {
+        val id = when (selection) {
+            is RealtimeCamera.Position -> selection.position.name.lowercase()
+            is RealtimeCamera.Device -> selection.id
+        }
+        val position = CameraPosition.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }
         starts += format to position
+        deviceIds += id
         rotationAtStart += rotation
         startFailure?.let {
             startFailure = null
@@ -268,6 +341,7 @@ internal class FakeCameraCapture : CameraCapture {
         }
         receiver = onFrame
         if (awaitStartup) awaitCancellation()
+        return CameraDevice(id, id, position, isExternal = position == null)
     }
 
     override suspend fun setRotation(
@@ -288,12 +362,25 @@ internal class FakeMicrophoneCapture : MicrophoneCapture {
     var starts = 0
     var stops = 0
     var stopFailure: Throwable? = null
+    var startFailure: XmaxError? = null
+    val deviceIds = mutableListOf<String?>()
+
+    override val isCapturing: Boolean
+        get() = receiver != null
+
+    override suspend fun validateDevice(deviceId: String) = Unit
 
     override suspend fun start(
+        deviceId: String?,
         onFrame: (AudioFrame) -> Unit,
         onError: (XmaxError) -> Unit,
     ) {
         if (receiver != null) return
+        deviceIds += deviceId
+        startFailure?.let {
+            startFailure = null
+            throw it
+        }
         receiver = onFrame
         starts++
     }

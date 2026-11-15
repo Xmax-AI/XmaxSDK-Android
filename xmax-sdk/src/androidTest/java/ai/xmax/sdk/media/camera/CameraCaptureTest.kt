@@ -12,10 +12,13 @@ package ai.xmax.sdk.media.camera
 
 import ai.xmax.sdk.AudioFrame
 import ai.xmax.sdk.CameraPosition
+import ai.xmax.sdk.MediaDevices
+import ai.xmax.sdk.RealtimeCamera
 import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeConfiguration
 import ai.xmax.sdk.RealtimeConnectionState
 import ai.xmax.sdk.RealtimeModel
+import ai.xmax.sdk.RealtimeMicrophone
 import ai.xmax.sdk.VideoFrame
 import ai.xmax.sdk.VideoPixelFormat
 import ai.xmax.sdk.XmaxClient
@@ -28,6 +31,7 @@ import ai.xmax.sdk.service.media.MediaService
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -103,7 +107,7 @@ class CameraCaptureTest {
         val audio = Channel<AudioFrame>(Channel.CONFLATED)
         val controller = CameraController(
             camera = Camera2Capture(context),
-            microphone = AudioRecordCapture(),
+            microphone = AudioRecordCapture(context),
             permissionManager = PermissionManager(context),
             mediaService = MediaService(RealtimeModel.X2_1_FLASH),
             videoListener = { video.trySend(it) },
@@ -114,7 +118,15 @@ class CameraCaptureTest {
         try {
             controller.setPreviewReadyListener { previewReady.complete(Unit) }
             val format = RealtimeModel.X2_1_FLASH.defaultCameraVideoFormat
-            val stream = controller.createLocalCameraStream(format, CameraPosition.FRONT, useMicrophone = true)
+            val cameras = MediaDevices.listCameraDevices(context)
+            val front = cameras.first { it.position == CameraPosition.FRONT }
+            val stream = controller.createLocalCameraStream(
+                videoFormat = format,
+                selection = RealtimeCamera.Device(front.id),
+                microphone = RealtimeMicrophone.SystemDefault,
+                rotation = RealtimeCameraRotation.ROTATION_0,
+            )
+            assertEquals(front.id, stream.videoTrack?.cameraDevice?.id)
             val firstFrame = withTimeout(5_000L) { video.receive() }
             assertEquals(VideoPixelFormat.I420, firstFrame.format.pixelFormat)
             assertEquals(format.width, firstFrame.format.width)
@@ -132,9 +144,12 @@ class CameraCaptureTest {
             assertEquals(format, stream.videoTrack?.videoFormat)
 
             if (context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA)) {
-                val switched = controller.switchCamera()
+                val rear = cameras.first { it.position == CameraPosition.BACK }
+                val switched = controller.switchCamera(RealtimeCamera.Device(rear.id))
                 assertSame(stream.videoTrack, switched.videoTrack)
                 assertEquals(CameraPosition.BACK, switched.videoTrack?.position)
+                assertEquals(rear.id, switched.videoTrack?.cameraDevice?.id)
+                assertEquals(format, switched.videoTrack?.videoFormat)
             }
 
             repeat(2) {
@@ -145,6 +160,14 @@ class CameraCaptureTest {
                 assertEquals(AudioFrame.samplesPerFrame * 2, first.data.size)
                 assertTrue(next.timestampUs > first.timestampUs)
                 assertEquals(0L, (next.timestampUs - first.timestampUs) % 10_000L)
+                val input = MediaDevices.listMicrophoneDevices(context)
+                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+                if (input != null) {
+                    controller.switchMicrophone(input.id)
+                    audio.tryReceive()
+                    assertEquals(AudioFrame.samplesPerFrame * 2, withTimeout(5_000L) { audio.receive() }.data.size)
+                    controller.switchMicrophone(null)
+                }
                 controller.stopMicrophoneCapture()
             }
         } finally {

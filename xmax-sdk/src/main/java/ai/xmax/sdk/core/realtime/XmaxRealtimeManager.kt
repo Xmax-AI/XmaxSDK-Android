@@ -407,14 +407,34 @@ internal class XmaxRealtimeManager(
         position: CameraPosition,
         useMicrophone: Boolean,
         rotation: RealtimeCameraRotation,
+    ): RealtimeMediaStream = createLocalCameraStream(
+        videoFormat = videoFormat,
+        camera = RealtimeCamera.Position(position),
+        microphone = if (useMicrophone) RealtimeMicrophone.SystemDefault else RealtimeMicrophone.Disabled,
+        rotation = rotation,
+    )
+
+    /**
+     * Starts a local stream with the selected camera and microphone.
+     *
+     * @param videoFormat The model-supported output format.
+     * @param camera The initial camera selection.
+     * @param microphone The microphone selection for connection.
+     * @param rotation The clockwise correction relative to automatic orientation.
+     */
+    override suspend fun createLocalCameraStream(
+        videoFormat: RealtimeVideoFormat,
+        camera: RealtimeCamera,
+        microphone: RealtimeMicrophone,
+        rotation: RealtimeCameraRotation,
     ): RealtimeMediaStream = mediaOperation(
         sourceRemoteAudioVolume = 0f,
         waitForCameraPreview = true,
     ) {
         it.createLocalCameraStream(
             videoFormat,
-            position,
-            useMicrophone,
+            camera,
+            microphone,
             rotation,
         )
     }
@@ -760,16 +780,15 @@ internal class XmaxRealtimeManager(
         }
 
     /**
-     * Switches between the front and rear cameras.
+     * Toggles between built-in front and rear cameras and resumes any active generation.
      *
-     * During generation, XmaxSDK stops the current task, switches cameras, and resumes with cached
-     * conditions. The RTC connection remains open. Switching is unavailable while connection or generation
-     * startup is in progress.
-     *
-     * @return The local stream with its existing video track and updated camera position.
+     * @return The local stream with its existing video track and updated camera device.
      */
-    override suspend fun switchCamera(): RealtimeMediaStream =
-        execute(OperationKind.SWITCH) { token ->
+    override suspend fun toggleCamera(): RealtimeMediaStream {
+        // Reject external input before admitting an operation and validate again under lifecycle ownership.
+        requireCameraFlipTarget()
+        return execute(OperationKind.TOGGLE_CAMERA) { token ->
+            val target = requireCameraFlipTarget()
             val wasGenerating = currentState.connectionState == RealtimeConnectionState.GENERATING
             if (wasGenerating) {
                 token.setFailureScope(TerminationScope.CONNECTION)
@@ -782,19 +801,79 @@ internal class XmaxRealtimeManager(
                 )
             }
 
-            val stream = mediaController.switchCamera()
+            val stream = mediaController.switchCamera(RealtimeCamera.Position(target))
             token.ensureCurrent()
             if (wasGenerating) {
                 delay(500L)
-                timing.measure { performStartGeneration(
-                    token,
-                    null,
-                    generationManager.cachedFaceRestoration,
-                ) }
+                timing.measure {
+                    performStartGeneration(
+                        token,
+                        null,
+                        generationManager.cachedFaceRestoration,
+                    )
+                }
             }
-
             stream
         }
+    }
+
+    /**
+     * Returns the opposite lens position when the active camera supports front and rear switching.
+     *
+     * @throws XmaxError With [XmaxErrorCode.OPERATION_NOT_ALLOWED] when there is no eligible active camera.
+     */
+    private fun requireCameraFlipTarget(): CameraPosition {
+        val camera = mediaController.currentTrack?.cameraDevice
+        val position = camera?.position
+        if (camera == null || camera.isExternal || position == null) {
+            throw XmaxError(
+                XmaxErrorCode.OPERATION_NOT_ALLOWED,
+                "Toggling cameras requires a built-in front or rear camera",
+            )
+        }
+        return if (position == CameraPosition.FRONT) CameraPosition.BACK else CameraPosition.FRONT
+    }
+
+    /**
+     * Switches to a specific camera while previewing or connected without an active generation.
+     *
+     * @param deviceId The camera ID returned by [MediaDevices.listCameraDevices].
+     */
+    override suspend fun switchCamera(
+        deviceId: String,
+    ): RealtimeMediaStream = execute(OperationKind.CONFIGURATION) { token ->
+        ensureDeviceCanSwitch()
+        val stream = mediaController.switchCamera(RealtimeCamera.Device(deviceId))
+        token.ensureCurrent()
+        stream
+    }
+
+    /**
+     * Switches the microphone while previewing or connected without an active generation.
+     *
+     * @param deviceId The audio input ID, or null for the Android default input.
+     */
+    override suspend fun switchMicrophone(
+        deviceId: String?,
+    ): Unit = execute(OperationKind.CONFIGURATION) { token ->
+        ensureDeviceCanSwitch()
+        mediaController.switchMicrophone(deviceId)
+        token.ensureCurrent()
+        Unit
+    }
+
+    /**
+     * Requires a ready preview or an idle connection for device selection.
+     */
+    private fun ensureDeviceCanSwitch() {
+        val state = currentState.connectionState
+        if (state != RealtimeConnectionState.READY && state != RealtimeConnectionState.CONNECTED) {
+            throw XmaxError(
+                XmaxErrorCode.OPERATION_NOT_ALLOWED,
+                "Wait for camera preview or stop generation before switching capture devices",
+            )
+        }
+    }
 
     /**
      * Establishes a realtime connection using a local stream created by this manager.

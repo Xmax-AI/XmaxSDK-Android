@@ -10,7 +10,8 @@
 
 package ai.xmax.sdk.media.camera
 
-import ai.xmax.sdk.CameraPosition
+import ai.xmax.sdk.CameraDevice
+import ai.xmax.sdk.RealtimeCamera
 import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.VideoFrame
@@ -25,18 +26,19 @@ internal interface CameraCapture {
      * Opens the camera and waits for a valid frame. An existing capture is replaced.
      *
      * @param format The desired output dimensions and frame rate.
-     * @param position The front or rear camera.
+     * @param selection The camera position or explicit device identifier.
      * @param rotation The clockwise correction relative to automatic orientation.
      * @param onFrame Receives an independently owned video frame on the capture thread.
      * @param onError Receives a capture failure after startup completes.
+     * @return The camera that produced the first frame.
      */
     suspend fun start(
         format: RealtimeVideoFormat,
-        position: CameraPosition,
+        selection: RealtimeCamera,
         rotation: RealtimeCameraRotation,
         onFrame: (VideoFrame) -> Unit,
         onError: (XmaxError) -> Unit,
-    )
+    ): CameraDevice
 
     /**
      * Applies a correction before converting the next frame.

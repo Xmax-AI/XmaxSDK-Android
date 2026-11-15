@@ -93,8 +93,8 @@ public object MediaDevices {
         manager: CameraManager,
         id: String,
     ): CameraDevice? {
-        val facing = try {
-            manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING)
+        val characteristics = try {
+            manager.getCameraCharacteristics(id)
         } catch (_: CameraAccessException) {
             return null
         } catch (_: IllegalArgumentException) {
@@ -103,12 +103,32 @@ public object MediaDevices {
             return null
         }
 
-        val position = when (facing) {
-            CameraCharacteristics.LENS_FACING_FRONT -> CameraPosition.FRONT
-            CameraCharacteristics.LENS_FACING_BACK -> CameraPosition.BACK
+        return describeCamera(
+            id,
+            characteristics,
+        )
+    }
+
+    /**
+     * Describes a Camera2 device using the same metadata for discovery and capture.
+     *
+     * @param id The Camera2 device identifier.
+     * @param characteristics The metadata reported by the camera service.
+     */
+    internal fun describeCamera(
+        id: String,
+        characteristics: CameraCharacteristics,
+    ): CameraDevice {
+        val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
+        val hardwareLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)
+        val isExternal = facing == CameraCharacteristics.LENS_FACING_EXTERNAL ||
+            hardwareLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_EXTERNAL
+        val position = when {
+            isExternal -> null
+            facing == CameraCharacteristics.LENS_FACING_FRONT -> CameraPosition.FRONT
+            facing == CameraCharacteristics.LENS_FACING_BACK -> CameraPosition.BACK
             else -> null
         }
-        val isExternal = facing == CameraCharacteristics.LENS_FACING_EXTERNAL
         val name = when {
             position == CameraPosition.FRONT -> "Front camera"
             position == CameraPosition.BACK -> "Rear camera"

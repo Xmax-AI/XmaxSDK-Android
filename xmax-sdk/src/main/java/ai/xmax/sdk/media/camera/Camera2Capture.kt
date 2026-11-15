@@ -10,7 +10,10 @@
 
 package ai.xmax.sdk.media.camera
 
+import ai.xmax.sdk.CameraDevice as XmaxCameraDevice
 import ai.xmax.sdk.CameraPosition
+import ai.xmax.sdk.MediaDevices
+import ai.xmax.sdk.RealtimeCamera
 import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.VideoFrame
@@ -77,19 +80,24 @@ internal class Camera2Capture(
      * Opens the selected lens and waits for the first converted frame.
      *
      * @param format The requested output format.
-     * @param position The front or rear camera.
+     * @param selection The camera position or explicit device identifier.
      * @param rotation The clockwise correction relative to automatic orientation.
      * @param onFrame The receiver of converted frames.
      * @param onError The receiver of capture errors after startup.
+     * @return The camera that produced the first frame.
      */
     override suspend fun start(
         format: RealtimeVideoFormat,
-        position: CameraPosition,
+        selection: RealtimeCamera,
         rotation: RealtimeCameraRotation,
         onFrame: (VideoFrame) -> Unit,
         onError: (XmaxError) -> Unit,
-    ) {
-        val configuration = configure(format, position)
+    ): XmaxCameraDevice {
+        val configuration = configure(
+            format,
+            selection,
+            rotation,
+        )
         stop()
 
         val session = Session(configuration, format, rotation, onFrame, onError)
@@ -103,6 +111,7 @@ internal class Camera2Capture(
             cleanupAfterFailure(error, { stop() })
             throw error
         }
+        return configuration.camera
     }
 
     /**
@@ -138,30 +147,15 @@ internal class Camera2Capture(
      * Selects a camera and capture size that can produce the requested oriented output.
      *
      * @param format The target dimensions and frame rate.
-     * @param position The requested camera facing.
+     * @param selection The requested camera position or device identifier.
+     * @param rotation The manual correction used when choosing the input size for an external camera.
      */
     private fun configure(
         format: RealtimeVideoFormat,
-        position: CameraPosition,
+        selection: RealtimeCamera,
+        rotation: RealtimeCameraRotation,
     ): ConfigurationForCamera {
-        val facing = if (position == CameraPosition.FRONT) {
-            CameraCharacteristics.LENS_FACING_FRONT
-        } else {
-            CameraCharacteristics.LENS_FACING_BACK
-        }
-        val camera = manager.cameraIdList.firstNotNullOfOrNull { id ->
-            val properties = manager.getCameraCharacteristics(id)
-            if (properties.get(CameraCharacteristics.LENS_FACING) == facing &&
-                !properties.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-                    ?.getOutputSizes(ImageFormat.YUV_420_888).isNullOrEmpty()
-            ) {
-                id to properties
-            } else {
-                null
-            }
-        } ?: throw cameraError("No ${position.name.lowercase()} camera with YUV output is available")
-
-        val (id, properties) = camera
+        val (camera, properties) = resolveCamera(selection)
         val sensorOrientation = properties.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         val displayRotation = windowManager.defaultDisplay.rotation
         val displayDegrees = when (displayRotation) {
@@ -177,18 +171,23 @@ internal class Camera2Capture(
         } else {
             displayDegrees
         }
-        val relativeRotation = if (position == CameraPosition.FRONT) {
-            (sensorOrientation + targetDegrees) % 360
-        } else {
-            (sensorOrientation - targetDegrees + 360) % 360
+        val relativeRotation = when (camera.position) {
+            CameraPosition.FRONT -> (sensorOrientation + targetDegrees) % 360
+            CameraPosition.BACK -> (sensorOrientation - targetDegrees + 360) % 360
+            null -> sensorOrientation
         }
         val orientation = VideoRotation.entries.first { it.degrees == relativeRotation }
-        val swap = relativeRotation % 180 != 0
+        val sizeRotation = if (camera.position == null) {
+            (relativeRotation + rotation.degrees) % 360
+        } else {
+            relativeRotation
+        }
+        val swap = sizeRotation % 180 != 0
         val targetWidth = if (swap) format.height else format.width
         val targetHeight = if (swap) format.width else format.height
 
         val streams = checkNotNull(properties.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP))
-        val sizes = checkNotNull(streams.getOutputSizes(ImageFormat.YUV_420_888))
+        val sizes = streams.getOutputSizes(ImageFormat.YUV_420_888)
         val targetArea = targetWidth.toLong() * targetHeight
         val targetAspect = targetWidth.toDouble() / targetHeight
         val frameIntervalNs = 1_000_000_000L / format.fps
@@ -205,20 +204,47 @@ internal class Camera2Capture(
             { abs(it.lower - format.fps) },
         ))
         return ConfigurationForCamera(
-            id = id,
+            camera = camera,
             size = size,
             fps = fps,
             orientation = orientation,
-            mirrored = position == CameraPosition.FRONT,
+            mirrored = camera.position == CameraPosition.FRONT,
             usesBoottime = properties.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) ==
                 CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME,
         )
     }
 
     /**
+     * Resolves a connected camera that can produce YUV frames.
+     *
+     * @param selection The position or Camera2 identifier used to find the device.
+     */
+    private fun resolveCamera(
+        selection: RealtimeCamera,
+    ): Pair<XmaxCameraDevice, CameraCharacteristics> {
+        val candidates = when (selection) {
+            is RealtimeCamera.Device -> manager.cameraIdList.filter { it == selection.id }
+            is RealtimeCamera.Position -> manager.cameraIdList.asList()
+        }
+        for (id in candidates) {
+            val properties = manager.getCameraCharacteristics(id)
+            val camera = MediaDevices.describeCamera(id, properties)
+            if (selection is RealtimeCamera.Position && camera.position != selection.position) continue
+            val formats = properties.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            if (!formats?.getOutputSizes(ImageFormat.YUV_420_888).isNullOrEmpty()) return camera to properties
+        }
+
+        val label = when (selection) {
+            is RealtimeCamera.Device -> "Camera ${selection.id}"
+            is RealtimeCamera.Position -> "The ${selection.position.name.lowercase()} camera"
+        }
+        throw cameraError("$label is unavailable or does not support YUV capture")
+    }
+
+    /**
      * The camera characteristics selected for one capture session.
      *
-     * @property id The Android camera identifier.
+     * @property camera The selected Android camera.
      * @property size The native YUV stream size.
      * @property fps The hardware exposure frame rate range, if advertised.
      * @property orientation The automatic rotation of the sensor frame.
@@ -226,7 +252,7 @@ internal class Camera2Capture(
      * @property usesBoottime Whether the sensor timestamps use the system boot-time clock.
      */
     private data class ConfigurationForCamera(
-        val id: String,
+        val camera: XmaxCameraDevice,
         val size: Size,
         val fps: Range<Int>?,
         val orientation: VideoRotation,
@@ -323,7 +349,7 @@ internal class Camera2Capture(
                 if (closing.get()) return@post
 
                 try {
-                    manager.openCamera(configuration.id, this, handler)
+                    manager.openCamera(configuration.camera.id, this, handler)
                     opening = true
                 } catch (error: Exception) {
                     fail("Could not open the camera", error)

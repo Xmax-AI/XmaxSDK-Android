@@ -186,12 +186,14 @@ public class RealtimeModelTest {
         )
 
         track.updateVideoFormat(updatedFormat)
-        track.updatePosition(CameraPosition.BACK)
+        val camera = CameraDevice("rear", "Rear camera", CameraPosition.BACK, isExternal = false)
+        track.updateCameraDevice(camera)
         val stream = RealtimeMediaStream("local", track)
 
         assertSame(track, stream.videoTrack)
         assertEquals(updatedFormat, track.videoFormat)
         assertEquals(CameraPosition.BACK, track.position)
+        assertSame(camera, track.cameraDevice)
     }
 
     @Test

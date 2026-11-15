@@ -10,10 +10,11 @@
 
 package ai.xmax.sdk.media
 
-import ai.xmax.sdk.CameraPosition
+import ai.xmax.sdk.RealtimeCamera
 import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
 import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeMediaStream
+import ai.xmax.sdk.RealtimeMicrophone
 import ai.xmax.sdk.RealtimeReferenceVideo
 import ai.xmax.sdk.RealtimeVideoSampleMethod
 import ai.xmax.sdk.RealtimeVideoFormat
@@ -104,23 +105,18 @@ internal interface MediaControlling : InteractionControlling {
     )
 
     /**
-     * Creates a local camera stream and starts its preview.
+     * Starts preview with a camera and retains the selected microphone for connection.
      *
-     * Your app must obtain camera permission before creation and recording permission before
-     * enabling the microphone. Microphone capture starts on connection and stops on disconnection,
-     * without local playback. Input dimensions must satisfy the model constraints.
-     *
-     * @param videoFormat Video dimensions, frame rate, and uplink encoding options.
-     * @param position The front or rear camera to use.
-     * @param useMicrophone Whether to use the microphone; requires recording permission and defaults to
-     * false.
+     * @param videoFormat The requested model-supported camera output.
+     * @param camera The initial camera selection.
+     * @param microphone The microphone selection for connection.
      * @param rotation The clockwise correction relative to automatic orientation.
      */
     suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
-        position: CameraPosition,
-        useMicrophone: Boolean = false,
-        rotation: RealtimeCameraRotation = RealtimeCameraRotation.ROTATION_0,
+        camera: RealtimeCamera,
+        microphone: RealtimeMicrophone,
+        rotation: RealtimeCameraRotation,
     ): RealtimeMediaStream
 
     /**
@@ -284,8 +280,21 @@ internal interface MediaControlling : InteractionControlling {
 
     /**
      * Switches the active camera and updates local track metadata.
+     *
+     * @param selection The camera position or device ID to switch to.
      */
-    suspend fun switchCamera(): RealtimeMediaStream
+    suspend fun switchCamera(
+        selection: RealtimeCamera,
+    ): RealtimeMediaStream
+
+    /**
+     * Switches the microphone for the active camera stream.
+     *
+     * @param deviceId The audio input ID, or null for the Android default input.
+     */
+    suspend fun switchMicrophone(
+        deviceId: String?,
+    )
 
     /**
      * Stops and releases the current local media source.

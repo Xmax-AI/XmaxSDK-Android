@@ -359,6 +359,27 @@ public interface XmaxRealtimeManaging {
     ): RealtimeMediaStream
 
     /**
+     * Creates a local camera stream with explicit camera and microphone selections.
+     *
+     * Bind the returned track to a preview view. Enabled microphones require recording permission
+     * and start capturing on connection. An explicit microphone input is verified when recording
+     * starts.
+     *
+     * @param videoFormat The model-supported output format, defaulting to the model's camera format.
+     * @param camera The camera position or identifier from [MediaDevices.listCameraDevices].
+     * @param microphone The input to use when connected, disabled by default.
+     * @param rotation The clockwise correction relative to automatic orientation.
+     * @return The stream containing the local camera track.
+     * @throws XmaxError If the format, permission, selected device, or camera startup prevents creation.
+     */
+    public suspend fun createLocalCameraStream(
+        videoFormat: RealtimeVideoFormat = options.model.defaultCameraVideoFormat,
+        camera: RealtimeCamera,
+        microphone: RealtimeMicrophone = RealtimeMicrophone.Disabled,
+        rotation: RealtimeCameraRotation = RealtimeCameraRotation.ROTATION_0,
+    ): RealtimeMediaStream
+
+    /**
      * Stops the local camera stream.
      *
      * Other input sources are unaffected.
@@ -504,14 +525,45 @@ public interface XmaxRealtimeManaging {
     public suspend fun stopLocalVideoStream()
 
     /**
-     * Switches between the front and rear cameras.
+     * Toggles between the device's built-in front and rear cameras.
      *
-     * During generation, XmaxSDK stops the current task and resumes with cached conditions after
-     * switching.
+     * During generation, the SDK stops the task, switches cameras, and resumes generation with the
+     * current conditions while keeping the RTC connection open.
      *
-     * @return The local stream with its existing video track and updated camera position.
+     * @return The local stream with its existing video track and updated camera device.
+     * @throws XmaxError With [XmaxErrorCode.OPERATION_NOT_ALLOWED] if the active camera is external,
+     * has no front or rear position, or there is no active camera.
      */
-    public suspend fun switchCamera(): RealtimeMediaStream
+    public suspend fun toggleCamera(): RealtimeMediaStream
+
+    /**
+     * Switches to a specific camera while retaining the video track and output format.
+     *
+     * Available while the camera preview is ready or connected without an active generation.
+     * Generation blocks switching with [XmaxErrorCode.OPERATION_NOT_ALLOWED].
+     *
+     * @param deviceId The identifier returned by [MediaDevices.listCameraDevices].
+     * @return The local stream with its existing video track and updated device metadata.
+     * @throws XmaxError If the stream state or target device prevents switching.
+     */
+    public suspend fun switchCamera(
+        deviceId: String,
+    ): RealtimeMediaStream
+
+    /**
+     * Changes the input for a camera stream created with microphone capture enabled.
+     *
+     * While previewing, the selection takes effect on the next connection. While connected without
+     * an active generation, the input is switched and its route is verified.
+     * Generation blocks switching with [XmaxErrorCode.OPERATION_NOT_ALLOWED].
+     *
+     * @param deviceId The identifier returned by [MediaDevices.listMicrophoneDevices], or null to use
+     * Android's default routing.
+     * @throws XmaxError If the stream state, input selection, or audio routing prevents switching.
+     */
+    public suspend fun switchMicrophone(
+        deviceId: String?,
+    )
 
     /**
      * Establishes a realtime connection using a local stream created by this manager.

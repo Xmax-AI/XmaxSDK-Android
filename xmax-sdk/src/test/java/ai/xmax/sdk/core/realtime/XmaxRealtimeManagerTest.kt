@@ -1297,7 +1297,7 @@ class XmaxRealtimeManagerTest {
 
     @Test fun `late superseded update cannot replace cached generation context`() = runTest {
         val f = Fixture(StandardTestDispatcher(testScheduler))
-        val local = f.manager.createLocalCameraStream(format, CameraPosition.FRONT)
+        val local = f.manager.createExternalVideoStream(ExternalSource())
         f.stream.confirmation = CompletableDeferred(Unit)
         f.manager.startGeneration(local, RealtimeContext("initial"))
         val release = CompletableDeferred<Unit>()
@@ -1309,9 +1309,79 @@ class XmaxRealtimeManagerTest {
         release.complete(Unit)
         latest.await(); old.join()
         assertTrue(old.isCancelled)
-        f.manager.switchCamera()
+        f.manager.replaceExternalVideoStream { ExternalSource() }
         assertEquals(listOf("initial", "initial"), f.stream.startedPrompts)
         assertEquals(listOf(false, true), f.stream.startedFaceRestorations)
+        f.manager.close()
+    }
+
+    @Test fun `explicit device switches are allowed before generation and blocked while it is active`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        val local = f.manager.createLocalCameraStream(
+            format,
+            camera = RealtimeCamera.Device("front"),
+            microphone = RealtimeMicrophone.SystemDefault,
+        )
+        assertSame(local.videoTrack, f.manager.switchCamera("back").videoTrack)
+        f.stream.confirmation = CompletableDeferred(Unit)
+        f.manager.startGeneration(local, RealtimeContext("initial"))
+        val taskId = f.manager.currentState.taskId
+
+        val cameraError = runCatching { f.manager.switchCamera("front") }.exceptionOrNull()
+        val audioError = runCatching { f.manager.switchMicrophone("usb") }.exceptionOrNull()
+        assertEquals(XmaxErrorCode.OPERATION_NOT_ALLOWED, (cameraError as? XmaxError)?.code)
+        assertEquals(XmaxErrorCode.OPERATION_NOT_ALLOWED, (audioError as? XmaxError)?.code)
+        assertEquals(listOf(RealtimeCamera.Device("back")), f.media.cameraSelections)
+        assertTrue(f.media.microphoneDeviceSelections.isEmpty())
+        assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
+        assertEquals(taskId, f.manager.currentState.taskId)
+
+        f.manager.disconnect()
+        f.manager.connect(local)
+        f.manager.switchMicrophone("usb")
+        assertEquals(listOf("usb"), f.media.microphoneDeviceSelections)
+        f.manager.close()
+    }
+
+    @Test fun `toggling a built-in camera resumes generation with the existing conditions and connection`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        val local = f.manager.createLocalCameraStream(camera = RealtimeCamera.Device("front"))
+        f.stream.confirmation = CompletableDeferred(Unit)
+        val context = RealtimeContext("initial")
+        f.manager.startGeneration(local, context, faceRestoration = true)
+        val oldTaskId = f.manager.currentState.taskId
+        val oldSessionId = f.manager.currentState.sessionId
+
+        val switched = f.manager.toggleCamera()
+
+        assertSame(local.videoTrack, switched.videoTrack)
+        assertEquals(CameraPosition.BACK, switched.videoTrack?.position)
+        assertEquals(listOf(RealtimeCamera.Position(CameraPosition.BACK)), f.media.cameraSelections)
+        assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
+        assertNotEquals(oldTaskId, f.manager.currentState.taskId)
+        assertEquals(oldSessionId, f.manager.currentState.sessionId)
+        assertEquals(listOf(context, context), f.stream.startedContexts)
+        assertEquals(listOf(true, true), f.stream.startedFaceRestorations)
+        f.manager.close()
+    }
+
+    @Test fun `toggling after selecting an external camera fails without interrupting generation`() = runTest {
+        val f = Fixture(StandardTestDispatcher(testScheduler))
+        val local = f.manager.createLocalCameraStream()
+        f.manager.switchCamera("usb")
+        assertEquals(true, local.videoTrack?.cameraDevice?.isExternal)
+        f.stream.confirmation = CompletableDeferred(Unit)
+        f.manager.startGeneration(local, RealtimeContext("initial"))
+        val taskId = f.manager.currentState.taskId
+
+        val error = runCatching { f.manager.toggleCamera() }.exceptionOrNull()
+
+        assertEquals(XmaxErrorCode.OPERATION_NOT_ALLOWED, (error as? XmaxError)?.code)
+        assertEquals(listOf(RealtimeCamera.Device("usb")), f.media.cameraSelections)
+        assertEquals("usb", local.videoTrack?.cameraDevice?.id)
+        assertEquals(RealtimeConnectionState.GENERATING, f.manager.currentState.connectionState)
+        assertEquals(taskId, f.manager.currentState.taskId)
+        assertEquals(listOf("initial"), f.stream.startedPrompts)
         f.manager.close()
     }
 
@@ -1939,8 +2009,8 @@ private class MediaStub : MediaControlling {
     }
     override suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
-        position: CameraPosition,
-        useMicrophone: Boolean,
+        camera: RealtimeCamera,
+        microphone: RealtimeMicrophone,
         rotation: RealtimeCameraRotation,
     ): RealtimeMediaStream {
         cameraStartBarrier?.await()
@@ -1948,8 +2018,9 @@ private class MediaStub : MediaControlling {
         cameraStartCount++
         cameraRotationAtCreation = rotation
         volumeAtStart = volume
-        hasAudio = useMicrophone
-        val track = RealtimeVideoTrack("local", videoFormat, position = position)
+        hasAudio = microphone != RealtimeMicrophone.Disabled
+        val track = RealtimeVideoTrack("local", videoFormat)
+        track.updateCameraDevice(resolveCamera(camera))
         currentTrack = track
         if (reportPreviewReadyOnCreate) {
             registeredCameraPreviewReadyListener?.onCameraPreviewReady()
@@ -2014,7 +2085,25 @@ private class MediaStub : MediaControlling {
     }
     override suspend fun setLocalAudioPreviewMuted(muted: Boolean) { this.muted = muted; muteChanges += muted }
     override suspend fun setLocalAudioVolume(volume: Float) { volumeError?.let { throw it }; this.volume = volume }
-    override suspend fun switchCamera() = RealtimeMediaStream("local", currentTrack)
+    private val cameras = listOf(
+        CameraDevice("front", "Front camera", CameraPosition.FRONT, isExternal = false),
+        CameraDevice("back", "Rear camera", CameraPosition.BACK, isExternal = false),
+        CameraDevice("usb", "External camera", null, isExternal = true),
+    )
+    val cameraSelections = mutableListOf<RealtimeCamera>()
+    val microphoneDeviceSelections = mutableListOf<String?>()
+    override suspend fun switchCamera(selection: RealtimeCamera): RealtimeMediaStream {
+        cameraSelections += selection
+        currentTrack!!.updateCameraDevice(resolveCamera(selection))
+        return RealtimeMediaStream("local", currentTrack)
+    }
+    private fun resolveCamera(selection: RealtimeCamera): CameraDevice = when (selection) {
+        is RealtimeCamera.Device -> cameras.first { it.id == selection.id }
+        is RealtimeCamera.Position -> cameras.first { it.position == selection.position }
+    }
+    override suspend fun switchMicrophone(deviceId: String?) {
+        microphoneDeviceSelections += deviceId
+    }
     override fun owns(stream: RealtimeMediaStream) = stream.videoTrack === currentTrack
     override suspend fun startInteraction(taskId: String, videoFormat: RealtimeVideoFormat) {
         interactionFormat = videoFormat

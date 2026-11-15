@@ -82,12 +82,12 @@ internal class XmaxRealtimeLifecycleManager(
         REPLACEMENT,
 
         /**
-         * Switches the active camera.
+         * Toggles the built-in camera and can resume generation.
          */
-        SWITCH,
+        TOGGLE_CAMERA,
 
         /**
-         * Updates media encoding settings.
+         * Changes capture devices or media settings.
          */
         CONFIGURATION,
 
@@ -129,8 +129,8 @@ internal class XmaxRealtimeLifecycleManager(
         fun affects(
             kind: OperationKind,
         ): Boolean = when (this) {
-            GENERATION -> kind == OperationKind.GENERATION || kind == OperationKind.REPLACEMENT || kind == OperationKind.SWITCH ||
-                kind == OperationKind.CONFIGURATION
+            GENERATION -> kind == OperationKind.GENERATION || kind == OperationKind.REPLACEMENT ||
+                kind == OperationKind.TOGGLE_CAMERA || kind == OperationKind.CONFIGURATION
             CONNECTION -> kind != OperationKind.MEDIA && kind != OperationKind.SETTING
             ALL -> true
         }
@@ -817,7 +817,7 @@ internal class XmaxRealtimeLifecycleManager(
     ): TerminationScope? = when (kind) {
         OperationKind.MEDIA -> TerminationScope.ALL
         OperationKind.CONNECTION -> TerminationScope.CONNECTION
-        OperationKind.GENERATION, OperationKind.REPLACEMENT, OperationKind.SWITCH -> TerminationScope.GENERATION
+        OperationKind.GENERATION, OperationKind.REPLACEMENT, OperationKind.TOGGLE_CAMERA -> TerminationScope.GENERATION
         OperationKind.CONFIGURATION, OperationKind.SETTING -> null
     }
 

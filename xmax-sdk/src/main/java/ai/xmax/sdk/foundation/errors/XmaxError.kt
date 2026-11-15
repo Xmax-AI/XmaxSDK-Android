@@ -91,6 +91,11 @@ public enum class XmaxErrorCode {
      * The operation exceeded its allowed time.
      */
     TIMEOUT,
+
+    /**
+     * The current SDK state does not allow the operation.
+     */
+    OPERATION_NOT_ALLOWED,
 }
 
 /**

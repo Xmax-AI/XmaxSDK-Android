@@ -235,7 +235,7 @@ internal object XmaxRealtimeFactory {
             rtcManager = rtcManager,
             cameraController = CameraController(
                 camera = Camera2Capture(context.applicationContext),
-                microphone = AudioRecordCapture(),
+                microphone = AudioRecordCapture(context.applicationContext),
                 permissionManager = PermissionManager(context),
                 mediaService = mediaService,
                 videoListener = streamController::pushCameraVideoFrame,

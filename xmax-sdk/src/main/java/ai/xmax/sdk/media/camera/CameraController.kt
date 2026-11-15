@@ -11,12 +11,14 @@
 package ai.xmax.sdk.media.camera
 
 import ai.xmax.sdk.AudioFrame
-import ai.xmax.sdk.CameraPosition
+import ai.xmax.sdk.CameraDevice
 import ai.xmax.sdk.MediaServicing
+import ai.xmax.sdk.RealtimeCamera
 import ai.xmax.sdk.RealtimeCameraPreviewReadyListener
 import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeMediaSource
 import ai.xmax.sdk.RealtimeMediaStream
+import ai.xmax.sdk.RealtimeMicrophone
 import ai.xmax.sdk.RealtimeVideoFormat
 import ai.xmax.sdk.RealtimeVideoTrack
 import ai.xmax.sdk.VideoFrame
@@ -67,8 +69,13 @@ internal class CameraController(
     /**
      * Whether the current source should capture microphone audio while connected.
      */
-    @Volatile var useMicrophone = false
-        private set
+    val useMicrophone: Boolean
+        get() = microphoneSelection != RealtimeMicrophone.Disabled
+
+    /**
+     * The microphone input requested for the current local stream.
+     */
+    @Volatile private var microphoneSelection: RealtimeMicrophone = RealtimeMicrophone.Disabled
 
     /**
      * The listener retained across local camera lifetimes.
@@ -102,24 +109,25 @@ internal class CameraController(
     }
 
     /**
-     * Starts the local camera. Microphone capture is deferred until connection.
+     * Starts the selected camera and retains the microphone selection for connection.
      *
      * @param videoFormat The requested model-supported camera output.
-     * @param position The initial front or rear camera.
-     * @param useMicrophone Whether the connection will publish microphone audio.
+     * @param selection The initial camera selection.
+     * @param microphone The microphone selection for the connection.
      * @param rotation The clockwise correction relative to automatic orientation.
      */
     suspend fun createLocalCameraStream(
         videoFormat: RealtimeVideoFormat,
-        position: CameraPosition,
-        useMicrophone: Boolean = false,
+        selection: RealtimeCamera,
+        microphone: RealtimeMicrophone = RealtimeMicrophone.Disabled,
         rotation: RealtimeCameraRotation = RealtimeCameraRotation.ROTATION_0,
     ): RealtimeMediaStream {
         check(currentTrack == null)
         val format = resolveVideoFormat(videoFormat)
-        val track = RealtimeVideoTrack(LOCAL_VIDEO_TRACK_ID, format, position)
+        val track = RealtimeVideoTrack(LOCAL_VIDEO_TRACK_ID, format)
         permissionManager.ensureCameraPermission()
-        if (useMicrophone) permissionManager.ensureMicrophonePermission()
+        if (microphone != RealtimeMicrophone.Disabled) permissionManager.ensureMicrophonePermission()
+        if (microphone is RealtimeMicrophone.Device) this.microphone.validateDevice(microphone.id)
 
         val previewReported = AtomicBoolean(false)
         var previewPixels = IntArray(0)
@@ -145,7 +153,7 @@ internal class CameraController(
         preview = framePreview
 
         try {
-            startCapture(format, position, framePreview, rotation)
+            track.updateCameraDevice(startCapture(format, selection, framePreview, rotation))
             VideoRenderRegistry.register(
                 track,
                 VideoRenderBinding(
@@ -154,7 +162,7 @@ internal class CameraController(
                 ),
             )
 
-            this.useMicrophone = useMicrophone
+            microphoneSelection = microphone
             cameraRotation = rotation
             currentTrack = track
             return RealtimeMediaStream(StreamID.LOCAL.value, track)
@@ -176,7 +184,7 @@ internal class CameraController(
         val format = resolveVideoFormat(videoFormat)
         if (format == track.videoFormat) return
 
-        replaceCapture(track, format, checkNotNull(track.position))
+        replaceCapture(track, format, RealtimeCamera.Device(checkNotNull(track.cameraDevice).id))
         track.updateVideoFormat(format)
     }
 
@@ -202,7 +210,56 @@ internal class CameraController(
      * Starts SDK microphone capture for the current connection if enabled.
      */
     suspend fun startMicrophoneCapture() {
-        if (useMicrophone) microphone.start(audioListener, audioErrorListener)
+        val selection = microphoneSelection
+        if (selection != RealtimeMicrophone.Disabled) startMicrophone(selection)
+    }
+
+    /**
+     * Retains the requested input for connection or replaces a running recorder.
+     *
+     * @param deviceId The audio input ID, or null for the Android default input.
+     */
+    suspend fun switchMicrophone(
+        deviceId: String?,
+    ) {
+        requireTrack()
+        val previous = microphoneSelection
+        if (previous == RealtimeMicrophone.Disabled) {
+            throw XmaxError(XmaxErrorCode.INVALID_CONFIGURATION, "Microphone capture is disabled for this camera stream")
+        }
+
+        val selection = deviceId?.let { RealtimeMicrophone.Device(it) } ?: RealtimeMicrophone.SystemDefault
+        if (selection == previous) return
+        if (deviceId != null) microphone.validateDevice(deviceId)
+        if (microphone.isCapturing) {
+            try {
+                microphone.stop()
+                startMicrophone(selection)
+            } catch (error: Throwable) {
+                cleanupAfterFailure(error, {
+                    try {
+                        microphone.stop()
+                        startMicrophone(previous)
+                    } catch (restoreError: Exception) {
+                        audioErrorListener(XmaxError.from(restoreError))
+                        throw restoreError
+                    }
+                })
+                throw XmaxError.from(error)
+            }
+        }
+        microphoneSelection = selection
+    }
+
+    /**
+     * Opens the recorder using the selected input.
+     *
+     * @param selection The enabled microphone selection.
+     */
+    private suspend fun startMicrophone(
+        selection: RealtimeMicrophone,
+    ) {
+        microphone.start((selection as? RealtimeMicrophone.Device)?.id, audioListener, audioErrorListener)
     }
 
     /**
@@ -221,7 +278,7 @@ internal class CameraController(
         val framePreview = preview
         currentTrack = null
         preview = null
-        useMicrophone = false
+        microphoneSelection = RealtimeMicrophone.Disabled
         cameraRotation = RealtimeCameraRotation.ROTATION_0
 
         cleanupResources(
@@ -234,36 +291,48 @@ internal class CameraController(
     }
 
     /**
-     * Switches lenses while retaining the camera track and preview binding.
+     * Switches cameras while retaining the camera track and preview binding.
+     *
+     * @param selection The camera position or device ID to switch to.
      */
-    suspend fun switchCamera(): RealtimeMediaStream {
+    suspend fun switchCamera(
+        selection: RealtimeCamera,
+    ): RealtimeMediaStream {
         val track = requireTrack()
-        val position = if (track.position == CameraPosition.FRONT) CameraPosition.BACK else CameraPosition.FRONT
-        replaceCapture(track, checkNotNull(track.videoFormat), position)
-        track.updatePosition(position)
-
+        if (selection !is RealtimeCamera.Device || selection.id != track.cameraDevice?.id) {
+            replaceCapture(
+                track,
+                checkNotNull(track.videoFormat),
+                selection,
+            )
+        }
         return RealtimeMediaStream(StreamID.LOCAL.value, track)
     }
 
     /**
-     * Starts a replacement and restores the previous lens and format if startup fails.
+     * Starts a replacement and restores the previous device and format if startup fails.
      *
      * @param track The existing track retaining its current format until replacement succeeds.
      * @param format The new output format.
-     * @param position The new camera position.
+     * @param selection The new camera selection.
      */
     private suspend fun replaceCapture(
         track: RealtimeVideoTrack,
         format: RealtimeVideoFormat,
-        position: CameraPosition,
+        selection: RealtimeCamera,
     ) {
+        val previousDevice = checkNotNull(track.cameraDevice)
         val framePreview = checkNotNull(preview)
         try {
-            startCapture(format, position, framePreview)
+            track.updateCameraDevice(startCapture(format, selection, framePreview))
         } catch (error: Throwable) {
             cleanupAfterFailure(error, {
                 try {
-                    startCapture(checkNotNull(track.videoFormat), checkNotNull(track.position), framePreview)
+                    startCapture(
+                        checkNotNull(track.videoFormat),
+                        RealtimeCamera.Device(previousDevice.id),
+                        framePreview,
+                    )
                 } catch (restoreError: Exception) {
                     videoErrorListener(XmaxError.from(restoreError))
                     throw restoreError
@@ -277,21 +346,22 @@ internal class CameraController(
      * Starts capture with callbacks scoped to its revision.
      *
      * @param format The output format.
-     * @param position The camera position.
+     * @param selection The camera selection.
      * @param framePreview The bound preview receiving the same oriented frames as RTC.
      * @param rotation The correction to apply when capture starts.
+     * @return The camera opened for the selection.
      */
     private suspend fun startCapture(
         format: RealtimeVideoFormat,
-        position: CameraPosition,
+        selection: RealtimeCamera,
         framePreview: LocalVideoFramePreview,
         rotation: RealtimeCameraRotation = cameraRotation,
-    ) {
+    ): CameraDevice {
         val revision = captureRevision.incrementAndGet()
         framePreview.discardPendingFrame()
-        camera.start(
+        return camera.start(
             format = format,
-            position = position,
+            selection = selection,
             rotation = rotation,
             onFrame = { frame ->
                 if (captureRevision.get() == revision) {

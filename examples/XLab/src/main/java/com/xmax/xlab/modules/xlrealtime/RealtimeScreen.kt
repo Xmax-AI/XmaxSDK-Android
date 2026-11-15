@@ -116,10 +116,12 @@ import ai.xmax.sdk.XmaxError
 import ai.xmax.sdk.XmaxEnvironment
 import ai.xmax.sdk.RealtimeConnectionState
 import ai.xmax.sdk.CameraPosition
+import ai.xmax.sdk.RealtimeCamera
 import ai.xmax.sdk.RealtimeCameraRotation
 import ai.xmax.sdk.RealtimeConfiguration
 import ai.xmax.sdk.RealtimeContext
 import ai.xmax.sdk.RealtimeMediaStream
+import ai.xmax.sdk.RealtimeMicrophone
 import ai.xmax.sdk.RealtimeModel
 import ai.xmax.sdk.RealtimeReason
 import ai.xmax.sdk.RealtimeVideoFormat
@@ -232,6 +234,7 @@ public fun RealtimeScreen(
     val referenceErrorMessage = xLabText(R.string.realtime_reference_error)
     val referenceRetryErrorMessage = xLabText(R.string.realtime_reference_retry_error)
     val cameraSwitchErrorMessage = xLabText(R.string.realtime_camera_switch_error)
+    val microphoneSwitchErrorMessage = xLabText(R.string.realtime_microphone_switch_error)
     val cameraRotationErrorMessage = xLabText(R.string.realtime_camera_rotate_error)
     val focusManager = LocalFocusManager.current
     val haptics = LocalHapticFeedback.current
@@ -298,6 +301,7 @@ public fun RealtimeScreen(
     var pickerTarget by remember { mutableStateOf<PickerTarget?>(null) }
     var pickerCategoryId by remember { mutableStateOf<String?>(null) }
     var cameraSwitching by remember { mutableStateOf(false) }
+    var microphoneDeviceId by remember(realtimeManager) { mutableStateOf<String?>(null) }
     var localMediaStream by remember(realtimeManager) { mutableStateOf<RealtimeMediaStream?>(null) }
     var preparedSource by remember(realtimeManager) { mutableStateOf<RealtimeSource?>(null) }
     var externalFileSource by remember(realtimeManager) { mutableStateOf<RealtimeFileVideoSource?>(null) }
@@ -553,6 +557,59 @@ public fun RealtimeScreen(
         preparedSource == currentSource && localMediaStream != null &&
         (currentSource !is RealtimeSource.Camera || cameraPreviewReady)
 
+    fun isDeviceSwitchState(state: RealtimeConnectionState): Boolean =
+        state == RealtimeConnectionState.READY || state == RealtimeConnectionState.CONNECTED
+
+    fun switchCaptureDevice(
+        isCamera: Boolean,
+        errorMessage: String,
+        switchDevice: suspend () -> Unit,
+    ) {
+        if (currentSource !is RealtimeSource.Camera || generationBusy || !canRequestGeneration() ||
+            !isDeviceSwitchState(realtimeManager.currentState.connectionState)
+        ) return
+
+        cameraSwitching = true
+        cameraSwitchJob = scope.launch {
+            val requestJob = coroutineContext[Job]
+            try {
+                if (isCamera) {
+                    cameraBlurTarget = 24f
+                    withFrameNanos { }
+                }
+                realtimeOperationMutex.withLock {
+                    if (!generationBusy && !isSuspendedForBackground && preparedSource == currentSource &&
+                        currentSource is RealtimeSource.Camera && localMediaStream != null && cameraPreviewReady &&
+                        isDeviceSwitchState(realtimeManager.currentState.connectionState)
+                    ) {
+                        switchDevice()
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                if (!wasReportedByState(error)) {
+                    Toast.makeText(
+                        context,
+                        xLabErrorText(error.message, errorMessage, localizedContext),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            } finally {
+                if (isCamera) {
+                    withContext(NonCancellable) {
+                        cameraBlurTarget = 0f
+                        delay(180)
+                    }
+                }
+                if (cameraSwitchJob === requestJob) {
+                    cameraSwitching = false
+                    cameraSwitchJob = null
+                }
+            }
+        }
+    }
+
     fun rotateCamera() {
         if (currentSource !is RealtimeSource.Camera || generationBusy || !canRequestGeneration()) return
 
@@ -786,10 +843,11 @@ public fun RealtimeScreen(
                     RealtimeSource.Camera -> {
                         cameraPreviewReady = false
                         localMediaStream = realtimeManager.createLocalCameraStream(
-                            position = CameraPosition.FRONT,
-                            useMicrophone = true,
+                            camera = RealtimeCamera.Position(CameraPosition.FRONT),
+                            microphone = RealtimeMicrophone.SystemDefault,
                             rotation = cameraRotation,
                         )
+                        microphoneDeviceId = null
                     }
                     is RealtimeSource.Image -> {
                         localMediaStream = realtimeManager.createLocalImageStream(selectedSource.uri)
@@ -1078,6 +1136,8 @@ public fun RealtimeScreen(
 
             if (currentSource is RealtimeSource.Camera) {
                 var isDeviceListVisible by remember { mutableStateOf(false) }
+                val canSwitchDevices = !generationBusy && canRequestGeneration() &&
+                    isDeviceSwitchState(qualityConnectionState)
                 CameraToolbar(
                     horizontal = isLandscape,
                     modifier = Modifier
@@ -1094,44 +1154,14 @@ public fun RealtimeScreen(
                     }
                     OverlayAction(
                         label = xLabText(R.string.realtime_flip),
-                        enabled = !generationBusy && canRequestGeneration(),
+                        enabled = canSwitchDevices,
                         modifier = Modifier,
                         onClick = {
-                            if (!generationBusy && canRequestGeneration()) {
-                                cameraSwitching = true
-                                cameraSwitchJob = scope.launch {
-                                    val requestJob = coroutineContext[Job]
-                                    cameraBlurTarget = 24f
-                                    try {
-                                        withFrameNanos { }
-                                        realtimeOperationMutex.withLock {
-                                            if (!isSuspendedForBackground && preparedSource == currentSource &&
-                                                localMediaStream != null && cameraPreviewReady && currentSource is RealtimeSource.Camera
-                                            ) {
-                                                localMediaStream = realtimeManager.switchCamera()
-                                            }
-                                        }
-                                    } catch (error: CancellationException) {
-                                        throw error
-                                    } catch (error: Throwable) {
-                                        if (!wasReportedByState(error)) {
-                                            Toast.makeText(
-                                                context,
-                                                xLabErrorText(error.message, cameraSwitchErrorMessage, localizedContext),
-                                                Toast.LENGTH_SHORT,
-                                            ).show()
-                                        }
-                                    } finally {
-                                        withContext(NonCancellable) {
-                                            cameraBlurTarget = 0f
-                                            delay(180)
-                                        }
-                                        if (cameraSwitchJob === requestJob) {
-                                            cameraSwitching = false
-                                            cameraSwitchJob = null
-                                        }
-                                    }
-                                }
+                            switchCaptureDevice(
+                                isCamera = true,
+                                errorMessage = cameraSwitchErrorMessage,
+                            ) {
+                                localMediaStream = realtimeManager.toggleCamera()
                             }
                         },
                     ) {
@@ -1252,6 +1282,27 @@ public fun RealtimeScreen(
                 }
                 if (isDeviceListVisible) {
                     RealtimeDeviceListDialog(
+                        cameraDeviceId = localMediaStream?.videoTrack?.cameraDevice?.id,
+                        microphoneDeviceId = microphoneDeviceId,
+                        canSwitch = canSwitchDevices,
+                        isGenerating = qualityConnectionState == RealtimeConnectionState.GENERATING,
+                        onCameraSelected = { deviceId ->
+                            switchCaptureDevice(
+                                isCamera = true,
+                                errorMessage = cameraSwitchErrorMessage,
+                            ) {
+                                localMediaStream = realtimeManager.switchCamera(deviceId)
+                            }
+                        },
+                        onMicrophoneSelected = { deviceId ->
+                            switchCaptureDevice(
+                                isCamera = false,
+                                errorMessage = microphoneSwitchErrorMessage,
+                            ) {
+                                realtimeManager.switchMicrophone(deviceId)
+                                microphoneDeviceId = deviceId
+                            }
+                        },
                         onDismiss = { isDeviceListVisible = false },
                     )
                 }
