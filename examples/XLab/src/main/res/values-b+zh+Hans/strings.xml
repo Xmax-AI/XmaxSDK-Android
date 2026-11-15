@@ -2,6 +2,25 @@
 <resources>
     <string name="realtime_camera_rotate">旋转</string>
     <string name="realtime_camera_rotate_error">无法旋转摄像头画面</string>
+    <string name="realtime_devices">设备</string>
+    <string name="realtime_devices_title">采集设备</string>
+    <string name="realtime_devices_loading">正在查询设备…</string>
+    <string name="realtime_devices_cameras">摄像头</string>
+    <string name="realtime_devices_microphones">麦克风</string>
+    <string name="realtime_devices_no_cameras">未发现摄像头</string>
+    <string name="realtime_devices_no_microphones">未发现麦克风</string>
+    <string name="realtime_devices_close">关闭</string>
+    <string name="realtime_device_camera_front">前置摄像头</string>
+    <string name="realtime_device_camera_rear">后置摄像头</string>
+    <string name="realtime_device_camera_external">外接摄像头</string>
+    <string name="realtime_device_camera">摄像头</string>
+    <string name="realtime_device_id">ID %1$s</string>
+    <string name="realtime_device_audio_detail">%1$s · ID %2$s</string>
+    <string name="realtime_device_audio_built_in">内置</string>
+    <string name="realtime_device_audio_usb">USB</string>
+    <string name="realtime_device_audio_bluetooth">蓝牙</string>
+    <string name="realtime_device_audio_wired">有线耳机</string>
+    <string name="realtime_device_audio_other">类型 %1$d</string>
     <string name="realtime_camera_format">比例</string>
     <string name="realtime_camera_format_error">摄像头比例切换失败</string>
     <string name="realtime_camera_format_stop_hint">请先停止生成，再切换比例</string>

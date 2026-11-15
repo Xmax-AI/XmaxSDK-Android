@@ -14,6 +14,7 @@ package com.xmax.xlab.modules.xlrealtime
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import java.io.File
@@ -35,15 +36,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -85,6 +91,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -211,6 +218,7 @@ public fun RealtimeScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val localizedContext = xLabLocalizedContext(LocalXLabLanguage.current)
     val localizedContextState = rememberUpdatedState(localizedContext)
     val cameraPermissionMessage = xLabText(R.string.realtime_camera_permission)
@@ -986,6 +994,7 @@ public fun RealtimeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
             .pointerInput(focusManager) {
                 awaitEachGesture {
                     awaitFirstDown(
@@ -1009,6 +1018,7 @@ public fun RealtimeScreen(
                 isSuspendedForBackground = isSuspendedForBackground,
                 cameraBlur = cameraBlur,
                 cameraVideoFormat = cameraVideoFormat,
+                isLandscape = isLandscape,
             )
 
             if (statisticsVisible) {
@@ -1067,13 +1077,21 @@ public fun RealtimeScreen(
             }
 
             if (currentSource is RealtimeSource.Camera) {
-                Column(
+                var isDeviceListVisible by remember { mutableStateOf(false) }
+                CameraToolbar(
+                    horizontal = isLandscape,
                     modifier = Modifier
                         .statusBarsPadding()
                         .align(Alignment.TopEnd)
                         .padding(end = 8.dp, top = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    OverlayAction(
+                        label = xLabText(R.string.realtime_devices),
+                        modifier = Modifier,
+                        onClick = { isDeviceListVisible = true },
+                    ) {
+                        DeviceListGlyph(Modifier.size(18.dp))
+                    }
                     OverlayAction(
                         label = xLabText(R.string.realtime_flip),
                         enabled = !generationBusy && canRequestGeneration(),
@@ -1117,7 +1135,7 @@ public fun RealtimeScreen(
                             }
                         },
                     ) {
-                        Text("⟳", color = Color.White, fontSize = 27.sp, lineHeight = 27.sp)
+                        CameraSwitchGlyph(Modifier.size(20.dp))
                     }
                     val canRotate = !generationBusy && canRequestGeneration()
                     val rotationLabel = xLabText(R.string.realtime_camera_rotate)
@@ -1231,6 +1249,11 @@ public fun RealtimeScreen(
                     ) {
                         StatisticsGlyph(statisticsVisible, Modifier.size(17.dp))
                     }
+                }
+                if (isDeviceListVisible) {
+                    RealtimeDeviceListDialog(
+                        onDismiss = { isDeviceListVisible = false },
+                    )
                 }
             } else {
                 MediaTopMenu(
@@ -1390,6 +1413,7 @@ private fun MediaCanvas(
     isSuspendedForBackground: Boolean,
     cameraBlur: Float,
     cameraVideoFormat: RealtimeVideoFormat?,
+    isLandscape: Boolean,
 ) {
     val isPreviewReady = when (source) {
         RealtimeSource.Camera -> remoteStream != null || cameraPreviewReady
@@ -1398,15 +1422,12 @@ private fun MediaCanvas(
         is RealtimeSource.ExternalVideo,
         -> remoteStream != null || localStream != null
     }
-    val contentMode = when (source) {
-        RealtimeSource.Camera -> when (cameraVideoFormat?.let { it.width to it.height }) {
+    val contentMode = when {
+        isLandscape || source !is RealtimeSource.Camera -> VideoContentMode.FIT
+        else -> when (cameraVideoFormat?.let { it.width to it.height }) {
             1920 to 1080, 1080 to 1920, 1280 to 704, 704 to 1280 -> VideoContentMode.FILL
             else -> VideoContentMode.FIT
         }
-        is RealtimeSource.Image,
-        is RealtimeSource.Video,
-        is RealtimeSource.ExternalVideo,
-        -> VideoContentMode.FIT
     }
     val containerModifier = Modifier
         .fillMaxSize()
@@ -1439,6 +1460,36 @@ private fun MediaCanvas(
                 (!isPreviewReady || sourceImageUploading || generationLoading),
             modifier = Modifier.fillMaxSize(),
         )
+    }
+}
+
+/**
+ * Lays out the camera controls along the available screen axis.
+ *
+ * @param horizontal Whether the controls are arranged in a row.
+ * @param modifier The toolbar position and insets.
+ * @param content The camera controls.
+ */
+@Composable
+private fun CameraToolbar(
+    horizontal: Boolean,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    if (horizontal) {
+        Row(
+            modifier = modifier,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            content()
+        }
+    } else {
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            content()
+        }
     }
 }
 
@@ -1692,6 +1743,86 @@ private fun CameraFormatGlyph(modifier: Modifier = Modifier) {
             size = androidx.compose.ui.geometry.Size(size.width * 0.8f, size.height * 0.6f),
             style = Stroke(width = 1.5.dp.toPx()),
         )
+    }
+}
+
+/**
+ * Draws two arrows for switching between the front and rear cameras.
+ *
+ * @param modifier The icon's layout and size.
+ */
+@Composable
+private fun CameraSwitchGlyph(
+    modifier: Modifier,
+) {
+    Canvas(modifier) {
+        val left = size.width * 0.18f
+        val right = size.width * 0.82f
+        val centerY = size.height * 0.5f
+        val arrowWidth = size.width * 0.12f
+        val arrowHeight = size.height * 0.13f
+        val topLeft = Offset(left, size.height * 0.18f)
+        val arcSize = androidx.compose.ui.geometry.Size(right - left, size.height * 0.64f)
+        val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
+        drawArc(
+            color = Color.White,
+            startAngle = 205f,
+            sweepAngle = 155f,
+            useCenter = false,
+            topLeft = topLeft,
+            size = arcSize,
+            style = stroke,
+        )
+        drawArc(
+            color = Color.White,
+            startAngle = 25f,
+            sweepAngle = 155f,
+            useCenter = false,
+            topLeft = topLeft,
+            size = arcSize,
+            style = stroke,
+        )
+        val arrowheads = Path().apply {
+            moveTo(right - arrowWidth, centerY - arrowHeight)
+            lineTo(right, centerY)
+            lineTo(right + arrowWidth, centerY - arrowHeight)
+            moveTo(left - arrowWidth, centerY + arrowHeight)
+            lineTo(left, centerY)
+            lineTo(left + arrowWidth, centerY + arrowHeight)
+        }
+        drawPath(
+            path = arrowheads,
+            color = Color.White,
+            style = stroke,
+        )
+    }
+}
+
+/**
+ * Draws the device list icon for the camera toolbar.
+ *
+ * @param modifier The icon's layout and size.
+ */
+@Composable
+private fun DeviceListGlyph(
+    modifier: Modifier,
+) {
+    Canvas(modifier) {
+        repeat(3) { row ->
+            val y = size.height * (0.25f + row * 0.25f)
+            drawCircle(
+                color = Color.White,
+                radius = 1.dp.toPx(),
+                center = Offset(size.width * 0.12f, y),
+            )
+            drawLine(
+                color = Color.White,
+                start = Offset(size.width * 0.33f, y),
+                end = Offset(size.width * 0.88f, y),
+                strokeWidth = 1.5.dp.toPx(),
+                cap = StrokeCap.Round,
+            )
+        }
     }
 }
 
